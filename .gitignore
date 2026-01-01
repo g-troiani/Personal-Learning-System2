@@ -58,7 +58,4 @@ coverage/
 Business Planning Workshop Workbook*.pdf
 
 # Claude Code and project config
-CLAUDE.md
-PLANS.md
-ExecPlans.md
 .mcp.json
