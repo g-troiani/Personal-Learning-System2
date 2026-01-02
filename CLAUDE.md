@@ -14,6 +14,28 @@ When writing complex features or significant refactors, use an ExecPlan (as desc
 
 ### Source of Truth
 
+## ExecPlans
+
+When writing complex features or significant refactors, use an ExecPlan (as described in PLANS.md) from design to implementation. Keep EXECPLAN.md updated as it is the source of truth and living document for this project. 
+
+  ## Living Documentation
+
+  EXECPLAN.md is the single source of truth for this project. You MUST:
+
+  1. **Read EXECPLAN.md at session start** - Always read it first to understand current state
+  2. **Update Progress section** - After completing any task, add a timestamped entry
+  3. **Update Surprises and Discoveries** - Document any bugs, unexpected behaviors, or workarounds found
+  4. **Update Decision Log** - Record any significant implementation decisions with rationale
+  5. **Update Outcomes and Retrospective** - At major stopping points, summarize what's working, what's not, and lessons learned
+
+  Never use temporary todo lists as the primary tracking mechanism. All progress must be recorded in EXECPLAN.md so the next session (or a new conversation) can pick up exactly where we left off.
+
+  When resuming work:
+  1. Read EXECPLAN.md first
+  2. Check the Progress section for incomplete milestones
+  3. Check Surprises and Discoveries for known issues
+  4. Continue from documented stopping point
+
 All specifications and design decisions are documented in:
 - `VISION.md` — Core requirements, design philosophy, success criteria
 - Reference materials (to be added): Research synthesis, variable taxonomy, system specification

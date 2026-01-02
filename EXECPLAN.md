@@ -16,28 +16,90 @@ The system solves five problems. First, it eliminates the "I don't know what I d
 
 This section tracks granular progress with timestamps. Each stopping point must be documented, even if it requires splitting a partially completed task.
 
-- [ ] Milestone 1: Project foundation including database schema, CLI skeleton, and configuration
-- [ ] Milestone 2: Document ingestion including text extraction and content storage
-- [ ] Milestone 3: Knowledge component extraction using LLM-based identification
-- [ ] Milestone 4: Practice item generation with type-specific question creation
-- [ ] Milestone 5: Core learning loop with session management and response collection
-- [ ] Milestone 6: Spaced repetition engine with SM-2 scheduling and mastery tracking
-- [ ] Milestone 7: To-do dashboard showing due items organized by source
-- [ ] Milestone 8: Technique bundle tracking for self-experimentation
+- [x] Milestone 1: Project foundation including database schema, CLI skeleton, and configuration (2026-01-02)
+  - Created virtual environment with Python 3.9
+  - Installed dependencies: click, python-dotenv, python-docx, pypdf, anthropic, supabase
+  - Created project directory structure under learn_system/
+  - Created database schema with 12 tables in Supabase
+  - Implemented CLI with commands: init, status, sources, bundles, schema
+  - Created 5 default technique bundles in database
+  - Verified all tables and bundles via Supabase dashboard
+- [x] Milestone 2: Document ingestion including text extraction and content storage (2026-01-02)
+  - Implemented extractors for PDF, DOCX, Markdown, and plain text files
+  - Created ingest.py orchestration module
+  - Updated CLI ingest command with actual functionality
+  - Tested with DOCX (Make_It_Stick_Distillation.docx) and Markdown (test_document.md)
+  - Verified both documents stored correctly in Supabase content_sources table
+- [x] Milestone 3: Knowledge component extraction using LLM-based identification (2026-01-02)
+  - Created kc_extractor.py with LLM client wrapper for Anthropic API
+  - Implemented content chunking for large documents (20k char limit)
+  - Built KC extraction prompt based on EXECPLAN.md specification
+  - Implemented JSON parsing with error handling for LLM responses
+  - Added deduplication logic to prevent duplicate KC names
+  - Tested with test_document.md (12 KCs) and Mind_For_Numbers (18 KCs)
+  - Fixed curly brace escaping issue in prompt template
+- [x] Milestone 4: Practice item generation with type-specific question creation (2026-01-02)
+  - Created practice/templates.py with 4 prompt templates by KC type (factual, conceptual, procedural_cognitive, procedural_execution)
+  - Created practice/generator.py with LLM-based item generation and JSON parsing
+  - Each KC generates 3 items with varying difficulty levels (1-5) and practice modes
+  - Practice modes: free_recall, cued_recall, recognition, explanation, application, execution
+  - Each item includes: prompt, expected_response, hints (2-3 progressive), rubric/success_criteria
+  - Updated ingest.py to call generate_all_items() after KC extraction
+  - Added --skip-items flag to ingest command
+  - Tested with test_document.md: 12 KCs generated 36 practice items
+  - Verified items stored correctly in Supabase practice_items table
+- [x] Milestone 5: Core learning loop with session management and response collection (2026-01-02)
+  - Created study/scheduler.py with get_study_queue() and get_todo_summary()
+  - Created study/loop.py with interactive study session implementation
+  - Implemented present_recall_item() for free_recall, cued_recall, recognition modes
+  - Implemented present_explanation_item() for explanation/application modes
+  - Implemented present_execution_item() for hands-on task tracking
+  - Session management: create session, record attempts, close with summary
+  - Technique history tracking integrated with attempt recording
+  - Connected study command to run_study_session()
+  - Tested: scheduler returns prioritized items, sessions/attempts recorded correctly
+- [x] Milestone 6: Spaced repetition engine with SM-2 scheduling and mastery tracking (2026-01-02)
+  - Created state/spacing.py with SM-2 algorithm (calculate_next_review)
+  - Created state/estimator.py with mastery calculation (exponential moving average)
+  - Integrated SM-2 into study loop: updates kc_state after each attempt
+  - Mastery updates based on exposure count (alpha decreases over time)
+  - Interval calculation: perfect score -> 6 days, failed -> 1 day reset
+  - Easiness factor adjusts based on performance quality
+  - Status command shows average mastery and due counts
+  - Fixed datetime parsing issue for Python 3.9 compatibility
+  - Tested: KC state updates correctly with mastery, interval, next_review_at
+- [x] Milestone 7: To-do dashboard showing due items organized by source (2026-01-02)
+  - Implemented todo command using get_todo_summary() from scheduler
+  - Shows totals: overdue, due today, new content
+  - Groups items by source with individual counts
+  - Implemented review command with source pattern matching
+  - Supports multiple matches with user selection
+  - Passes source_id to run_study_session for filtered practice
+  - Tested: todo shows 53 new items across 4 sources, review filters correctly
+- [x] Milestone 8: Technique bundle tracking for self-experimentation (2026-01-02)
+  - Sessions already record technique_bundle_id on creation
+  - record_technique_usage tracks KC-bundle associations in kc_technique_history
+  - Study loop already calls record_technique_usage after each attempt
+  - Bundle option available on study (--bundle) and review (--bundle) commands
+  - Added techniques command to view bundle usage statistics
+  - Shows KCs practiced, total exposures, and sessions per bundle
+  - Foundation ready for self-experimentation and A/B testing of techniques
 
 
 ## Surprises and Discoveries
 
 This section documents unexpected behaviors, bugs, optimizations, or insights discovered during implementation. Each observation includes concise evidence.
 
-No discoveries recorded yet. This section will be populated during implementation.
+2026-01-02: Python 3.9 type hints incompatibility. The system default Python 3.9 does not support the `X | None` union syntax (PEP 604). Had to use `Optional[X]` from typing module instead. Also `list[dict]` needed to be `List[Dict]`. Evidence: TypeError when importing modules.
+
+2026-01-02: Supabase client library requires specific key format. The secret key (service role key) is needed for full database access, not the anon/publishable key. Evidence: Initial connection tests failed with anon key.
 
 
 ## Decision Log
 
 This section records every significant decision with rationale.
 
-Decision: Use SQLite rather than PostgreSQL for data storage. Rationale: This is a single-user system running locally. SQLite requires zero configuration, stores everything in one file, and handles the expected data volumes easily. Migration to PostgreSQL remains possible if needed later. Date: Initial design.
+Decision: Use Supabase (PostgreSQL) instead of SQLite for data storage. Rationale: User requested Supabase for cloud-hosted database with dashboard visibility. Provides real-time data inspection, automatic backups, and future potential for web interface. Trade-off is network dependency vs. offline-first design. Date: 2026-01-02 (overrides initial SQLite decision).
 
 Decision: Use technique bundles rather than individual technique toggles for self-experimentation. Rationale: Testing one technique at a time requires too many comparisons to reach statistical significance. Bundles group related techniques together, such as combining free recall with elaboration prompts and delayed feedback into a "Deep Retrieval" bundle. This enables meaningful comparisons with fewer data points. Date: Initial design.
 
@@ -54,7 +116,41 @@ Decision: Track Cognitive Load Theory proxies in the MVP rather than implementin
 
 This section summarizes outcomes, gaps, and lessons learned at major milestones or at completion.
 
-No outcomes recorded yet. This section will be populated as milestones complete.
+### All 8 Milestones Complete (2026-01-02)
+
+**What's Working:**
+- Complete document ingestion pipeline: PDF, DOCX, Markdown, text extraction
+- LLM-based knowledge component extraction with type classification
+- Automatic practice item generation with type-specific prompts (3 items per KC)
+- Interactive study sessions with confidence/difficulty ratings
+- SM-2 spaced repetition algorithm with mastery tracking
+- Todo dashboard showing overdue, due today, and new items by source
+- Source-filtered review sessions
+- Technique bundle tracking for self-experimentation
+
+**CLI Commands Available:**
+- `init` - Initialize database and default bundles
+- `ingest <file>` - Process documents, extract KCs, generate items
+- `status` - Show system statistics and due counts
+- `sources` - List ingested documents
+- `bundles` - List technique bundles
+- `todo` - Show what needs review
+- `study` - Start interactive practice session
+- `review <pattern>` - Focus session on specific source
+- `techniques` - View bundle usage statistics
+
+**Technical Decisions That Worked Well:**
+- Using Supabase instead of SQLite provided real-time visibility into data
+- Click framework made CLI development straightforward
+- Separating scheduler, loop, spacing, and estimator modules kept code organized
+- Progress callbacks during ingestion provided good user feedback
+
+**Known Gaps for Future Work:**
+- No automated correctness verification (relies on self-assessment)
+- No interleaving implementation within sessions (just bundle tracking)
+- No retention test scheduling (structure exists but not implemented)
+- No learning goals tracking (table exists but not used)
+- Could benefit from progress charts and analytics visualization
 
 
 ## Context and Orientation

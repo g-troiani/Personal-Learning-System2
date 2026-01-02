@@ -1,0 +1,50 @@
+"""Configuration constants and environment management."""
+
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
+
+# Database configuration (Supabase)
+SUPABASE_URL: str = os.getenv('SUPABASE_URL', '')
+SUPABASE_KEY: str = os.getenv('SUPABASE_KEY', '')
+
+# LLM configuration
+ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+
+# Local data path for any local files
+DATA_PATH: str = str(Path(__file__).parent.parent / 'data')
+
+
+def get_supabase_url() -> str:
+    """Returns Supabase project URL."""
+    url = os.getenv('SUPABASE_URL', SUPABASE_URL)
+    if not url:
+        raise ValueError("SUPABASE_URL environment variable is not set")
+    return url
+
+
+def get_supabase_key() -> str:
+    """Returns Supabase API key."""
+    key = os.getenv('SUPABASE_KEY', SUPABASE_KEY)
+    if not key:
+        raise ValueError("SUPABASE_KEY environment variable is not set")
+    return key
+
+
+def get_api_key() -> str:
+    """Returns Anthropic API key from environment, raises if not set."""
+    key = os.getenv('ANTHROPIC_API_KEY', '')
+    if not key:
+        raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+    return key
+
+
+def get_data_path() -> str:
+    """Returns absolute path to local data directory."""
+    path = Path(DATA_PATH)
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path)
