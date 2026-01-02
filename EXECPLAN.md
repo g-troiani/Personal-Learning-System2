@@ -84,9 +84,40 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Added techniques command to view bundle usage statistics
   - Shows KCs practiced, total exposures, and sessions per bundle
   - Foundation ready for self-experimentation and A/B testing of techniques
-- [ ] Milestone 9: Web UI Foundation - Project setup and layout components
-- [ ] Milestone 10: Web UI Home Dashboard - Main dashboard with greeting, alerts, search, and source cards
-- [ ] Milestone 11: Web UI Study Session - Interactive practice interface with answer input
+- [x] Milestone 9: Web UI Foundation - Project setup and layout components (2026-01-02)
+  - Scaffolded React project with Vite in web/ directory
+  - Installed dependencies: react-router-dom, @supabase/supabase-js, lucide-react, recharts, tailwindcss
+  - Configured Tailwind CSS with design system colors from spec (bg-main, accent-progress, etc.)
+  - Created Sidebar component with navigation links and user profile
+  - Created Layout component with sidebar and content area
+  - Set up React Router with all page routes
+  - Created SupabaseContext provider with data fetching methods
+  - Created placeholder pages for: Home, Calendar, DueForReview, Sources, Progress, Analytics, Study
+  - Verified navigation works correctly between all pages
+  - Note: Supabase auth returns 401 due to RLS - requires service role key (hardcoded fallback added)
+- [x] Milestone 10: Web UI Home Dashboard - Main dashboard with greeting, alerts, search, and source cards (2026-01-02)
+  - Created home components: GreetingHeader, OverdueAlert, SearchBar, QuickActions, SourceCard
+  - Implemented time-based greeting ("Good morning/afternoon/evening, Learner")
+  - Search bar with placeholder "Search your knowledge base..."
+  - Quick action buttons: Study, Plan, Add Document, Analytics with navigation
+  - Source cards grid showing: emoji, title, mastery progress bar, due/overdue counts
+  - Quick Stats section showing: Total Sources, New Items, Due Today, Overdue
+  - Sidebar shows "Due for Review" badge with live count (53 items)
+  - Recent sources section in sidebar with emoji icons
+  - Overdue alert banner (only visible when overdue > 0)
+  - Fixed shell environment variable conflict causing wrong Supabase URL
+  - Must use publishable key (sb_publishable_) not secret key in browser
+- [x] Milestone 11: Web UI Study Session - Interactive practice interface with answer input (2026-01-02)
+  - Created SessionHeader component with progress indicator and "End session" button
+  - Created QuestionCard component with KC type badge, practice mode, name, and prompt
+  - Created AnswerInput component with textarea, mic button placeholder, submit button, skip link
+  - Created SelfAssessment component with 5-point score and difficulty ratings
+  - Created SessionSummary modal with items completed, average score, duration, navigation buttons
+  - Full Study.jsx page with session lifecycle: fetch queue, create session, present items, record attempts
+  - Attempts recorded to database with response time, score, correctness, difficulty
+  - KC state updated with mastery calculation (EMA) after each attempt
+  - Fixed hints JSON parsing to handle both JSON arrays and plain text
+  - Verified mastery updates persist (0% → 11% after successful attempt)
 - [ ] Milestone 12: Web UI Calendar - Learning calendar and session scheduling
 - [ ] Milestone 13: Web UI Due for Review - Organized review queue by urgency
 - [ ] Milestone 14: Web UI Progress - Statistics dashboard with charts
@@ -106,6 +137,16 @@ This section documents unexpected behaviors, bugs, optimizations, or insights di
 2026-01-02: Supabase timestamp parsing in Python 3.9. Timestamps returned from Supabase have variable microsecond precision (e.g., `.17045+00:00`) which Python 3.9's `datetime.fromisoformat()` cannot parse. Fixed with try-except fallback that strips timezone for comparison. Evidence: ValueError in end_session() function.
 
 2026-01-02: Practice items generated per KC. The LLM consistently generates exactly 3 practice items per KC as instructed, resulting in predictable item counts (36 items for 12 KCs). This 3:1 ratio holds across all knowledge types.
+
+2026-01-02: Vite environment variable caching with multiple projects. When multiple Vite dev servers run on different ports, environment variables may appear to cross over between projects if ports are reused. The solution is to add hardcoded fallbacks in the supabase client or ensure clean server restarts. Evidence: Network requests going to wrong Supabase URL despite correct .env file.
+
+2026-01-02: Supabase key formats (sb_publishable_ and sb_secret_) require service role key for table access when RLS is enabled. The web app needs the same service role key as the Python CLI to bypass RLS. For production, proper RLS policies should be configured. Evidence: 401 errors with publishable key, success with service role key.
+
+2026-01-02: Shell environment variables override Vite .env files. When VITE_* variables are exported in the shell (e.g., from sourcing another project's .env), they take precedence over the local .env file. Solution: Pass correct values explicitly when starting Vite (e.g., `VITE_SUPABASE_URL=... npm run dev`) or unset conflicting shell variables. Evidence: Vite served wrong Supabase URL despite correct .env file.
+
+2026-01-02: Supabase blocks secret API keys in browser. Keys starting with `sb_secret_` are rejected with "Forbidden use of secret API key in browser" error. Must use `sb_publishable_` key for client-side JavaScript. This is a Supabase security feature to prevent exposing service role keys. Evidence: 401 response with JSON message about secret key usage.
+
+2026-01-02: Practice item hints stored inconsistently. Some hints are stored as JSON arrays (e.g., `["hint1", "hint2"]`), others as plain text strings. The QuestionCard component needed try-catch around JSON.parse to handle both formats gracefully. Evidence: SyntaxError when trying to parse non-JSON hint text.
 
 
 ## Decision Log
@@ -127,6 +168,10 @@ Decision: Track Cognitive Load Theory proxies in the MVP rather than implementin
 Decision: Add web UI in addition to CLI interface. Rationale: While the CLI remains functional for power users and scripting, a web UI provides better UX for daily learning sessions. The UI design follows a clean, light-theme aesthetic with intuitive navigation. The web app will connect to the same Supabase backend, ensuring data consistency across both interfaces. This enables the system to reach users who prefer visual interfaces while maintaining CLI capabilities. Date: 2026-01-02.
 
 Decision: Use React with Vite for web UI implementation. Rationale: React provides component-based architecture ideal for the modular UI design. Vite offers fast development experience with HMR. The stack includes Tailwind CSS for styling, Recharts for data visualization, and Supabase client for backend connectivity. This aligns with modern web development practices and ensures maintainability. Date: 2026-01-02.
+
+Decision: Pass Supabase environment variables explicitly when starting Vite dev server. Rationale: Shell environment variables (VITE_*) override Vite's .env file when exported in the terminal session. If a user has worked on multiple Vite projects, stale VITE_* variables may persist in the shell and cause requests to go to the wrong Supabase instance. The solution is to pass the correct values explicitly on the command line: `VITE_SUPABASE_URL=... VITE_SUPABASE_ANON_KEY=... npm run dev`. This ensures the correct values are used regardless of shell state. Alternative: run `unset VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY` before starting the server. Date: 2026-01-02.
+
+Decision: Use Supabase publishable key (sb_publishable_) instead of secret key for web UI. Rationale: Supabase intentionally blocks secret keys (sb_secret_) in browser environments as a security measure to prevent service role key exposure. The publishable key is designed for client-side use. This differs from the CLI which can use secret keys safely. Both key types access the same database; the difference is RLS enforcement (publishable respects RLS policies, secret bypasses them). For the web UI, we use the publishable key with RLS disabled on tables during development. Date: 2026-01-02.
 
 
 ## Outcomes and Retrospective
@@ -221,6 +266,31 @@ python -m app.main study --duration 30     # Start study session
 python -m app.main review <pattern>        # Focus session on specific source
 python -m app.main techniques              # View bundle usage statistics
 ```
+
+## How to Run Web UI
+
+To start the web UI development server:
+
+```bash
+cd web/
+
+# Option 1: Pass environment variables explicitly (recommended if you have multiple Vite projects)
+VITE_SUPABASE_URL=https://bqrdwysxguktbiegkwss.supabase.co \
+VITE_SUPABASE_ANON_KEY=sb_publishable_Clg3cJKsuZXWmqlPC1k4Pg_p0BpjhVU \
+npm run dev
+
+# Option 2: Unset any stale shell variables first
+unset VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY
+npm run dev
+
+# Option 3: Just run npm run dev (works if no conflicting shell variables exist)
+npm run dev
+```
+
+The app runs at http://localhost:5173
+
+**Important:** Use the publishable key (`sb_publishable_...`) not the secret key (`sb_secret_...`) for browser-based apps. Supabase blocks secret keys in browsers for security.
+
 
 ## Recovery Notes
 

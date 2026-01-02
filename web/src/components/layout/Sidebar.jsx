@@ -1,0 +1,131 @@
+import { NavLink } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import {
+  Home,
+  Calendar,
+  ClipboardList,
+  BookOpen,
+  BarChart2,
+  Settings
+} from 'lucide-react'
+import { useSupabase } from '../../contexts/SupabaseContext'
+
+// Emoji mapping for sources (can be customized per source)
+const sourceEmojis = {
+  'default': '📚',
+  'llm': '🧠',
+  'terraform': '🏗️',
+  'docker': '🐳',
+  'python': '🐍',
+  'ai': '🤖',
+  'ml': '📊'
+}
+
+function getSourceEmoji(title) {
+  const lowerTitle = title.toLowerCase()
+  if (lowerTitle.includes('llm') || lowerTitle.includes('evaluating')) return sourceEmojis.llm
+  if (lowerTitle.includes('terraform')) return sourceEmojis.terraform
+  if (lowerTitle.includes('docker')) return sourceEmojis.docker
+  if (lowerTitle.includes('python')) return sourceEmojis.python
+  if (lowerTitle.includes('ai') || lowerTitle.includes('agent')) return sourceEmojis.ai
+  if (lowerTitle.includes('ml') || lowerTitle.includes('machine')) return sourceEmojis.ml
+  return sourceEmojis.default
+}
+
+export default function Sidebar() {
+  const { getRecentSources, getDueCounts } = useSupabase()
+  const [recentSources, setRecentSources] = useState([])
+  const [dueCount, setDueCount] = useState(0)
+
+  useEffect(() => {
+    const loadData = async () => {
+      const sources = await getRecentSources(3)
+      setRecentSources(sources)
+
+      const counts = await getDueCounts()
+      setDueCount(counts.total)
+    }
+    loadData()
+  }, [])
+
+  const navItems = [
+    { to: '/', icon: Home, label: 'Home' },
+    { to: '/calendar', icon: Calendar, label: 'Calendar' },
+    { to: '/review', icon: ClipboardList, label: 'Due for Review', badge: dueCount },
+    { to: '/sources', icon: BookOpen, label: 'Sources' },
+    { to: '/progress', icon: BarChart2, label: 'Progress' },
+    { to: '/analytics', icon: Settings, label: 'Analytics' },
+  ]
+
+  return (
+    <aside className="w-sidebar h-screen bg-bg-sidebar flex flex-col border-r border-bg-card-border fixed left-0 top-0">
+      {/* Logo */}
+      <div className="px-4 py-5">
+        <h1 className="text-xl font-semibold text-text-primary">Learn</h1>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3">
+        <ul className="space-y-1">
+          {navItems.map(item => (
+            <li key={item.to}>
+              <NavLink
+                to={item.to}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                    isActive
+                      ? 'bg-btn-secondary text-text-primary font-medium'
+                      : 'text-text-secondary hover:bg-btn-secondary/50'
+                  }`
+                }
+              >
+                <item.icon size={20} />
+                <span className="flex-1">{item.label}</span>
+                {item.badge > 0 && (
+                  <span className="bg-accent-alert text-white text-xs font-medium px-2 py-0.5 rounded-full">
+                    {item.badge}
+                  </span>
+                )}
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+
+        {/* Recent Section */}
+        {recentSources.length > 0 && (
+          <div className="mt-8">
+            <h3 className="px-3 text-xs font-medium text-text-muted uppercase tracking-wider mb-2">
+              Recent
+            </h3>
+            <ul className="space-y-1">
+              {recentSources.map(source => (
+                <li key={source.id}>
+                  <NavLink
+                    to={`/sources/${source.id}`}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-btn-secondary/50 rounded-lg transition-colors"
+                  >
+                    <span>{getSourceEmoji(source.title)}</span>
+                    <span className="truncate">{source.title}</span>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </nav>
+
+      {/* User Profile */}
+      <div className="p-4 border-t border-bg-card-border">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-text-muted/20 flex items-center justify-center text-text-secondary font-medium">
+            G
+          </div>
+          <div>
+            <div className="text-sm font-medium text-text-primary">Gian</div>
+            <div className="text-xs text-text-muted">Pro plan</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  )
+}
