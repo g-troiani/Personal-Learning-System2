@@ -118,10 +118,38 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - KC state updated with mastery calculation (EMA) after each attempt
   - Fixed hints JSON parsing to handle both JSON arrays and plain text
   - Verified mastery updates persist (0% → 11% after successful attempt)
-- [ ] Milestone 12: Web UI Calendar - Learning calendar and session scheduling
-- [ ] Milestone 13: Web UI Due for Review - Organized review queue by urgency
-- [ ] Milestone 14: Web UI Progress - Statistics dashboard with charts
-- [ ] Milestone 15: Web UI Analytics - Deep insights, technique comparison, and recommendations
+- [x] Milestone 12: Web UI Calendar - Learning calendar and session scheduling (2026-01-02)
+  - Created MonthNavigation component with prev/next arrows and month/year display
+  - Created CalendarGrid component with 7-column layout, today highlight, session indicators
+  - Created ScheduleForm component with source dropdown, session type, duration, date
+  - Full Calendar.jsx page fetching sessions from database
+  - Session scheduling creates records in sessions table
+  - Sessions shown on selected date with status (Completed/Scheduled)
+- [x] Milestone 13: Web UI Due for Review - Organized review queue by urgency (2026-01-02)
+  - Created ReviewSection component with colored dot indicator, title, and source list
+  - Created SourceItem component with emoji, title, count, and action button (Review/Study/Start)
+  - Full DueForReview.jsx page fetching and categorizing items from getDueCounts()
+  - Three sections: Overdue (red), Due Today (amber), New Content (green)
+  - Sources sorted by count within each category (highest first)
+  - Action buttons link to /study?source={sourceId} for filtered sessions
+  - "Study All" button at bottom shows total count and starts unfiltered session
+  - Empty state shows friendly message when all caught up
+- [x] Milestone 14: Web UI Progress - Statistics dashboard with charts (2026-01-02)
+  - Created StatCards.jsx with 4 summary cards: Sources, Items Learned, Study Sessions, Total Time
+  - Created MasteryBySource.jsx with horizontal progress bars per source, sorted by mastery
+  - Created WeeklyChart.jsx with Recharts bar chart showing daily activity (Mon-Sun)
+  - Streak indicator shows consecutive days with study sessions
+  - Weekly total shows items practiced this week
+  - Link to /analytics for detailed insights
+  - All stats calculated from real database queries (content_sources, kc_state, sessions, attempts)
+- [x] Milestone 15: Web UI Analytics - Deep insights, technique comparison, and recommendations (2026-01-02)
+  - Created InsightCards.jsx with three colored insight cards: What's Working (green), Needs Attention (amber), Optimization (blue)
+  - Created TechniqueComparison.jsx with Recharts horizontal bar chart showing 7-day and 30-day retention by technique bundle
+  - Created PerformanceByType.jsx with horizontal bars for factual/conceptual/procedural/metacognitive with color coding
+  - Created CalibrationAnalysis.jsx with scatter chart comparing confidence_before to actual score, showing overconfident/underconfident/well-calibrated counts
+  - Created ItemsNeedingAttention.jsx listing struggling items with Practice buttons linking to filtered study sessions
+  - Full Analytics.jsx page with filter controls (time period, source, knowledge type) that update all sections
+  - All analytics calculated from real database queries (attempts, kc_state, technique_bundles, retention_tests, kc_technique_history)
 
 
 ## Surprises and Discoveries
@@ -213,6 +241,37 @@ This section summarizes outcomes, gaps, and lessons learned at major milestones 
 - No retention test scheduling (structure exists but not implemented)
 - No learning goals tracking (table exists but not used)
 - Could benefit from progress charts and analytics visualization
+
+### All 15 Milestones Complete (2026-01-02)
+
+**Web UI Implementation Complete:**
+- React/Vite/Tailwind web application with full feature parity to CLI
+- Home dashboard with greeting, overdue alerts, source cards with mastery progress
+- Interactive study sessions with question cards, answer input, self-assessment, session summary
+- Calendar page with month navigation, session scheduling form
+- Due for Review page with items organized by urgency (overdue/due today/new)
+- Progress page with stat cards, mastery by source, weekly activity chart, streak tracking
+- Analytics page with deep insights including:
+  - Three insight cards (What's Working, Needs Attention, Optimization)
+  - Technique bundle effectiveness comparison with 7-day/30-day retention bars
+  - Performance by knowledge type with color-coded horizontal bars
+  - Calibration analysis scatter chart comparing confidence vs actual scores
+  - Items needing attention list with practice buttons
+
+**Web UI Pages Available:**
+- `/` - Home dashboard with source cards and quick actions
+- `/calendar` - Learning calendar and session scheduling
+- `/review` - Due for review items organized by urgency
+- `/sources` - Source library (placeholder)
+- `/progress` - Statistics dashboard with charts
+- `/analytics` - Deep insights and recommendations
+- `/study` - Interactive study session (full-screen)
+
+**Technical Decisions That Worked Well:**
+- Recharts for data visualization provided clean, responsive charts
+- Supabase client in React matched CLI data access patterns
+- Filter controls with useCallback avoided infinite re-render loops
+- Moving tooltip components outside main function avoided React hook warnings
 
 
 ## Context and Orientation
