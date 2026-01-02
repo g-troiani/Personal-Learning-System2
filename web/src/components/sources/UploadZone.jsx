@@ -55,6 +55,7 @@ export default function UploadZone({ onUpload, onClose, onComplete, isExpanded =
     }
 
     // Map processing status to step number
+    // Note: processingStatus is the full status object, use processing_status field
     const stepMap = {
       'pending': 0,
       'extracting_text': 1,
@@ -62,8 +63,9 @@ export default function UploadZone({ onUpload, onClose, onComplete, isExpanded =
       'generating_items': 3,
       'ready': 4
     }
-    if (stepMap[processingStatus] !== undefined) {
-      setProcessingStep(stepMap[processingStatus])
+    const statusString = processingStatus?.processing_status
+    if (stepMap[statusString] !== undefined) {
+      setProcessingStep(stepMap[statusString])
     }
 
     // Handle completion
