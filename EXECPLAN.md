@@ -94,6 +94,12 @@ This section documents unexpected behaviors, bugs, optimizations, or insights di
 
 2026-01-02: Supabase client library requires specific key format. The secret key (service role key) is needed for full database access, not the anon/publishable key. Evidence: Initial connection tests failed with anon key.
 
+2026-01-02: Curly brace escaping in Python format strings. The KC extraction prompt template contained JSON examples with curly braces, which conflicted with Python's `.format()` method. Fixed by using double braces `{{` and `}}` to escape literal braces. Evidence: KeyError when calling prompt.format().
+
+2026-01-02: Supabase timestamp parsing in Python 3.9. Timestamps returned from Supabase have variable microsecond precision (e.g., `.17045+00:00`) which Python 3.9's `datetime.fromisoformat()` cannot parse. Fixed with try-except fallback that strips timezone for comparison. Evidence: ValueError in end_session() function.
+
+2026-01-02: Practice items generated per KC. The LLM consistently generates exactly 3 practice items per KC as instructed, resulting in predictable item counts (36 items for 12 KCs). This 3:1 ratio holds across all knowledge types.
+
 
 ## Decision Log
 
