@@ -100,7 +100,7 @@ export default function ItemsNeedingAttention({ items }) {
                     </span>
                   )}
 
-                  {item.avgDifficulty !== undefined && (
+                  {item.avgDifficulty != null && (
                     <span className="text-text-muted">
                       Difficulty: {item.avgDifficulty.toFixed(1)}/5
                     </span>

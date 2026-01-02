@@ -176,6 +176,8 @@ This section documents unexpected behaviors, bugs, optimizations, or insights di
 
 2026-01-02: Practice item hints stored inconsistently. Some hints are stored as JSON arrays (e.g., `["hint1", "hint2"]`), others as plain text strings. The QuestionCard component needed try-catch around JSON.parse to handle both formats gracefully. Evidence: SyntaxError when trying to parse non-JSON hint text.
 
+2026-01-02: Null vs undefined check in JavaScript. The Analytics page ItemsNeedingAttention component checked `avgDifficulty !== undefined` before calling `.toFixed()`, but the value could be `null` (not undefined). In JavaScript, `null !== undefined` is true, so the check passed and `.toFixed()` was called on null, causing a crash. Fixed by using `avgDifficulty != null` which checks for both null and undefined. Evidence: TypeError "Cannot read properties of null (reading 'toFixed')" in browser console.
+
 
 ## Decision Log
 
