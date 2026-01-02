@@ -279,7 +279,7 @@ This section summarizes outcomes, gaps, and lessons learned at major milestones 
 - `/` - Home dashboard with source cards and quick actions
 - `/calendar` - Learning calendar and session scheduling
 - `/review` - Due for review items organized by urgency
-- `/sources` - Source library (placeholder)
+- `/sources` - Source library (placeholder - implementing in M16-M20)
 - `/progress` - Statistics dashboard with charts
 - `/analytics` - Deep insights and recommendations
 - `/study` - Interactive study session (full-screen)
@@ -315,16 +315,18 @@ An attempt records a single interaction with a practice item. Each attempt captu
 
 The project has two main parts: `learn_system/` for the Python CLI and `web/` for the React web UI. Both connect to the same Supabase database. The CLI structure: `app/main.py` (CLI entry), `app/config.py` (configuration), `app/database/` (Supabase queries), `app/ingestion/` (document processing and KC extraction), `app/practice/` (item generation), `app/study/` (session loop and scheduler), `app/state/` (mastery and spacing algorithms). The web structure is defined in the "Web UI Technology Stack" section.
 
-The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, pypdf, anthropic, and supabase. The web UI requires Node.js 18+ with React, Vite, Tailwind CSS, Recharts, and Supabase client. An Anthropic API key and Supabase credentials must be available in environment variables. An internet connection is required for database access and during document ingestion when the LLM API is called.
+The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, pypdf, anthropic, and supabase. The backend API (M18) additionally requires: fastapi, uvicorn, python-multipart. The web UI requires Node.js 18+ with React, Vite, Tailwind CSS, Recharts, and Supabase client. An Anthropic API key and Supabase credentials must be available in environment variables. An internet connection is required for database access and during document ingestion when the LLM API is called.
 
 
 ## Plan of Work
 
-Implementation proceeded through fifteen milestones. All milestones are complete.
+Implementation proceeds through twenty milestones. Milestones 1-15 are complete. Milestones 16-20 implement the Sources page with file upload and processing.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
-**Web UI (Complete):** M9: Foundation (React/Vite/Tailwind setup, sidebar layout). M10: Home dashboard. M11: Study session interface. M12: Calendar and scheduling. M13: Due for Review page. M14: Progress statistics. M15: Analytics and insights.
+**Web UI Core (Complete):** M9: Foundation (React/Vite/Tailwind setup, sidebar layout). M10: Home dashboard. M11: Study session interface. M12: Calendar and scheduling. M13: Due for Review page. M14: Progress statistics. M15: Analytics and insights.
+
+**Sources Feature (Pending):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish.
 
 
 ## CLI Usage Reference
@@ -562,6 +564,22 @@ The complete database schema follows. This SQL should be placed in learn_system/
     CREATE INDEX IF NOT EXISTS idx_state_review ON kc_state(next_review_at);
     CREATE INDEX IF NOT EXISTS idx_state_mastery ON kc_state(mastery_level);
 
+Schema additions for Sources feature (M16-M20). Run these migrations in Supabase dashboard before starting M16:
+
+    -- Add processing status columns to content_sources
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS processing_status TEXT DEFAULT 'pending';
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS processing_progress INTEGER DEFAULT 0;
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS processing_step TEXT;
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS error_message TEXT;
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMPTZ;
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS processing_completed_at TIMESTAMPTZ;
+
+    -- Enable realtime for processing updates (if not already enabled)
+    ALTER PUBLICATION supabase_realtime ADD TABLE content_sources;
+
+    -- Status values: pending, extracting_text, extracting_kcs, generating_items, ready, error
+    -- The existing 'status' column (active/archived) remains for lifecycle state
+
 The five default technique bundles to insert during init:
 
     INSERT INTO technique_bundles (id, name, description, retrieval_mode, spacing_multiplier,
@@ -677,6 +695,64 @@ All Web UI milestones are complete. See the **Progress** section for detailed im
 - **M14:** Progress (stat cards, mastery by source, weekly chart, streak)
 - **M15:** Analytics (insight cards, technique comparison, calibration analysis, items needing attention)
 
+### Sources Feature Milestones 16-20 (Pending)
+
+These milestones implement the Sources page with document upload and processing functionality. The full specification is in `NEW FEATURES.md`. Key architecture: React frontend talks directly to Supabase for reads, but uploads go through a new FastAPI backend that wraps the existing CLI ingestion pipeline.
+
+- **M16:** Sources page foundation (list display, filtering, sorting)
+- **M17:** Upload UI (drag-drop zone, file validation, progress indicators)
+- **M18:** FastAPI backend (upload endpoint, processing pipeline, status API)
+- **M19:** Real-time processing (Supabase Realtime subscriptions, live progress)
+- **M20:** Error handling and polish (retry mechanism, error states, delete functionality)
+
+### Milestone 16: Sources Page Foundation
+
+At the end of this milestone, the Sources page displays all existing sources from the database in a grid layout with filtering and sorting. This replaces the current placeholder page.
+
+The work involves creating components in `web/src/components/sources/`: SourcesHeader.jsx for page title, SourcesToolbar.jsx with search/filter/sort controls, SourcesList.jsx for the grid container, and EmptyState.jsx for when no sources exist. The existing SourceCard pattern from `components/home/SourceCard.jsx` can be reused or adapted. Add `useSources` hook in `web/src/hooks/useSources.js` for data fetching with caching. Extend SupabaseContext with upload queue state (preparation for M17). Wire Sources.jsx page to display the grid.
+
+To verify, navigate to `/sources`. The page should show all sources from the database as cards. Each card displays emoji, title, domain badge, KC count, item count, mastery percentage, and due/overdue counts. Clicking a card navigates to `/study?source={id}`. Filter by domain works. Sort by name/date/mastery works. Empty state shows when no sources exist.
+
+### Milestone 17: Upload UI
+
+At the end of this milestone, users can select files for upload via drag-drop or file picker, with immediate client-side validation. The actual upload is mocked pending the backend.
+
+The work involves creating UploadZone.jsx with drag-drop area supporting idle, dragover, uploading, processing, complete, and error visual states. Create UploadProgress.jsx showing multi-step progress indicator (Upload → Extract → Analyze → Generate). Create `useSourceUpload` hook in `web/src/hooks/useSourceUpload.js` that handles file validation (type, size), manages upload state, and adds optimistic entries to the sources list. Supported file types: .pdf, .docx, .md, .txt (max 25MB). Add upload button to SourcesToolbar that expands the UploadZone.
+
+To verify, click "Add Document" button. Upload zone appears with dashed border. Drag a file over - border highlights. Drop a valid file - shows uploading state with filename. Drop an invalid file (e.g., .exe) - shows immediate error. Progress indicator shows steps (mocked timing). Optimistic card appears in source list during "upload".
+
+### Milestone 18: FastAPI Backend
+
+At the end of this milestone, a FastAPI server runs on port 8000 that accepts file uploads, processes them through the existing ingestion pipeline, and updates processing status in the database.
+
+The work involves creating `learn_system/app/api/` directory structure: `server.py` (FastAPI app factory with CORS), `routes/sources.py` (upload, status, retry, delete endpoints), `routes/health.py` (health check), `models/schemas.py` (Pydantic request/response models), `services/processing.py` (ProcessingPipeline class that wraps `ingest_document()` with status updates). Add dependencies to requirements.txt: fastapi, uvicorn, python-multipart. The ProcessingPipeline updates `content_sources.processing_status` column at each stage: pending → extracting_text → extracting_kcs → generating_items → ready (or error). Run migrations in Supabase to add processing_status, processing_progress, processing_step, error_message columns to content_sources table.
+
+To verify, start the API server: `uvicorn app.api.server:app --reload --port 8000`. Upload a document via curl:
+
+    curl -X POST http://localhost:8000/api/sources/upload -F "file=@doc.pdf" -F "domain=general"
+
+Response shows source_id and status "pending". Poll status endpoint:
+
+    curl http://localhost:8000/api/sources/{source_id}/status
+
+Status progresses through stages. After completion, status is "ready" with kc_count and item_count populated. Frontend can now call real API instead of mock.
+
+### Milestone 19: Real-time Processing Progress
+
+At the end of this milestone, the frontend shows live processing progress as documents are being analyzed, using Supabase Realtime subscriptions.
+
+The work involves creating `useSourceProcessing` hook in `web/src/hooks/useSourceProcessing.js` that subscribes to Supabase Realtime changes on the content_sources table filtered by source_id. Create ProcessingStatus.jsx component showing current step and progress percentage. Update SourceCard to display processing state with animated indicator when status is not "ready". Add toast notification (using a simple toast component or console for now) when processing completes. Implement polling fallback if Realtime subscription fails. Wire UploadZone to show real-time progress after upload starts.
+
+To verify, upload a document through the web UI. The UploadZone shows real-time progress: "Extracting text... 10%", "Analyzing content... 35%", "Generating practice items... 70%", then "Complete! 12 concepts, 36 items". Card in list updates from "Processing" to ready state without page refresh. Toast appears on completion.
+
+### Milestone 20: Error Handling and Polish
+
+At the end of this milestone, the Sources feature is production-ready with comprehensive error handling, retry mechanism, delete functionality, and responsive design.
+
+The work involves adding error boundaries to Sources page components. Implement retry mechanism: failed sources show "Retry" button that calls `/api/sources/{id}/retry` endpoint. Create user-friendly error messages for common failures (file too large, unsupported type, LLM rate limit, network error). Add delete functionality: dropdown menu on SourceCard with "Delete" option, confirmation dialog, calls DELETE endpoint, removes from list with animation. Add SourceDetailPanel.jsx (modal or drawer) showing full source info: all KCs, item counts by type, processing history. Test and fix mobile responsive layout. Update EmptyState with prominent "Add Your First Document" CTA that auto-opens upload zone.
+
+To verify, upload a file that will fail (e.g., trigger LLM rate limit by uploading many files quickly). Error state shows clear message and "Retry" button. Click Retry - processing restarts. Delete a source - confirmation appears, source removed from list and database. View source details - modal shows KC list. Test on mobile viewport - layout remains usable.
+
 
 ## Web UI Technology Stack
 
@@ -724,12 +800,21 @@ Directory structure for web application:
     │   │   │   ├── StatCards.jsx
     │   │   │   ├── MasteryBySource.jsx
     │   │   │   └── WeeklyChart.jsx
-    │   │   └── analytics/
-    │   │       ├── InsightCards.jsx
-    │   │       ├── TechniqueComparison.jsx
-    │   │       ├── PerformanceByType.jsx
-    │   │       ├── CalibrationAnalysis.jsx
-    │   │       └── ItemsNeedingAttention.jsx
+    │   │   ├── analytics/
+    │   │   │   ├── InsightCards.jsx
+    │   │   │   ├── TechniqueComparison.jsx
+    │   │   │   ├── PerformanceByType.jsx
+    │   │   │   ├── CalibrationAnalysis.jsx
+    │   │   │   └── ItemsNeedingAttention.jsx
+    │   │   └── sources/                    # (M16-M20)
+    │   │       ├── SourcesHeader.jsx
+    │   │       ├── SourcesToolbar.jsx
+    │   │       ├── SourcesList.jsx
+    │   │       ├── UploadZone.jsx
+    │   │       ├── UploadProgress.jsx
+    │   │       ├── ProcessingStatus.jsx
+    │   │       ├── SourceDetailPanel.jsx
+    │   │       └── EmptyState.jsx
     │   ├── pages/
     │   │   ├── Home.jsx
     │   │   ├── Calendar.jsx
@@ -740,6 +825,12 @@ Directory structure for web application:
     │   │   └── Study.jsx
     │   ├── contexts/
     │   │   └── SupabaseContext.jsx
+    │   ├── hooks/                          # (M16-M19)
+    │   │   ├── useSources.js
+    │   │   ├── useSourceUpload.js
+    │   │   └── useSourceProcessing.js
+    │   ├── services/                       # (M17-M18)
+    │   │   └── sourcesApi.js
     │   ├── lib/
     │   │   └── supabase.js
     │   ├── App.jsx
@@ -750,6 +841,22 @@ Directory structure for web application:
     ├── vite.config.js
     ├── tailwind.config.js
     └── postcss.config.js
+
+Directory structure for backend API (M18):
+
+    learn_system/app/api/
+    ├── __init__.py
+    ├── server.py              # FastAPI app factory with CORS
+    ├── routes/
+    │   ├── __init__.py
+    │   ├── sources.py         # /api/sources endpoints
+    │   └── health.py          # /api/health endpoint
+    ├── models/
+    │   ├── __init__.py
+    │   └── schemas.py         # Pydantic request/response models
+    └── services/
+        ├── __init__.py
+        └── processing.py      # ProcessingPipeline class
 
 
 ## Web UI Design Specifications
@@ -874,3 +981,5 @@ From the Adaptive Learning Platform Blueprint: Bloom's cognitive levels are capt
 ## Revision History
 
 2026-01-02: Added Web UI milestones (9-15) based on UI design screenshots. Added comprehensive specifications for React-based web interface including: technology stack (React, Vite, Tailwind, Recharts, Supabase client), detailed milestone descriptions for all pages (Home, Calendar, Due for Review, Sources, Progress, Analytics, Study Session), directory structure, color palette, typography, spacing, and component specifications. Added Decision Log entries for web UI addition and technology choices.
+
+2026-01-02: Added Sources Feature milestones (16-20) from NEW FEATURES.md specification. Changes include: (1) Updated Plan of Work to show 20 milestones with M16-M20 pending, (2) Added detailed milestone descriptions for Sources page foundation, Upload UI, FastAPI backend, real-time processing, and error handling, (3) Added backend API directory structure in learn_system/app/api/, (4) Added frontend components/sources/ and hooks/ directories, (5) Added database schema migrations for processing_status tracking columns, (6) Updated CLI requirements to include fastapi, uvicorn, python-multipart dependencies. Full specification available in NEW FEATURES.md with architecture diagrams, API endpoints, state management design, and integration validation report.
