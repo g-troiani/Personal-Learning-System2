@@ -162,6 +162,52 @@ This section tracks granular progress with timestamps. Each stopping point must 
     - Schema additions are additive (processing_status, processing_progress, etc.)
     - FastAPI requires new dependencies: fastapi, uvicorn, python-multipart
     - Existing ingest_document() has progress_callback - can wrap with status updates
+- [x] Milestone 16: Sources Page Foundation - List display with filtering and sorting (2026-01-02)
+  - Created useSources hook in web/src/hooks/useSources.js with data fetching, filtering, sorting, and caching
+  - Created SourcesHeader.jsx with page title and document count
+  - Created SourcesToolbar.jsx with search input, domain filter dropdown, sort by dropdown, sort order toggle, and Add Document button
+  - Created SourcesList.jsx with responsive grid layout and enhanced SourceCard showing emoji, title, domain badge, KC count, item count, mastery progress, due/overdue counts
+  - Created EmptyState.jsx with two variants: no sources (CTA to add first document) and no filter results
+  - Extended SupabaseContext with upload queue state management (addToUploadQueue, updateUploadItem, removeFromUploadQueue, clearCompletedUploads)
+  - Wired Sources.jsx page with all components and placeholder upload modal
+  - Verified: search filters by title/domain, domain filter works, sort by name/date/mastery works, card click navigates to /study?source={id}
+- [x] Milestone 17: Upload UI - Drag-drop zone and file validation (2026-01-02)
+  - Created UploadZone.jsx with drag-drop area supporting idle, dragover, uploading, processing, complete, and error visual states
+  - Created UploadProgress.jsx showing 4-step progress indicator (Upload → Extract → Analyze → Generate) with step icons and progress bar
+  - Created useSourceUpload hook in web/src/hooks/useSourceUpload.js with file validation (type, size), upload state management, and optimistic source creation
+  - Supported file types: .pdf, .docx, .md, .txt with 25MB max size
+  - Simulated upload and processing flow (mocked timing for M17 - real API in M18)
+  - Integrated UploadZone into Sources.jsx with show/hide toggle via Add Document button
+  - Added upload success notification with KC count and item count display
+  - Verified: upload zone displays, click to browse works, close button works, file type messaging correct
+- [x] Milestone 18: FastAPI Backend - Upload endpoint and processing pipeline (2026-01-02)
+  - Created FastAPI server in app/api/server.py with CORS middleware for frontend access
+  - Created Pydantic schemas in app/api/models/schemas.py for request/response validation (ProcessingStatus enum, UploadResponse, ProcessingStatusResponse, etc.)
+  - Created health endpoint in app/api/routes/health.py returning status, version, timestamp
+  - Created ProcessingPipeline class in app/api/services/processing.py wrapping ingest_document() with status updates to Supabase
+  - Created sources routes in app/api/routes/sources.py with endpoints: POST /upload, GET /{id}/status, POST /{id}/retry, DELETE /{id}
+  - File upload uses BackgroundTasks to process documents asynchronously
+  - Processing status updates: pending → extracting_text → extracting_kcs → generating_items → ready (or error)
+  - Created database migration file migrations/001_add_processing_status.sql
+  - Updated requirements.txt with fastapi, uvicorn, python-multipart
+  - Verified: API server starts on port 8001, health endpoint returns 200 OK
+- [x] Milestone 19: Real-time Processing Progress - Status tracking and UI updates (2026-01-02)
+  - Created useSourceProcessing hook in web/src/hooks/useSourceProcessing.js with Supabase Realtime subscription and polling fallback
+  - Created ProcessingStatus component in web/src/components/sources/ProcessingStatus.jsx showing progress bar, step indicators, and status badges
+  - Created ProcessingBadge component for compact inline status display on source cards
+  - Updated SourcesList.jsx SourceCard to handle processing states: pending, extracting_text, extracting_kcs, generating_items, ready, error
+  - Added retry button on error state cards with onRetry handler
+  - Wired UploadZone.jsx to real API: fetch to POST /api/sources/upload, monitors progress via useSourceProcessing hook
+  - Added shimmer animation CSS for progress bar visual feedback
+  - Updated Sources.jsx with handleRetry for failed sources using POST /api/sources/{id}/retry
+  - Updated learn_system/.env with correct Supabase key format (sb_publishable_)
+  - Upgraded supabase Python library (2.0.3 → 2.27.0) and websockets dependency for compatibility
+  - Ran database migration in Supabase SQL Editor: ALTER TABLE to add processing_status, processing_progress, processing_step, error_message, processing_started_at, processing_completed_at columns
+  - Verified end-to-end upload flow: curl POST /api/sources/upload → source created with pending status → processing ran through all stages → status='ready', progress=100, step='Processing complete!'
+  - Test source src_88d49c1e (test_upload.md) successfully processed in ~4 minutes with 61 words extracted
+  - Browser upload test (2026-01-02): Programmatically triggered file upload via JavaScript, upload zone UI worked correctly (file selection, Upload & Process button), API received request (200 OK), processing completed successfully
+  - Test source src_7f66a8d2 (browser_test.md) processed: 10 KCs extracted, 30 practice items generated, appears in Sources list after refresh
+  - Known issue: Supabase Realtime subscription not updating progress UI in real-time (UI showed 0% while DB showed 82%). After page refresh, completed source displayed correctly. See Surprises and Discoveries for details.
 
 
 ## Surprises and Discoveries
@@ -189,6 +235,10 @@ This section documents unexpected behaviors, bugs, optimizations, or insights di
 2026-01-02: Practice item hints stored inconsistently. Some hints are stored as JSON arrays (e.g., `["hint1", "hint2"]`), others as plain text strings. The QuestionCard component needed try-catch around JSON.parse to handle both formats gracefully. Evidence: SyntaxError when trying to parse non-JSON hint text.
 
 2026-01-02: Null vs undefined check in JavaScript. The Analytics page ItemsNeedingAttention component checked `avgDifficulty !== undefined` before calling `.toFixed()`, but the value could be `null` (not undefined). In JavaScript, `null !== undefined` is true, so the check passed and `.toFixed()` was called on null, causing a crash. Fixed by using `avgDifficulty != null` which checks for both null and undefined. Evidence: TypeError "Cannot read properties of null (reading 'toFixed')" in browser console.
+
+2026-01-02: Supabase Python library key validation. The supabase-py library version 2.0.3 raised "Invalid API key" for the newer `sb_publishable_*` key format. Upgrading to supabase 2.27.0 resolved this. Also required upgrading websockets (for websockets.asyncio.client import). The web frontend JS library accepted this key format from the start. Evidence: SupabaseException "Invalid API key" resolved after pip3 install --upgrade supabase.
+
+2026-01-02: Supabase Realtime subscription not receiving updates during browser upload. The useSourceProcessing hook sets up a Realtime subscription to monitor processing status changes, but the UI remained at "Uploading file... 0% complete" while the database showed processing_progress=82% at "Generating items for KC 8/10". After page refresh, the completed source (10 KCs, 30 items) displayed correctly. Possible causes: (1) Realtime not enabled for content_sources table in Supabase dashboard, (2) subscription filter syntax issue, (3) timing issue where subscription setup happens after initial updates. The polling fallback (2-second interval) should have caught this but didn't trigger. Needs investigation for M20. Evidence: Browser console showed no Realtime update logs; DB query showed correct progress values.
 
 
 ## Decision Log

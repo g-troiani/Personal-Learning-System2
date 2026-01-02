@@ -8,6 +8,45 @@ export function SupabaseProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Upload queue state (preparation for M17)
+  // Each item: { id, file, status: 'pending'|'uploading'|'processing'|'complete'|'error', progress: 0-100, error: string|null }
+  const [uploadQueue, setUploadQueue] = useState([])
+
+  // Add file to upload queue
+  const addToUploadQueue = (file) => {
+    const id = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    setUploadQueue(prev => [...prev, {
+      id,
+      file,
+      fileName: file.name,
+      fileSize: file.size,
+      status: 'pending',
+      progress: 0,
+      error: null,
+      sourceId: null
+    }])
+    return id
+  }
+
+  // Update upload queue item
+  const updateUploadItem = (id, updates) => {
+    setUploadQueue(prev => prev.map(item =>
+      item.id === id ? { ...item, ...updates } : item
+    ))
+  }
+
+  // Remove from upload queue
+  const removeFromUploadQueue = (id) => {
+    setUploadQueue(prev => prev.filter(item => item.id !== id))
+  }
+
+  // Clear completed/errored items from queue
+  const clearCompletedUploads = () => {
+    setUploadQueue(prev => prev.filter(item =>
+      item.status !== 'complete' && item.status !== 'error'
+    ))
+  }
+
   // Fetch all content sources
   const fetchSources = async () => {
     try {
@@ -226,7 +265,13 @@ export function SupabaseProvider({ children }) {
     fetchSources,
     getDueCounts,
     getMasteryBySource,
-    getRecentSources
+    getRecentSources,
+    // Upload queue (M17 preparation)
+    uploadQueue,
+    addToUploadQueue,
+    updateUploadItem,
+    removeFromUploadQueue,
+    clearCompletedUploads
   }
 
   return (
