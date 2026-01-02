@@ -129,6 +129,10 @@ export function useSourceProcessing(sourceId) {
     // Set up realtime subscription
     setupRealtimeSubscription()
 
+    // Always start polling as backup - Realtime may not work reliably
+    // Polling will stop automatically when processing completes
+    startPolling()
+
     // Cleanup
     return () => {
       if (subscriptionRef.current) {
@@ -137,7 +141,7 @@ export function useSourceProcessing(sourceId) {
       }
       stopPolling()
     }
-  }, [sourceId, fetchStatus, setupRealtimeSubscription, stopPolling])
+  }, [sourceId, fetchStatus, setupRealtimeSubscription, startPolling, stopPolling])
 
   // Computed values
   const isProcessing = status && !['ready', 'error'].includes(status.processing_status)
