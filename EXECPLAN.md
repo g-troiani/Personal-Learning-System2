@@ -150,6 +150,18 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Created ItemsNeedingAttention.jsx listing struggling items with Practice buttons linking to filtered study sessions
   - Full Analytics.jsx page with filter controls (time period, source, knowledge type) that update all sections
   - All analytics calculated from real database queries (attempts, kc_state, technique_bundles, retention_tests, kc_technique_history)
+- [x] Sources View Research & Specification (2026-01-02)
+  - Created NEW FEATURES.md with comprehensive Sources view specification
+  - Ran 5 parallel research agents covering: UI/UX design, file upload flow, backend integration, user journey, engineering architecture
+  - Documented FastAPI backend API design (upload, status, retry, health endpoints)
+  - Specified Supabase Realtime for processing progress tracking
+  - Designed SourcesContext state management with custom hooks (useSources, useSourceUpload, useSourceProcessing)
+  - Defined 5 implementation milestones (M16-M20)
+  - Validated integration with existing codebase:
+    - Existing patterns confirmed: generate_id('src'), get_client(), SupabaseContext, SourceCard component
+    - Schema additions are additive (processing_status, processing_progress, etc.)
+    - FastAPI requires new dependencies: fastapi, uvicorn, python-multipart
+    - Existing ingest_document() has progress_callback - can wrap with status updates
 
 
 ## Surprises and Discoveries
@@ -203,6 +215,10 @@ Decision: Pass Supabase environment variables explicitly when starting Vite dev 
 
 Decision: Use Supabase publishable key (sb_publishable_) instead of secret key for web UI. Rationale: Supabase intentionally blocks secret keys (sb_secret_) in browser environments as a security measure to prevent service role key exposure. The publishable key is designed for client-side use. This differs from the CLI which can use secret keys safely. Both key types access the same database; the difference is RLS enforcement (publishable respects RLS policies, secret bypasses them). For the web UI, we use the publishable key with RLS disabled on tables during development. Date: 2026-01-02.
 
+Decision: Use FastAPI with BackgroundTasks for Sources upload API. Rationale: The existing ingest_document() pipeline already handles text extraction, KC extraction, and item generation. FastAPI wraps this with HTTP endpoints and adds processing status tracking. BackgroundTasks keeps processing in-process (no Celery/Redis) which suits localhost single-user. Supabase Realtime provides push updates to frontend during processing. The hybrid architecture (frontend reads directly from Supabase, API only for upload/processing) minimizes complexity. Date: 2026-01-02.
+
+Decision: Add processing_status as new column instead of using existing status field. Rationale: The existing `status` field in content_sources represents lifecycle state (active/archived). The new `processing_status` field tracks ingestion pipeline state (pending/extracting_kcs/generating_items/ready/error). These are orthogonal concerns - a source could be 'active' but still 'error' in processing. Keeping them separate avoids conflating different state machines. Date: 2026-01-02.
+
 
 ## Outcomes and Retrospective
 
@@ -242,7 +258,6 @@ This section summarizes outcomes, gaps, and lessons learned at major milestones 
 - No interleaving implementation within sessions (just bundle tracking)
 - No retention test scheduling (structure exists but not implemented)
 - No learning goals tracking (table exists but not used)
-- Could benefit from progress charts and analytics visualization
 
 ### All 15 Milestones Complete (2026-01-02)
 
@@ -305,11 +320,11 @@ The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, p
 
 ## Plan of Work
 
-Implementation proceeds through fifteen milestones. Milestones 1-8 (CLI) are complete. Milestones 9-15 implement the web UI.
+Implementation proceeded through fifteen milestones. All milestones are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
-**Web UI (Pending):** M9: Foundation (React/Vite/Tailwind setup, sidebar layout). M10: Home dashboard. M11: Study session interface. M12: Calendar and scheduling. M13: Due for Review page. M14: Progress statistics. M15: Analytics and insights.
+**Web UI (Complete):** M9: Foundation (React/Vite/Tailwind setup, sidebar layout). M10: Home dashboard. M11: Study session interface. M12: Calendar and scheduling. M13: Due for Review page. M14: Progress statistics. M15: Analytics and insights.
 
 
 ## CLI Usage Reference
@@ -650,67 +665,17 @@ All CLI milestones are complete. See the **Progress** section for detailed imple
 - **M7:** Todo dashboard and source-filtered review
 - **M8:** Technique bundle tracking for self-experimentation
 
-### Milestone 9: Web UI Foundation
+### Web UI Milestones 9-15 (Complete)
 
-At the end of this milestone, a React web application exists with the core layout structure, navigation sidebar, and connection to the Supabase backend. The app runs locally and can authenticate with the existing database.
+All Web UI milestones are complete. See the **Progress** section for detailed implementation notes.
 
-The work involves scaffolding a new React project with Vite in a `web/` directory alongside the existing `learn_system/` CLI. Installing dependencies: React 18, React Router, Tailwind CSS, Supabase client, Lucide React icons, and Recharts for visualization. Creating the root layout with a persistent left sidebar containing: app logo ("Learn"), navigation links (Home, Calendar, Due for Review with badge, Sources, Progress, Analytics), a "Recent" section showing recent sources with emoji icons, and a user profile area at the bottom. Implementing a Supabase context provider for database access. Setting up Tailwind with a light theme color palette matching the design: warm off-white backgrounds (#FAF9F7), green accents for progress (#10B981), amber/orange for alerts (#F59E0B), red for overdue (#EF4444).
-
-To verify, run `npm run dev` in the web directory. The application should display the sidebar layout. Clicking navigation links should change the active state. The "Due for Review" badge should show the count from the database. Recent sources should populate from content_sources table.
-
-
-### Milestone 10: Web UI Home Dashboard
-
-At the end of this milestone, the Home page displays a personalized greeting, overdue alert banner, search box with quick actions, and source cards showing mastery progress.
-
-The work involves creating the Home page component with: a time-based greeting ("Good morning/afternoon/evening, [name]") with subtitle "Ready to learn something?", an alert banner showing overdue item count with clock icon and "Review now" button (only visible when items are overdue), a search input with placeholder "Search your knowledge base...", quick action buttons below search (Study, Plan, Add Document, Analytics) each with an icon, and a grid of source cards. Each source card displays: emoji icon (configurable per source), truncated title, horizontal progress bar with mastery percentage, and status text showing due/overdue counts in appropriate colors (amber for due today, red for overdue). Cards link to source-specific study sessions.
-
-To verify, navigate to Home. Verify greeting reflects current time. If overdue items exist, the alert banner should appear with accurate count. Source cards should display correct mastery percentages matching database values. Clicking "Review now" should navigate to Due for Review page. Quick action buttons should trigger their respective actions or navigate to relevant pages.
-
-
-### Milestone 11: Web UI Study Session
-
-At the end of this milestone, users can complete interactive study sessions through the web interface with the same functionality as the CLI study loop.
-
-The work involves creating a full-screen study session view with: header showing "X End session" on left and progress indicator "N of M" with progress bar on right, knowledge component display showing type badge (factual/conceptual/procedural) and practice mode (Free recall/Cued recall/etc), KC name as heading, question prompt in a rounded card, answer input area supporting both text entry and voice input (microphone button), submit button, and "Skip and show answer" link. After submission: display expected answer, collect self-assessment rating (1-5 scale), collect difficulty rating, and advance to next item. Session summary modal on completion showing items completed, average score, and session duration. All attempts must be recorded to the database with the same fields as CLI attempts.
-
-To verify, start a study session from any entry point. Complete several items verifying: progress indicator updates, answers are recorded, ratings are collected, session summary appears on completion. Query the attempts table to confirm records match the session activity. End session early and verify partial progress is saved.
-
-
-### Milestone 12: Web UI Calendar
-
-At the end of this milestone, users can view a learning calendar showing scheduled reviews and plan future study sessions.
-
-The work involves creating the Calendar page with: page header "Learning Calendar" with subtitle "Plan and schedule your study sessions", month navigation (previous/next arrows with "January 2026" display), a 7-column calendar grid (Sun-Sat) showing all days of the month, current day highlighted with a circle indicator, and a "Schedule a Study Session" form at the bottom. The scheduling form includes: source dropdown ("Select source..."), session type dropdown (Review/Study/New), duration input (default 30 minutes), date picker, and "Add" button. Future enhancement: show scheduled sessions and due item density on calendar days.
-
-To verify, navigate to Calendar. Verify current month displays correctly with proper day alignment. Today's date should be highlighted. Change months using navigation arrows. Schedule a study session using the form and verify it creates a database entry. The scheduled session should appear on the calendar day.
-
-
-### Milestone 13: Web UI Due for Review
-
-At the end of this milestone, the Due for Review page displays all items needing attention organized by urgency with direct action buttons.
-
-The work involves creating the Due for Review page with: page header "Due for Review", three sections with colored indicators: Overdue (red dot), Due Today (amber dot), New Content (green dot). Each section lists sources with: source emoji and name, item count and status text ("X items overdue" / "X items due" / "X items not yet practiced"), and action button (Review/Study/Start) styled appropriately. At the bottom: "Review everything at once?" prompt with "Study All (N items)" button in dark style. Clicking any action button starts a filtered study session for that source/category.
-
-To verify, navigate to Due for Review. Verify sources appear in correct sections based on their item states. Badge count in sidebar should match total items shown. Click "Review" on an overdue source and verify session starts with only items from that source. Click "Study All" and verify all due items are included in the session.
-
-
-### Milestone 14: Web UI Progress
-
-At the end of this milestone, the Progress page displays learning statistics, mastery by source, and weekly activity visualization.
-
-The work involves creating the Progress page with: page header "Progress", summary stat cards in a row showing: Sources (count), Items Learned (count), Study Sessions (count), Total Time (formatted hours). Mastery by Source section showing each source with: emoji, name, horizontal progress bar, and percentage. This Week bar chart showing daily activity (M-T-W-T-F-S-S) with green bars indicating items practiced each day, streak indicator ("N day streak 🔥"), and weekly total ("N items this week"). A "View detailed analytics >" link at bottom navigating to Analytics page.
-
-To verify, navigate to Progress. Verify stat cards show accurate counts from database. Mastery percentages should match kc_state averages per source. Weekly chart should reflect actual session activity for the current week. Streak calculation should be accurate based on consecutive days with sessions.
-
-
-### Milestone 15: Web UI Analytics
-
-At the end of this milestone, the Analytics page provides deep insights into learning patterns, technique effectiveness, and actionable recommendations.
-
-The work involves creating the Analytics page with: page header "Analytics" with subtitle "Deep insights into your learning patterns", filter controls (time period dropdown, source filter, knowledge type filter), three insight cards in a row: "What's Working" (green, shows best performing technique/pattern with improvement percentage), "Needs Attention" (amber, shows calibration issues or struggling areas), "Optimization" (light blue, shows recommendations like best study time). Technique Bundle Effectiveness section comparing bundles with: dual progress bars (7-day retention, 30-day retention), percentages, and "N sessions, avg to mastery, n=X items" metrics. Performance by Knowledge Type showing horizontal bars for Factual, Conceptual, Procedural (Cognitive), Procedural (Execution) with percentages and item counts. Calibration Analysis showing confidence vs actual performance per knowledge type with badges (Calibrated/Overconfident/Underconfident). Optimal Spacing Analysis showing retention curve by interval with recommendation text. Items Needing Attention list showing KCs with low mastery or high difficulty, each with: KC name, source name, mastery percentage (colored by level), attempts and difficulty info, and "Practice" button.
-
-To verify, navigate to Analytics with sufficient data in the database. Verify technique comparisons reflect actual retention rates from attempts. Verify calibration analysis correctly compares confidence_before ratings to actual scores. Filter controls should update all sections. Clicking "Practice" on a struggling item should start a focused session.
+- **M9:** Foundation (React/Vite/Tailwind setup, Sidebar, Layout, SupabaseContext)
+- **M10:** Home dashboard (greeting, overdue alert, search, quick actions, source cards)
+- **M11:** Study session (question card, answer input, self-assessment, session summary)
+- **M12:** Calendar (month navigation, calendar grid, schedule form)
+- **M13:** Due for Review (sections by urgency, source items, action buttons)
+- **M14:** Progress (stat cards, mastery by source, weekly chart, streak)
+- **M15:** Analytics (insight cards, technique comparison, calibration analysis, items needing attention)
 
 
 ## Web UI Technology Stack
@@ -735,8 +700,7 @@ Directory structure for web application:
     │   ├── components/
     │   │   ├── layout/
     │   │   │   ├── Sidebar.jsx
-    │   │   │   ├── Layout.jsx
-    │   │   │   └── UserProfile.jsx
+    │   │   │   └── Layout.jsx
     │   │   ├── home/
     │   │   │   ├── GreetingHeader.jsx
     │   │   │   ├── OverdueAlert.jsx
@@ -765,7 +729,6 @@ Directory structure for web application:
     │   │       ├── TechniqueComparison.jsx
     │   │       ├── PerformanceByType.jsx
     │   │       ├── CalibrationAnalysis.jsx
-    │   │       ├── SpacingAnalysis.jsx
     │   │       └── ItemsNeedingAttention.jsx
     │   ├── pages/
     │   │   ├── Home.jsx
@@ -776,17 +739,9 @@ Directory structure for web application:
     │   │   ├── Analytics.jsx
     │   │   └── Study.jsx
     │   ├── contexts/
-    │   │   ├── SupabaseContext.jsx
-    │   │   └── SessionContext.jsx
-    │   ├── hooks/
-    │   │   ├── useStudyQueue.js
-    │   │   ├── useSources.js
-    │   │   ├── useProgress.js
-    │   │   └── useAnalytics.js
+    │   │   └── SupabaseContext.jsx
     │   ├── lib/
-    │   │   ├── supabase.js
-    │   │   ├── spacing.js
-    │   │   └── mastery.js
+    │   │   └── supabase.js
     │   ├── App.jsx
     │   ├── main.jsx
     │   └── index.css
