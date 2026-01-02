@@ -19,9 +19,13 @@ export function useSources() {
   const [sortOrder, setSortOrder] = useState('desc')
 
   // Fetch enriched source data (with KC counts, item counts, mastery, due counts)
-  const fetchEnrichedSources = useCallback(async () => {
+  // isRefresh: if true, don't show loading spinner (background refresh)
+  const fetchEnrichedSources = useCallback(async (isRefresh = false) => {
     try {
-      setLoading(true)
+      // Only show loading on initial load, not on refresh
+      if (!isRefresh) {
+        setLoading(true)
+      }
       setError(null)
 
       // Fetch sources
@@ -185,9 +189,9 @@ export function useSources() {
     return result
   }, [enrichedSources, searchQuery, domainFilter, sortBy, sortOrder])
 
-  // Refresh data
+  // Refresh data (background refresh without loading spinner)
   const refresh = useCallback(() => {
-    return fetchEnrichedSources()
+    return fetchEnrichedSources(true)
   }, [fetchEnrichedSources])
 
   // Initial fetch

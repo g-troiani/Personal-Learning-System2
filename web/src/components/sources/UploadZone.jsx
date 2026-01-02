@@ -47,10 +47,20 @@ export default function UploadZone({ onUpload, onClose, onComplete, isExpanded =
 
   // Sync UI state with processing status from Supabase Realtime
   useEffect(() => {
-    if (!sourceId || !processingStatus) return
+    // Only update if we have a sourceId and are in a processing state
+    if (!sourceId) return
 
-    // Update progress from realtime data
-    if (processingProgress !== undefined) {
+    // If we have a sourceId but status hasn't loaded yet, keep showing processing
+    if (!processingStatus) {
+      // Ensure we're in processing state while waiting for status
+      if (state !== STATES.PROCESSING && state !== STATES.COMPLETE && state !== STATES.ERROR) {
+        setState(STATES.PROCESSING)
+      }
+      return
+    }
+
+    // Update progress from realtime data (only if > 0 to avoid resetting)
+    if (processingProgress > 0) {
       setProgress(processingProgress)
     }
 
@@ -66,6 +76,10 @@ export default function UploadZone({ onUpload, onClose, onComplete, isExpanded =
     const statusString = processingStatus?.processing_status
     if (stepMap[statusString] !== undefined) {
       setProcessingStep(stepMap[statusString])
+      // Ensure we're in processing state if backend is processing
+      if (statusString !== 'ready' && statusString !== 'error' && state !== STATES.PROCESSING) {
+        setState(STATES.PROCESSING)
+      }
     }
 
     // Handle completion
@@ -83,7 +97,7 @@ export default function UploadZone({ onUpload, onClose, onComplete, isExpanded =
       setState(STATES.ERROR)
       setError(processingError || 'Processing failed. Please try again.')
     }
-  }, [sourceId, processingStatus, processingProgress, isComplete, hasError, processingError, onComplete])
+  }, [sourceId, processingStatus, processingProgress, isComplete, hasError, processingError, onComplete, state])
 
   // Validate file type and size
   const validateFile = useCallback((file) => {

@@ -86,7 +86,9 @@ export default function Sources() {
   const hasNoSources = allSources.length === 0
   const hasNoFilteredResults = sources.length === 0 && !hasNoSources
 
-  if (loading) {
+  // Only show full-page loading on initial load, not during refresh
+  // This prevents UploadZone from being unmounted during upload
+  if (loading && allSources.length === 0 && !showUploadZone) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="w-8 h-8 animate-spin text-accent-new" />
