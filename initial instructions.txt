@@ -64,4 +64,42 @@ contradicting and the user journey makes sense. so until the task is successful 
   placeholders and that everything is well implemented and
   works. Make sure EXECPLAN.md is kept updated. 
 
+# IMPLEMENT EXECPLAN.MD -  same as above less commands to be ran the first time the environment is set up
+  9) let's go ahead and implement @EXECPLAN.md. Refer to it often and follow the instructions in
+    CLAUDE.md. Use chrome to test
+    until the task
+    succeeded. Proceed one milestone at a time. Before moving on
+    to the following milestone, test all the logic of the current milestone, make sure no
+    placeholders and that everything is well implemented and
+    works. Make sure EXECPLAN.md is kept updated (all sections)
+
+
+    # REVIEW & CLEANING EXECPLAN.md
+    review the additions to EXECPLAN.md. Also, make sure we don't keep in EXECPLAN.md outdated or superfloud information to make
+  the document crisp.
+
+    # ADDING TO EXECPLAN.md
+Update @EXECPLAN.MD to prepare to implement the new feature from @NEW FEATURES.md. Integrate the features into the current execplan.md to produce a new execplan according to the rules of plans.md.
+
+   [INSERT FEATURES HERE IN DETAIL OR REFER TO A SPEC]
+   as shown in the screenshots in the folder /Users/gianmariatroiani/Downloads/Gian Vision/code/Personal Learning System (original - take 2)/ui design.
+
+
+
+
+  # RESEARCH FOR NEW FEATURE
+  Let's do some research. Do not change anything in the code for now, just output the crisp and distilled fruit of the research in NEW FEATURES.md. 
+  In the future, this research and specs will be then integrated in EXECPLAN.md. 
+  Spin up 5 git work trees to research how to best implement the SOURCES view as right now it just contains a placeholder. 
+  Then, integrate the result of each research in the context of building a view that is cohesive with the rest of the system that is built so far.
+  What are the UI considerations? How the logic should work? And just general engineering and design consideration to
+  implement the sources tab. What would be required to upload something? How would it translate from upload to practice
+  questions? How would the user journey through the app be best designed in terms of this? The standard for a good plan: any
+  developer should be able to follow it. You should be able to hand it to a senior engineer and say "execute this" and it should work.
   
+  Planning Phase Decisions
+
+  Verify complex logic is correct
+  Ensure business requirements follow good practice
+  Establish clean service boundaries
+  Prevent unnecessary coupling 
