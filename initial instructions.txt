@@ -1,0 +1,67 @@
+1) let's go ahead and implement @EXECPLAN.md. Refer to it often and follow the instructions in CLAUDE.md. Create a virtual environment, activate it and work inside there. Use chrome to test until the task 
+succeeded. Use Supabase for the database. Proceed one milestone at a time. Before moving on to 
+the following milestone, test all the logic of the current milestone, make sure no placeholders and that everything is well implemented and 
+works. 
+
+2) claude --dangerously-skip-permissions --chrome
+
+
+3) let's go ahead and implement @ExecPlans.md
+
+4) add to CLAUDE.md:
+  ## Living Documentation
+
+  EXECPLAN.md is the single source of truth for this project. You MUST:
+
+  1. **Read EXECPLAN.md at session start** - Always read it first to understand current state
+  2. **Update Progress section** - After completing any task, add a timestamped entry
+  3. **Update Surprises and Discoveries** - Document any bugs, unexpected behaviors, or workarounds found
+  4. **Update Decision Log** - Record any significant implementation decisions with rationale
+  5. **Update Outcomes and Retrospective** - At major stopping points, summarize what's working, what's not, and lessons learned
+
+  Never use temporary todo lists as the primary tracking mechanism. All progress must be recorded in EXECPLAN.md so the next session (or a new conversation) can pick up exactly where we left off.
+
+  When resuming work:
+  1. Read EXECPLAN.md first
+  2. Check the Progress section for incomplete milestones
+  3. Check Surprises and Discoveries for known issues
+  4. Continue from documented stopping point
+
+
+5) No, review your work for completeness and correctness.
+  Make sure you documented how the logic that triangulates between features, usefulness for the user and user journey, backend and database implementation and front-end implementation. 
+It needs to be thought out in a way that the components interact with each other and they don't crash when we're trying
+ to build it. We're going to have to build it in one shot so everything needs to be laid out and we need to make sure that there's no things that
+ don't integrate. Ultrathink
+
+
+6) Integrate the features into the current execplan.md to produce a new execplan according to the rules of plans.md
+
+
+
+7) > Spin up 6 gitworktrees all tasked with the following: " do you have a detailed implementation plan in @EXECPLANV1.md ? Does all of this ABIDES by the plans.md 
+rules? Can the implementation be one-shotted or is there logic missing or contradicting or there is need to review the user journey or somehting? This means real
+code structure: function signatures, type definitions, data flow.
+The standard for a good plan: any developer should be able to follow it. The speaker likens it to paint by numbers. You should be able to hand it to your most 
+junior engineer and say "execute this line by line" and it should work.
+Planning Phase Decisions
+
+Verify complex logic is correct
+Ensure business requirements follow good practice
+Establish clean service boundaries
+Prevent unnecessary coupling             Ultrathink. Review your changes for completeness and correctness." once all are done, take the findings from each and 
+resolve all the differences and implement all the best solutions and the ones that have merit to get to a solution that can finally be on-shotted. We are going to
+iterate and spin up multiple git work trees until the main Branch is ready to be one shotted It is abiding by the plans.md rules, there is no logic missing or
+contradicting and the user journey makes sense. so until the task is successful and the multiple git word trees all come out back with nothing significant to change
+ we're going to iterate until the task is successful.
+
+ 8)let's go ahead and implement @EXECPLAN.md. Refer to it often and follow the instructions in
+  CLAUDE.md. Create a virtual environment, activate it and work inside there. Use chrome to test
+  until the task
+  succeeded. Use Supabase for the database. You have all the api keys for supabase, anthropic and
+  openai in the .env file at the root directory. Proceed one milestone at a time. Before moving on
+  to the following milestone, test all the logic of the current milestone, make sure no
+  placeholders and that everything is well implemented and
+  works. Make sure EXECPLAN.md is kept updated. 
+
+  
