@@ -84,6 +84,13 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Added techniques command to view bundle usage statistics
   - Shows KCs practiced, total exposures, and sessions per bundle
   - Foundation ready for self-experimentation and A/B testing of techniques
+- [ ] Milestone 9: Web UI Foundation - Project setup and layout components
+- [ ] Milestone 10: Web UI Home Dashboard - Main dashboard with greeting, alerts, search, and source cards
+- [ ] Milestone 11: Web UI Study Session - Interactive practice interface with answer input
+- [ ] Milestone 12: Web UI Calendar - Learning calendar and session scheduling
+- [ ] Milestone 13: Web UI Due for Review - Organized review queue by urgency
+- [ ] Milestone 14: Web UI Progress - Statistics dashboard with charts
+- [ ] Milestone 15: Web UI Analytics - Deep insights, technique comparison, and recommendations
 
 
 ## Surprises and Discoveries
@@ -116,6 +123,10 @@ Decision: Use the SM-2 algorithm for spaced repetition rather than newer alterna
 Decision: Use the Anthropic Claude API for knowledge component extraction and practice item generation. Rationale: Extraction quality directly determines system usefulness. Claude produces consistent, well-structured output. The cost of a few dollars per document is acceptable for personal use. Local models can be added as an alternative later without changing the data model. Date: Initial design.
 
 Decision: Track Cognitive Load Theory proxies in the MVP rather than implementing full CLT-aware presentation selection. Rationale: Full CLT implementation requires content-level tagging of presentation properties such as split attention versus integrated visuals, worked examples versus independent practice, and novice-appropriate versus expert-appropriate formats. The MVP captures proxies including intrinsic complexity ratings on knowledge components, difficulty ratings on attempts, response time patterns, and hint usage depth. These proxies enable future CLT-aware features without blocking initial implementation. Date: Design review.
+
+Decision: Add web UI in addition to CLI interface. Rationale: While the CLI remains functional for power users and scripting, a web UI provides better UX for daily learning sessions. The UI design follows a clean, light-theme aesthetic with intuitive navigation. The web app will connect to the same Supabase backend, ensuring data consistency across both interfaces. This enables the system to reach users who prefer visual interfaces while maintaining CLI capabilities. Date: 2026-01-02.
+
+Decision: Use React with Vite for web UI implementation. Rationale: React provides component-based architecture ideal for the modular UI design. Vite offers fast development experience with HMR. The stack includes Tailwind CSS for styling, Recharts for data visualization, and Supabase client for backend connectivity. This aligns with modern web development practices and ensures maintainability. Date: 2026-01-02.
 
 
 ## Outcomes and Retrospective
@@ -163,7 +174,7 @@ This section summarizes outcomes, gaps, and lessons learned at major milestones 
 
 This section describes the current state as if the reader knows nothing about the project. It defines every term that might be unfamiliar and names all key files by full path.
 
-This system is a personal learning tool implementing evidence-based learning science. There is no existing codebase; implementation starts from scratch. The system runs locally via command-line interface, stores data in SQLite, and calls an external LLM API for intelligent content processing.
+This system is a personal learning tool implementing evidence-based learning science. The system provides both a CLI interface and a web UI, stores data in Supabase (PostgreSQL), and calls the Anthropic Claude API for intelligent content processing during document ingestion.
 
 A knowledge component, abbreviated KC throughout this document, refers to a single learnable unit extracted from source content. A knowledge component might be a definition such as "Precision is the ratio of true positives to all predicted positives," a concept such as "When to prioritize precision over recall depends on the cost of false positives versus false negatives," a cognitive procedure such as "Calculate precision given a confusion matrix," or an execution task such as "Implement a function that computes precision from prediction and label arrays." Each knowledge component has a type that determines appropriate practice approaches.
 
@@ -181,436 +192,44 @@ A session is a study period during which the user practices items. Sessions reco
 
 An attempt records a single interaction with a practice item. Each attempt captures the item presented, the response given, correctness assessment, time taken, confidence rating before the attempt, difficulty rating after the attempt, hints requested, and for execution tasks, independence level and errors encountered.
 
-The project will be structured as follows. All source code lives under a directory called learn_system. The learn_system/app directory contains the Python package. The file learn_system/app/main.py serves as the CLI entry point using the Click framework. The file learn_system/app/config.py manages configuration constants and paths. The directory learn_system/app/database contains connection.py for SQLite management, schema.sql containing the complete database schema as SQL statements, and queries.py containing functions that execute database operations. The directory learn_system/app/ingestion contains ingest.py for orchestrating document processing, extractors.py for extracting text from PDF, DOCX, and Markdown files, and kc_extractor.py for LLM-based knowledge component identification. The directory learn_system/app/practice contains generator.py for creating practice items and templates.py for LLM prompt templates organized by knowledge type. The directory learn_system/app/session contains manager.py for session lifecycle management, scheduler.py for determining which items are due for review, presenter.py for displaying items appropriately by practice mode, and loop.py for the main interactive study loop. The directory learn_system/app/state contains estimator.py for mastery calculations using exponential moving average, spacing.py for implementing the SM-2 spaced repetition algorithm, and tracker.py for recording technique bundle history per knowledge component. The directory learn_system/app/analysis contains reports.py for analysis queries. The directory learn_system/data will contain the SQLite database file learning.db created at runtime.
+The project has two main parts: `learn_system/` for the Python CLI and `web/` for the React web UI. Both connect to the same Supabase database. The CLI structure: `app/main.py` (CLI entry), `app/config.py` (configuration), `app/database/` (Supabase queries), `app/ingestion/` (document processing and KC extraction), `app/practice/` (item generation), `app/study/` (session loop and scheduler), `app/state/` (mastery and spacing algorithms). The web structure is defined in the "Web UI Technology Stack" section.
 
-The system requires five Python packages. Click version 8.0 or higher provides the command-line interface framework with decorators for defining commands and options. Python-dotenv version 1.0 or higher loads environment variables from a .env file, used for the API key. Python-docx version 0.8 or higher reads Microsoft Word DOCX files by parsing their XML structure. Pypdf version 3.0 or higher extracts text from PDF files. Anthropic version 0.18 or higher provides the official Claude API client.
-
-The system requires Python 3.10 or higher because it uses modern type hints and match statements. An Anthropic API key must be available in the environment variable ANTHROPIC_API_KEY. The system needs approximately one hundred megabytes of disk space for the database as it grows with use. An internet connection is required during document ingestion when the LLM API is called, but not during study sessions.
+The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, pypdf, anthropic, and supabase. The web UI requires Node.js 18+ with React, Vite, Tailwind CSS, Recharts, and Supabase client. An Anthropic API key and Supabase credentials must be available in environment variables. An internet connection is required for database access and during document ingestion when the LLM API is called.
 
 
 ## Plan of Work
 
-This section describes the sequence of implementation in prose form.
+Implementation proceeds through fifteen milestones. Milestones 1-8 (CLI) are complete. Milestones 9-15 implement the web UI.
 
-Implementation proceeds through eight milestones that build incrementally toward the complete system. Each milestone produces working, testable functionality that the next milestone builds upon.
+**CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
-The first milestone establishes project foundation by creating the directory structure, implementing the complete database schema, building the CLI skeleton with the init command, and setting up configuration management. The database schema must be complete from the start because later milestones depend on specific tables and columns. The init command creates the database file and populates default technique bundles. Validation confirms that running init creates a database with all tables and that the bundles can be queried.
+**Web UI (Pending):** M9: Foundation (React/Vite/Tailwind setup, sidebar layout). M10: Home dashboard. M11: Study session interface. M12: Calendar and scheduling. M13: Due for Review page. M14: Progress statistics. M15: Analytics and insights.
 
-The second milestone implements document ingestion by building text extractors for PDF, DOCX, and Markdown formats, creating the ingest command that orchestrates extraction and storage, and storing documents with metadata in the content_sources table. Validation confirms that ingesting each file type produces stored content that can be retrieved.
 
-The third milestone implements knowledge component extraction by building the LLM client wrapper for calling Claude, crafting extraction prompts that produce structured output, implementing text chunking for documents that exceed context limits, parsing LLM responses into knowledge component records, and storing components with their type, cognitive level, complexity, and relationships. Validation confirms that ingesting a document extracts knowledge components visible in the database with appropriate metadata.
+## CLI Usage Reference
 
-The fourth milestone implements practice item generation by creating prompt templates specific to each knowledge type, generating multiple items per knowledge component at varying difficulty levels, and storing items with their prompts, expected responses, hints, and rubrics. Validation confirms that ingestion produces practice items for each knowledge component and that items are appropriately structured for their type.
+CLI commands (all complete and functional):
 
-The fifth milestone implements the core learning loop by building session management to create, track, and close sessions, implementing item presentation that formats questions appropriately for each practice mode, collecting user responses through interactive prompts, recording all attempt data including timing and ratings, and providing session summaries. Validation confirms that running the study command produces an interactive session where attempts are recorded to the database.
+```
+python -m app.main init                    # Initialize database and bundles
+python -m app.main ingest <file> --domain  # Process document, extract KCs, generate items
+python -m app.main status                  # Show system statistics
+python -m app.main sources                 # List ingested documents
+python -m app.main bundles                 # List technique bundles
+python -m app.main todo                    # Show what's due for review
+python -m app.main study --duration 30     # Start study session
+python -m app.main review <pattern>        # Focus session on specific source
+python -m app.main techniques              # View bundle usage statistics
+```
 
-The sixth milestone implements the spaced repetition engine by implementing SM-2 interval calculations, building mastery estimation from attempt history, creating the scheduler that queries for due items, and updating knowledge component state after each attempt. Validation confirms that completing a session causes next review dates to be set based on performance and that subsequent todo calls reflect the schedule.
+## Recovery Notes
 
-The seventh milestone implements the to-do dashboard and source-specific review by building the todo command that displays due items organized by source document with counts and overdue indicators, and implementing the review command that focuses a session on items from a specified source. Validation confirms that todo shows the expected breakdown and that review filters items correctly.
-
-The eighth milestone implements technique bundle tracking by recording bundle associations on sessions, linking attempts to bundles through their session, and storing technique history per knowledge component to track which bundles have been used. Validation confirms that sessions record their bundle and that history accumulates correctly.
-
-
-## Concrete Steps
-
-This section provides exact commands to run from the repository root directory, which is learn_system. All paths are relative to that root unless otherwise specified.
-
-To begin implementation, create the project directory and navigate into it:
-
-    mkdir learn_system
-    cd learn_system
-
-Create the package structure:
-
-    mkdir -p app/database app/ingestion app/practice app/session app/state app/analysis data
-    touch app/__init__.py app/database/__init__.py app/ingestion/__init__.py
-    touch app/practice/__init__.py app/session/__init__.py app/state/__init__.py
-    touch app/analysis/__init__.py
-
-Create requirements.txt with the dependencies:
-
-    click>=8.0
-    python-dotenv>=1.0
-    python-docx>=0.8
-    pypdf>=3.0
-    anthropic>=0.18
-
-Install dependencies:
-
-    pip install -r requirements.txt
-
-Create a .env file with the API key:
-
-    echo "ANTHROPIC_API_KEY=your-key-here" > .env
-
-After Milestone 1 is complete, verify the foundation:
-
-    python -m app.main init
-
-Expected output:
-
-    Initialized database at data/learning.db
-    Created 5 default technique bundles
-
-Verify the database was created:
-
-    sqlite3 data/learning.db ".tables"
-
-Expected output showing all tables:
-
-    attempts              kc_prerequisites      practice_items
-    content_sources       kc_state              retention_tests
-    kc_subskills          kc_technique_history  sessions
-    knowledge_components  learning_goals        technique_bundles
-
-After Milestone 2 is complete, verify document ingestion:
-
-    python -m app.main ingest /path/to/test.pdf --domain tech
-
-Expected output:
-
-    Ingesting: test.pdf
-    Extracted 15234 characters
-    Stored as source: test.pdf (id: src_abc123)
-
-Verify storage:
-
-    sqlite3 data/learning.db "SELECT id, title, word_count FROM content_sources"
-
-After Milestone 4 is complete, verify full ingestion with extraction and generation:
-
-    python -m app.main ingest /path/to/Evaluating_LLMs.docx --domain ai_ml
-
-Expected output:
-
-    Ingesting: Evaluating_LLMs.docx
-    Extracted 28456 characters
-    Extracting knowledge components...
-    Found 52 knowledge components
-    Generating practice items...
-    Generated 156 practice items
-    Done. Source ready for study.
-
-After Milestone 5 is complete, verify the study loop:
-
-    python -m app.main study --duration 5
-
-Expected interactive session beginning with:
-
-    Starting study session (5 minutes, bundle: Standard SRS)
-    
-    [Item 1 of ~10]
-    KC: Precision metric definition
-    Mode: free_recall
-    
-    What is precision in the context of classification metrics?
-    
-    Your answer:
-
-After providing an answer, expect:
-
-    Expected: Precision is the ratio of true positives to all predicted positives (TP / (TP + FP))
-    
-    Rate your accuracy (1-5, where 5 is perfect):
-
-After completing items, expect session summary:
-
-    Session complete!
-    Duration: 5 minutes
-    Items completed: 8
-    Average score: 0.72
-
-After Milestone 6 is complete, verify spaced repetition:
-
-    python -m app.main status
-
-Expected output:
-
-    Learning System Status
-    =====================
-    Sources: 1
-    Knowledge Components: 52
-    Practice Items: 156
-    
-    Mastery: 12% average across all KCs
-    Due today: 15 items
-    Overdue: 0 items
-
-After Milestone 7 is complete, verify the todo dashboard:
-
-    python -m app.main todo
-
-Expected output:
-
-    === What's Due ===
-    
-    🔴 OVERDUE (0 items)
-    
-    🟡 DUE TODAY (15 items)
-      Evaluating_LLMs.docx: 15 items
-    
-    🟢 NEW CONTENT (37 items)
-      Evaluating_LLMs.docx: 37 items not yet practiced
-
-Verify source-specific review:
-
-    python -m app.main review eval --duration 10
-
-Expected output beginning:
-
-    Starting review session for: Evaluating_LLMs.docx
-    Duration: 10 minutes, Bundle: Standard SRS
-    Items due from this source: 15
-
-
-## Validation and Acceptance
-
-This section describes how to verify that the implementation is correct. Acceptance criteria are stated as observable behavior.
-
-The system is correctly implemented when all of the following behaviors can be observed:
-
-Running `python -m app.main init` in an empty data directory creates learning.db containing twelve tables: content_sources, knowledge_components, kc_state, kc_prerequisites, kc_subskills, practice_items, attempts, sessions, technique_bundles, kc_technique_history, retention_tests, and learning_goals. The technique_bundles table contains five rows representing the default bundles.
-
-Running `python -m app.main ingest document.pdf --domain tech` on a PDF file extracts text and stores a row in content_sources with the filename as title, extracted text in content, and a word count. The same command works for DOCX and Markdown files.
-
-Running ingest on a document of substantial length (at least five thousand words) produces knowledge components in the knowledge_components table with appropriate knowledge_type values distributed across factual, conceptual, procedural_cognitive, and procedural_execution. Each knowledge component has a cognitive_level from the set remember, understand, apply, analyze, evaluate, create. Each has an intrinsic_complexity between one and five.
-
-Running ingest produces practice items in the practice_items table linked to knowledge components. Each knowledge component has at least one practice item. Factual knowledge components have items with practice_mode in free_recall, cued_recall, or recognition. Conceptual knowledge components have items with practice_mode in explanation or application. Procedural_cognitive knowledge components have items with practice_mode application. Procedural_execution knowledge components have items with practice_mode execution.
-
-Running `python -m app.main study --duration 5` starts an interactive session. The session presents practice items one at a time. For recall modes, it shows a prompt and waits for text input, then shows the expected answer. For explanation modes, it shows a scenario and waits for multi-line input, then shows evaluation criteria. For execution modes, it describes a task and asks for completion status, independence level, and errors encountered. After each item, it prompts for accuracy self-assessment (one through five) and difficulty rating (one through five). It records all inputs as an attempt row in the database. After the duration expires or items are exhausted, it shows a summary with items completed and average score.
-
-Running `python -m app.main todo` after a study session shows items organized by source. Items practiced in the session do not appear as due today unless their computed next review date is today. Items not yet practiced appear under new content.
-
-Running `python -m app.main review sourcename` starts a session filtered to items from sources matching the provided name pattern. Only items from matching sources appear during the session.
-
-After multiple study sessions on different days, running `python -m app.main status` shows increasing mastery percentages for practiced knowledge components. Items practiced correctly have next review dates further in the future than items practiced incorrectly.
-
-The technique_bundle_id on sessions matches the active bundle. The kc_technique_history table accumulates rows linking knowledge components to the bundles used when practicing them.
-
-
-## Idempotence and Recovery
-
-This section explains how to safely repeat steps and recover from partial failures.
-
-Running init multiple times is safe. The schema creation uses IF NOT EXISTS clauses. Default technique bundles are inserted only if no bundles exist. Running init when a database already exists leaves existing data intact and ensures schema is current.
-
-Running ingest on the same document multiple times creates duplicate entries. This is intentional: each ingestion represents a distinct processing of the source. To avoid duplicates, check for existing sources with the same filename before ingesting.
-
-If ingestion fails partway through knowledge component extraction, no partial data is committed. The extraction process collects all components in memory before writing to the database in a single transaction. To retry after failure, simply run ingest again.
-
-If ingestion fails during practice item generation, knowledge components will have been saved but practice items will not exist. The generation process can be run independently on existing knowledge components by calling the generate function directly or by implementing a regenerate command.
-
-If a study session is interrupted, completed attempts are already committed to the database. Incomplete sessions may lack an end time. A cleanup function can mark interrupted sessions as abandoned. Restarting study begins a new session; no data is lost.
-
-The database file can be backed up by copying data/learning.db. To restore, replace the file with the backup copy. All data including sources, knowledge components, practice items, attempts, and session history is contained in this single file.
-
-
-## Interfaces and Dependencies
-
-This section specifies the key functions, their signatures, and their purposes. These interfaces must exist at the end of implementation.
-
-In learn_system/app/config.py:
-
-    DATABASE_PATH: str
-    # Path to SQLite database file, default "data/learning.db"
-    
-    ANTHROPIC_MODEL: str
-    # Model identifier for LLM calls, default "claude-sonnet-4-20250514"
-    
-    def get_db_path() -> str
-    # Returns absolute path to database file
-    
-    def get_api_key() -> str
-    # Returns Anthropic API key from environment, raises if not set
-
-In learn_system/app/database/connection.py:
-
-    def get_connection() -> sqlite3.Connection
-    # Returns connection to SQLite database, creating file if needed
-    
-    def init_database() -> None
-    # Creates all tables and indexes if they do not exist
-    
-    def init_default_bundles() -> None
-    # Inserts default technique bundles if none exist
-
-In learn_system/app/database/queries.py:
-
-    def insert_source(title: str, content: str, domain: str, metadata: dict) -> str
-    # Inserts content source, returns generated ID
-    
-    def get_source(source_id: str) -> dict | None
-    # Returns source record or None if not found
-    
-    def insert_kc(source_id: str, name: str, description: str, knowledge_type: str,
-                  cognitive_level: str, intrinsic_complexity: int, domain: str) -> str
-    # Inserts knowledge component, returns generated ID
-    
-    def get_kcs_for_source(source_id: str) -> list[dict]
-    # Returns all knowledge components for a source
-    
-    def insert_practice_item(kc_id: str, practice_mode: str, difficulty_level: int,
-                            prompt: str, expected_response: str, hints: list[str]) -> str
-    # Inserts practice item, returns generated ID
-    
-    def get_items_for_kc(kc_id: str) -> list[dict]
-    # Returns all practice items for a knowledge component
-    
-    def get_due_items(as_of: datetime) -> list[dict]
-    # Returns items where next_review_at <= as_of, ordered by urgency
-    
-    def get_due_items_for_source(source_id: str, as_of: datetime) -> list[dict]
-    # Returns due items filtered to specific source
-    
-    def insert_session(technique_bundle_id: str, session_type: str) -> str
-    # Creates session record, returns generated ID
-    
-    def end_session(session_id: str, items_completed: int, notes: str) -> None
-    # Updates session with end time and summary
-    
-    def insert_attempt(session_id: str, practice_item_id: str, kc_id: str,
-                      response: str, score: float, correctness: str,
-                      confidence_before: int, difficulty_rating: int,
-                      response_time_ms: int, hints_requested: int) -> str
-    # Records attempt, returns generated ID
-    
-    def get_kc_state(kc_id: str) -> dict | None
-    # Returns current state for knowledge component
-    
-    def update_kc_state(kc_id: str, mastery_level: float, next_review_at: datetime,
-                       interval_days: float, easiness_factor: float) -> None
-    # Updates state after attempt
-
-In learn_system/app/ingestion/extractors.py:
-
-    def extract_pdf(file_path: str) -> str
-    # Extracts text content from PDF file
-    
-    def extract_docx(file_path: str) -> str
-    # Extracts text content from DOCX file
-    
-    def extract_markdown(file_path: str) -> str
-    # Reads and returns Markdown file content
-    
-    def extract_text(file_path: str) -> str
-    # Dispatches to appropriate extractor based on file extension
-
-In learn_system/app/ingestion/kc_extractor.py:
-
-    def extract_kcs(source_id: str, content: str, domain: str) -> list[dict]
-    # Calls LLM to extract knowledge components from content
-    # Returns list of KC dictionaries with name, description, type, level, complexity
-    
-    def chunk_content(content: str, max_chars: int = 20000) -> list[str]
-    # Splits content into chunks for processing, preserving paragraph boundaries
-
-In learn_system/app/practice/generator.py:
-
-    def generate_items_for_kc(kc: dict) -> list[dict]
-    # Generates practice items appropriate for KC type
-    # Returns list with prompt, expected_response, hints, difficulty_level, practice_mode
-    
-    def generate_all_items(source_id: str) -> int
-    # Generates items for all KCs in source, returns count generated
-
-In learn_system/app/practice/templates.py:
-
-    def get_factual_prompt(kc: dict) -> str
-    # Returns LLM prompt for generating factual practice items
-    
-    def get_conceptual_prompt(kc: dict) -> str
-    # Returns LLM prompt for generating conceptual practice items
-    
-    def get_procedural_cognitive_prompt(kc: dict) -> str
-    # Returns LLM prompt for generating procedural-cognitive items
-    
-    def get_procedural_execution_prompt(kc: dict) -> str
-    # Returns LLM prompt for generating execution task items
-
-In learn_system/app/session/scheduler.py:
-
-    def get_study_queue(duration_minutes: int, source_id: str | None = None) -> list[dict]
-    # Builds ordered queue of items to practice
-    # Prioritizes: overdue, due today, new items, reinforcement
-    
-    def get_todo_summary() -> dict
-    # Returns counts of overdue, due today, and new items by source
-
-In learn_system/app/session/presenter.py:
-
-    def present_recall_item(item: dict) -> tuple[str, float]
-    # Displays recall prompt, collects response, shows expected, gets self-score
-    # Returns (response_text, score)
-    
-    def present_explanation_item(item: dict) -> tuple[str, float]
-    # Displays scenario, collects explanation, shows rubric, gets self-score
-    # Returns (response_text, score)
-    
-    def present_execution_item(item: dict) -> tuple[dict, float]
-    # Displays task, collects completion status and metadata
-    # Returns (execution_metadata, score)
-
-In learn_system/app/session/loop.py:
-
-    def run_study_session(duration_minutes: int, bundle_id: str,
-                         source_id: str | None = None) -> dict
-    # Runs interactive study loop, returns session summary
-
-In learn_system/app/state/estimator.py:
-
-    def calculate_mastery(kc_id: str, new_score: float, current_mastery: float,
-                         exposure_count: int) -> float
-    # Computes updated mastery using exponential moving average
-    # Alpha varies by exposure count: higher early, lower later
-
-In learn_system/app/state/spacing.py:
-
-    def calculate_next_review(score: float, current_interval: float,
-                             easiness_factor: float) -> tuple[float, float, datetime]
-    # Implements SM-2 algorithm
-    # Returns (new_interval_days, new_easiness_factor, next_review_datetime)
-
-In learn_system/app/state/tracker.py:
-
-    def record_technique_usage(kc_id: str, bundle_id: str) -> None
-    # Records that KC was practiced with given bundle
-    # Updates kc_technique_history table
-
-In learn_system/app/main.py:
-
-    @click.command()
-    def init() -> None
-    # Initializes database and default bundles
-    
-    @click.command()
-    @click.argument('file_path')
-    @click.option('--domain', default='general')
-    def ingest(file_path: str, domain: str) -> None
-    # Ingests document, extracts KCs, generates practice items
-    
-    @click.command()
-    def status() -> None
-    # Shows system status including source count, KC count, mastery summary
-    
-    @click.command()
-    def sources() -> None
-    # Lists all ingested sources with item counts
-    
-    @click.command()
-    @click.option('--duration', default=30)
-    @click.option('--bundle', default='standard_srs')
-    def study(duration: int, bundle: str) -> None
-    # Starts study session with specified duration and technique bundle
-    
-    @click.command()
-    def todo() -> None
-    # Shows what's due for review organized by source
-    
-    @click.command()
-    @click.argument('source_pattern')
-    @click.option('--duration', default=30)
-    def review(source_pattern: str, duration: int) -> None
-    # Starts review session filtered to matching sources
+- Running `init` multiple times is safe (uses IF NOT EXISTS)
+- Re-ingesting same document creates duplicate; check first if needed
+- Failed ingestion during KC extraction: no partial data committed, retry safely
+- Failed during item generation: KCs saved, items not; can regenerate
+- Interrupted sessions: completed attempts saved; restart begins new session
+- Database backups via Supabase dashboard or pg_dump
 
 
 ## Artifacts and Notes
@@ -887,79 +506,245 @@ The prompt template for knowledge component extraction. This goes in the LLM cal
 
 ## Milestones
 
-This section provides narrative detail for each milestone, following the structure: what will exist at the end that did not exist before, what work is involved, and how to verify completion.
+### CLI Milestones 1-8 (Complete)
+
+All CLI milestones are complete. See the **Progress** section for detailed implementation notes and the **Outcomes and Retrospective** section for what's working.
+
+- **M1:** Project foundation, database schema, CLI skeleton
+- **M2:** Document ingestion (PDF, DOCX, Markdown extraction)
+- **M3:** KC extraction via LLM with chunking and deduplication
+- **M4:** Practice item generation with type-specific templates
+- **M5:** Interactive study loop with session management
+- **M6:** SM-2 spaced repetition and mastery tracking
+- **M7:** Todo dashboard and source-filtered review
+- **M8:** Technique bundle tracking for self-experimentation
+
+### Milestone 9: Web UI Foundation
+
+At the end of this milestone, a React web application exists with the core layout structure, navigation sidebar, and connection to the Supabase backend. The app runs locally and can authenticate with the existing database.
+
+The work involves scaffolding a new React project with Vite in a `web/` directory alongside the existing `learn_system/` CLI. Installing dependencies: React 18, React Router, Tailwind CSS, Supabase client, Lucide React icons, and Recharts for visualization. Creating the root layout with a persistent left sidebar containing: app logo ("Learn"), navigation links (Home, Calendar, Due for Review with badge, Sources, Progress, Analytics), a "Recent" section showing recent sources with emoji icons, and a user profile area at the bottom. Implementing a Supabase context provider for database access. Setting up Tailwind with a light theme color palette matching the design: warm off-white backgrounds (#FAF9F7), green accents for progress (#10B981), amber/orange for alerts (#F59E0B), red for overdue (#EF4444).
+
+To verify, run `npm run dev` in the web directory. The application should display the sidebar layout. Clicking navigation links should change the active state. The "Due for Review" badge should show the count from the database. Recent sources should populate from content_sources table.
 
 
-### Milestone 1: Project Foundation
+### Milestone 10: Web UI Home Dashboard
 
-At the end of this milestone, the project directory structure exists, the database schema is defined and can be created, the CLI responds to the init command, and five default technique bundles are stored in the database. Nothing is visible to the end user yet except confirmation that initialization succeeded.
+At the end of this milestone, the Home page displays a personalized greeting, overdue alert banner, search box with quick actions, and source cards showing mastery progress.
 
-The work involves creating all directories and empty __init__.py files as specified in the project structure. The config.py file defines paths and provides functions to retrieve the database path and API key. The schema.sql file contains all CREATE TABLE and CREATE INDEX statements. The connection.py file implements get_connection returning a SQLite connection and init_database executing the schema. The queries.py file starts with insert and retrieval functions for technique bundles. The main.py file uses Click to define the init command that calls init_database and init_default_bundles.
+The work involves creating the Home page component with: a time-based greeting ("Good morning/afternoon/evening, [name]") with subtitle "Ready to learn something?", an alert banner showing overdue item count with clock icon and "Review now" button (only visible when items are overdue), a search input with placeholder "Search your knowledge base...", quick action buttons below search (Study, Plan, Add Document, Analytics) each with an icon, and a grid of source cards. Each source card displays: emoji icon (configurable per source), truncated title, horizontal progress bar with mastery percentage, and status text showing due/overdue counts in appropriate colors (amber for due today, red for overdue). Cards link to source-specific study sessions.
 
-To verify, run `python -m app.main init` from the learn_system directory. The output should confirm database creation and bundle initialization. Then run `sqlite3 data/learning.db ".tables"` to confirm all twelve tables exist. Run `sqlite3 data/learning.db "SELECT name FROM technique_bundles"` to confirm five bundles exist.
-
-
-### Milestone 2: Document Ingestion
-
-At the end of this milestone, the ingest command accepts a file path and domain, extracts text from PDF, DOCX, or Markdown files, and stores the content in the content_sources table. Knowledge component extraction and practice generation are not yet implemented; this milestone focuses only on getting document content into the database.
-
-The work involves implementing extract_pdf using pypdf to iterate pages and join their text. Implementing extract_docx using python-docx to iterate paragraphs and join their text. Implementing extract_markdown by simply reading the file. Implementing extract_text to dispatch based on file extension. Adding insert_source and get_source to queries.py. Implementing the ingest command in main.py that calls extract_text, computes word count, and calls insert_source.
-
-To verify, run `python -m app.main ingest /path/to/test.pdf --domain tech` on a PDF file. Confirm output shows extraction character count and stored source ID. Run `sqlite3 data/learning.db "SELECT id, title, word_count FROM content_sources"` to confirm the row exists. Repeat with a DOCX file and a Markdown file to verify all extractors work.
+To verify, navigate to Home. Verify greeting reflects current time. If overdue items exist, the alert banner should appear with accurate count. Source cards should display correct mastery percentages matching database values. Clicking "Review now" should navigate to Due for Review page. Quick action buttons should trigger their respective actions or navigate to relevant pages.
 
 
-### Milestone 3: Knowledge Component Extraction
+### Milestone 11: Web UI Study Session
 
-At the end of this milestone, the ingest command not only stores document content but also calls the LLM to extract knowledge components and stores them with full metadata. Practice items are not yet generated; this milestone focuses on the extraction step.
+At the end of this milestone, users can complete interactive study sessions through the web interface with the same functionality as the CLI study loop.
 
-The work involves implementing an LLM client wrapper that calls the Anthropic API with appropriate error handling. Implementing chunk_content to split large documents at paragraph boundaries. Implementing extract_kcs that builds the extraction prompt, calls the LLM, parses the JSON response, and returns structured KC data. Adding insert_kc and get_kcs_for_source to queries.py. Modifying the ingest command to call extract_kcs after storing the source and insert each KC. Implementing deduplication to avoid exact duplicate KC names within a source.
+The work involves creating a full-screen study session view with: header showing "X End session" on left and progress indicator "N of M" with progress bar on right, knowledge component display showing type badge (factual/conceptual/procedural) and practice mode (Free recall/Cued recall/etc), KC name as heading, question prompt in a rounded card, answer input area supporting both text entry and voice input (microphone button), submit button, and "Skip and show answer" link. After submission: display expected answer, collect self-assessment rating (1-5 scale), collect difficulty rating, and advance to next item. Session summary modal on completion showing items completed, average score, and session duration. All attempts must be recorded to the database with the same fields as CLI attempts.
 
-To verify, run ingest on a substantial document. Confirm output shows knowledge component count. Run `sqlite3 data/learning.db "SELECT name, knowledge_type, cognitive_level FROM knowledge_components WHERE source_id = 'xxx'"` replacing xxx with the source ID. Confirm knowledge components exist with appropriate type distribution. Verify that factual, conceptual, and procedural types are all represented if the source content warrants them.
-
-
-### Milestone 4: Practice Item Generation
-
-At the end of this milestone, the ingest command generates practice items for each knowledge component. The full ingestion pipeline is complete: document goes in, knowledge components and practice items come out.
-
-The work involves implementing prompt templates for each knowledge type in templates.py. Factual templates request free recall, cued recall, and recognition items with expected answers and hints. Conceptual templates request explanation and application items with scenarios and rubrics. Procedural_cognitive templates request problem-solving items with solution steps. Procedural_execution templates request task descriptions with success criteria. Implementing generate_items_for_kc that selects the appropriate template, calls the LLM, parses responses, and returns item dictionaries. Implementing generate_all_items that iterates through KCs and generates items. Adding insert_practice_item and get_items_for_kc to queries.py. Modifying the ingest command to call generate_all_items after KC extraction.
-
-To verify, run ingest on a document. Confirm output shows practice item count, which should be roughly three times the KC count. Run `sqlite3 data/learning.db "SELECT pi.practice_mode, COUNT(*) FROM practice_items pi GROUP BY pi.practice_mode"` to confirm items exist across different modes. Examine specific items with `SELECT prompt, expected_response FROM practice_items LIMIT 3` to verify quality.
+To verify, start a study session from any entry point. Complete several items verifying: progress indicator updates, answers are recorded, ratings are collected, session summary appears on completion. Query the attempts table to confirm records match the session activity. End session early and verify partial progress is saved.
 
 
-### Milestone 5: Core Learning Loop
+### Milestone 12: Web UI Calendar
 
-At the end of this milestone, the study command starts an interactive session where the user practices items and all responses are recorded. The session runs for a specified duration, presents items one at a time, collects responses and ratings, and provides a summary at the end.
+At the end of this milestone, users can view a learning calendar showing scheduled reviews and plan future study sessions.
 
-The work involves implementing insert_session and end_session in queries.py. Implementing insert_attempt with all the tracking fields. Implementing get_study_queue in scheduler.py that returns items ordered by priority, initially just randomized since spaced repetition is not yet implemented. Implementing present_recall_item that prints the prompt, waits for input, prints expected response, and prompts for self-assessed score. Implementing present_explanation_item similarly but for multi-line input with rubric display. Implementing present_execution_item that describes the task and collects completion metadata. Implementing run_study_session in loop.py that creates a session, loops through items calling appropriate presenters, records attempts, and summarizes results. Adding the study command to main.py.
+The work involves creating the Calendar page with: page header "Learning Calendar" with subtitle "Plan and schedule your study sessions", month navigation (previous/next arrows with "January 2026" display), a 7-column calendar grid (Sun-Sat) showing all days of the month, current day highlighted with a circle indicator, and a "Schedule a Study Session" form at the bottom. The scheduling form includes: source dropdown ("Select source..."), session type dropdown (Review/Study/New), duration input (default 30 minutes), date picker, and "Add" button. Future enhancement: show scheduled sessions and due item density on calendar days.
 
-To verify, run study after ingesting a document. Confirm the interactive loop presents items and accepts input. Complete several items and verify the session summary appears. Query `SELECT COUNT(*) FROM attempts WHERE session_id = 'xxx'` to confirm attempts were recorded. Query `SELECT response, score, confidence_before FROM attempts LIMIT 3` to verify data captured.
-
-
-### Milestone 6: Spaced Repetition Engine
-
-At the end of this milestone, item review dates are calculated using the SM-2 algorithm, mastery estimates update after each attempt, and the scheduler returns items based on their due dates. The system now implements spaced repetition.
-
-The work involves implementing calculate_next_review in spacing.py following the SM-2 algorithm as specified in artifacts. Implementing calculate_mastery in estimator.py using exponential moving average. Adding update_kc_state to queries.py. Modifying the attempt recording flow to call these functions and update kc_state after each attempt. Modifying get_study_queue to query kc_state for next_review_at and prioritize overdue and due items. Implementing get_due_items and get_due_items_for_source in queries.py. Adding the status command to main.py showing source count, KC count, average mastery, and due item count.
-
-To verify, complete a study session and then query `SELECT kc_id, mastery_level, next_review_at FROM kc_state WHERE mastery_level > 0 LIMIT 5` to confirm states were updated. Verify that next_review_at values are in the future. Run status and confirm it shows due item counts. Manually update a next_review_at to the past with `UPDATE kc_state SET next_review_at = datetime('now', '-1 day') WHERE kc_id = 'xxx'` and verify that item appears in the next study session.
+To verify, navigate to Calendar. Verify current month displays correctly with proper day alignment. Today's date should be highlighted. Change months using navigation arrows. Schedule a study session using the form and verify it creates a database entry. The scheduled session should appear on the calendar day.
 
 
-### Milestone 7: To-Do Dashboard and Source Review
+### Milestone 13: Web UI Due for Review
 
-At the end of this milestone, the todo command shows items organized by source with overdue, due today, and new content sections. The review command starts a session filtered to items from a specific source. Users can now see what needs attention and focus on specific topics.
+At the end of this milestone, the Due for Review page displays all items needing attention organized by urgency with direct action buttons.
 
-The work involves implementing get_todo_summary in scheduler.py that queries items grouped by source with categorization into overdue, due_today, and new based on next_review_at and exposure_count. Adding the todo command to main.py that calls get_todo_summary and formats output with emoji indicators and counts per source. Modifying get_study_queue to accept an optional source filter. Adding the review command that finds sources matching a pattern, selects one if multiple match, and calls run_study_session with that source ID. Adding the sources command to list ingested sources.
+The work involves creating the Due for Review page with: page header "Due for Review", three sections with colored indicators: Overdue (red dot), Due Today (amber dot), New Content (green dot). Each section lists sources with: source emoji and name, item count and status text ("X items overdue" / "X items due" / "X items not yet practiced"), and action button (Review/Study/Start) styled appropriately. At the bottom: "Review everything at once?" prompt with "Study All (N items)" button in dark style. Clicking any action button starts a filtered study session for that source/category.
 
-To verify, ingest two different documents. Complete some items from one document. Run todo and confirm output shows both sources with appropriate categorization. Items from the practiced document should appear under due sections; items from the unpracticed document should appear under new content. Run `review doc1` and confirm only items from that source appear. Run sources and confirm both documents are listed.
+To verify, navigate to Due for Review. Verify sources appear in correct sections based on their item states. Badge count in sidebar should match total items shown. Click "Review" on an overdue source and verify session starts with only items from that source. Click "Study All" and verify all due items are included in the session.
 
 
-### Milestone 8: Technique Bundle Tracking
+### Milestone 14: Web UI Progress
 
-At the end of this milestone, sessions record which technique bundle was used, and the system tracks technique history per knowledge component. This provides the data foundation for analyzing which techniques work best.
+At the end of this milestone, the Progress page displays learning statistics, mastery by source, and weekly activity visualization.
 
-The work involves ensuring sessions.technique_bundle_id is set when creating sessions. Implementing record_technique_usage in tracker.py that inserts or updates kc_technique_history when a KC is practiced with a bundle. Modifying the study loop to call record_technique_usage after each attempt. Adding a bundle option to the study and review commands with bundle_standard as the default. Verifying that history accumulates across sessions.
+The work involves creating the Progress page with: page header "Progress", summary stat cards in a row showing: Sources (count), Items Learned (count), Study Sessions (count), Total Time (formatted hours). Mastery by Source section showing each source with: emoji, name, horizontal progress bar, and percentage. This Week bar chart showing daily activity (M-T-W-T-F-S-S) with green bars indicating items practiced each day, streak indicator ("N day streak 🔥"), and weekly total ("N items this week"). A "View detailed analytics >" link at bottom navigating to Analytics page.
 
-To verify, complete a study session with the default bundle. Query `SELECT * FROM kc_technique_history LIMIT 5` to confirm history records exist. Start another session with `study --bundle bundle_deep` and practice the same items. Query history again and confirm new records show the deep bundle. Query `SELECT tb.name, COUNT(*) FROM kc_technique_history kth JOIN technique_bundles tb ON kth.technique_bundle_id = tb.id GROUP BY tb.name` to confirm both bundles have history.
+To verify, navigate to Progress. Verify stat cards show accurate counts from database. Mastery percentages should match kc_state averages per source. Weekly chart should reflect actual session activity for the current week. Streak calculation should be accurate based on consecutive days with sessions.
+
+
+### Milestone 15: Web UI Analytics
+
+At the end of this milestone, the Analytics page provides deep insights into learning patterns, technique effectiveness, and actionable recommendations.
+
+The work involves creating the Analytics page with: page header "Analytics" with subtitle "Deep insights into your learning patterns", filter controls (time period dropdown, source filter, knowledge type filter), three insight cards in a row: "What's Working" (green, shows best performing technique/pattern with improvement percentage), "Needs Attention" (amber, shows calibration issues or struggling areas), "Optimization" (light blue, shows recommendations like best study time). Technique Bundle Effectiveness section comparing bundles with: dual progress bars (7-day retention, 30-day retention), percentages, and "N sessions, avg to mastery, n=X items" metrics. Performance by Knowledge Type showing horizontal bars for Factual, Conceptual, Procedural (Cognitive), Procedural (Execution) with percentages and item counts. Calibration Analysis showing confidence vs actual performance per knowledge type with badges (Calibrated/Overconfident/Underconfident). Optimal Spacing Analysis showing retention curve by interval with recommendation text. Items Needing Attention list showing KCs with low mastery or high difficulty, each with: KC name, source name, mastery percentage (colored by level), attempts and difficulty info, and "Practice" button.
+
+To verify, navigate to Analytics with sufficient data in the database. Verify technique comparisons reflect actual retention rates from attempts. Verify calibration analysis correctly compares confidence_before ratings to actual scores. Filter controls should update all sections. Clicking "Practice" on a struggling item should start a focused session.
+
+
+## Web UI Technology Stack
+
+The web interface uses the following technology stack:
+
+| Layer | Technology | Version | Purpose |
+|-------|------------|---------|---------|
+| Framework | React | 18.x | Component-based UI |
+| Build Tool | Vite | 5.x | Fast development and bundling |
+| Routing | React Router | 6.x | Client-side navigation |
+| Styling | Tailwind CSS | 3.4.x | Utility-first CSS |
+| Icons | Lucide React | latest | Consistent iconography |
+| Charts | Recharts | 2.x | Data visualization |
+| Database | Supabase Client | 2.x | Backend connectivity |
+| State | React Context | built-in | Global state management |
+
+Directory structure for web application:
+
+    web/
+    ├── src/
+    │   ├── components/
+    │   │   ├── layout/
+    │   │   │   ├── Sidebar.jsx
+    │   │   │   ├── Layout.jsx
+    │   │   │   └── UserProfile.jsx
+    │   │   ├── home/
+    │   │   │   ├── GreetingHeader.jsx
+    │   │   │   ├── OverdueAlert.jsx
+    │   │   │   ├── SearchBar.jsx
+    │   │   │   ├── QuickActions.jsx
+    │   │   │   └── SourceCard.jsx
+    │   │   ├── study/
+    │   │   │   ├── SessionHeader.jsx
+    │   │   │   ├── QuestionCard.jsx
+    │   │   │   ├── AnswerInput.jsx
+    │   │   │   ├── SelfAssessment.jsx
+    │   │   │   └── SessionSummary.jsx
+    │   │   ├── calendar/
+    │   │   │   ├── CalendarGrid.jsx
+    │   │   │   ├── MonthNavigation.jsx
+    │   │   │   └── ScheduleForm.jsx
+    │   │   ├── review/
+    │   │   │   ├── ReviewSection.jsx
+    │   │   │   └── SourceItem.jsx
+    │   │   ├── progress/
+    │   │   │   ├── StatCards.jsx
+    │   │   │   ├── MasteryBySource.jsx
+    │   │   │   └── WeeklyChart.jsx
+    │   │   └── analytics/
+    │   │       ├── InsightCards.jsx
+    │   │       ├── TechniqueComparison.jsx
+    │   │       ├── PerformanceByType.jsx
+    │   │       ├── CalibrationAnalysis.jsx
+    │   │       ├── SpacingAnalysis.jsx
+    │   │       └── ItemsNeedingAttention.jsx
+    │   ├── pages/
+    │   │   ├── Home.jsx
+    │   │   ├── Calendar.jsx
+    │   │   ├── DueForReview.jsx
+    │   │   ├── Sources.jsx
+    │   │   ├── Progress.jsx
+    │   │   ├── Analytics.jsx
+    │   │   └── Study.jsx
+    │   ├── contexts/
+    │   │   ├── SupabaseContext.jsx
+    │   │   └── SessionContext.jsx
+    │   ├── hooks/
+    │   │   ├── useStudyQueue.js
+    │   │   ├── useSources.js
+    │   │   ├── useProgress.js
+    │   │   └── useAnalytics.js
+    │   ├── lib/
+    │   │   ├── supabase.js
+    │   │   ├── spacing.js
+    │   │   └── mastery.js
+    │   ├── App.jsx
+    │   ├── main.jsx
+    │   └── index.css
+    ├── public/
+    ├── package.json
+    ├── vite.config.js
+    ├── tailwind.config.js
+    └── postcss.config.js
+
+
+## Web UI Design Specifications
+
+This section documents the exact visual design based on the reference screenshots.
+
+### Color Palette
+
+    Background (main):     #FAF9F7 (warm off-white)
+    Background (sidebar):  #F5F4F2 (slightly darker)
+    Card background:       #FFFFFF (white)
+    Card border:           #E5E4E2 (light gray)
+
+    Text (primary):        #1A1A1A (near black)
+    Text (secondary):      #6B7280 (gray)
+    Text (muted):          #9CA3AF (light gray)
+
+    Accent (progress):     #10B981 (emerald green)
+    Accent (alert):        #F59E0B (amber)
+    Accent (overdue):      #EF4444 (red)
+    Accent (new):          #3B82F6 (blue)
+
+    Button (primary):      #1A1A1A (dark)
+    Button (secondary):    #F3F4F6 (light gray)
+    Button (action):       #FEF3C7 (light amber background)
+
+### Typography
+
+    Logo:                  "Learn" - 20px, font-weight 600
+    Page titles:           32px, font-weight 600
+    Section headers:       18px, font-weight 600
+    Card titles:           16px, font-weight 500
+    Body text:             14px, font-weight 400
+    Small/muted:           12px, font-weight 400
+
+    Font family:           Inter, system-ui, sans-serif
+
+### Spacing
+
+    Sidebar width:         240px
+    Content padding:       32px
+    Card padding:          20px
+    Card gap:              16px
+    Section gap:           24px
+    Border radius (cards): 12px
+    Border radius (buttons): 8px
+
+### Component Specifications
+
+**Sidebar Navigation Item:**
+- Height: 40px
+- Padding: 12px 16px
+- Border radius: 8px
+- Active state: light gray background (#F3F4F6)
+- Icon size: 20px
+- Badge: circular, amber background, white text
+
+**Source Card:**
+- Width: flexible (grid column)
+- Padding: 20px
+- Emoji: 32px
+- Progress bar height: 8px
+- Progress bar border radius: 4px
+
+**Alert Banner:**
+- Background: #FEF3C7 (light amber)
+- Border radius: 12px
+- Icon: clock, amber color
+- Button: amber background, white text
+
+**Study Session Question Card:**
+- Background: #F9FAFB (very light gray)
+- Border radius: 12px
+- Padding: 24px
+
+**Knowledge Type Badge:**
+- Background: #E0E7FF (light indigo)
+- Text: #4338CA (indigo)
+- Padding: 4px 12px
+- Border radius: 16px
+- Font size: 12px
 
 
 ## Research Foundation
@@ -1002,4 +787,4 @@ From the Adaptive Learning Platform Blueprint: Bloom's cognitive levels are capt
 
 ## Revision History
 
-No revisions yet. This is the initial version of the PLANS.md-compliant ExecPlan.
+2026-01-02: Added Web UI milestones (9-15) based on UI design screenshots. Added comprehensive specifications for React-based web interface including: technology stack (React, Vite, Tailwind, Recharts, Supabase client), detailed milestone descriptions for all pages (Home, Calendar, Due for Review, Sources, Progress, Analytics, Study Session), directory structure, color palette, typography, spacing, and component specifications. Added Decision Log entries for web UI addition and technology choices.
