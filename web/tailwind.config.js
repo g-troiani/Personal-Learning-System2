@@ -38,6 +38,7 @@ export default {
       },
       spacing: {
         'sidebar': '240px',
+        'sidebar-collapsed': '64px',
       },
       borderRadius: {
         'card': '12px',
