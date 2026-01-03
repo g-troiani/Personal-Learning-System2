@@ -373,10 +373,14 @@ This section documents unexpected behaviors, bugs, optimizations, or insights di
   4. Consider queuing large documents for background processing with email/notification on completion
   5. Add retry button on stuck/stale processing jobs (>5 minutes without progress update)
 
-**Processing Speed Observations:**
-- Small documents (10-15 KCs): ~30-45 seconds with parallel Groq
-- Medium documents (38 KCs): ~2-3 minutes
-- Initial page load can feel slow due to polling/realtime subscriptions starting up
+**Processing Speed Requirements (CRITICAL for user retention):**
+- **Target: <1 minute for standard uploads** - users abandon if processing takes too long
+- Only very large content (entire books) should exceed 1 minute
+- Current performance is too slow and needs optimization:
+  - KC extraction with Claude is the main bottleneck
+  - Consider switching KC extraction to Groq for speed
+  - Consider generating fewer items per KC initially (1-2 instead of 3)
+  - Consider on-demand item generation during practice sessions
 - Progress updates throttled to 0.5s intervals to avoid overwhelming Supabase
 
 
