@@ -301,9 +301,15 @@ This section tracks granular progress with timestamps. Each stopping point must 
     - Returns count of successfully generated items
   - All imports verified successful
   - Note: Single .env file in project root (not in learn_system/) contains all API keys:
-    - SUPABASE_URL, SUPABASE_KEY (with export prefix for shell)
+    - SUPABASE_URL, SUPABASE_KEY (no export prefix for python-dotenv)
+    - VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY (with VITE_ prefix for web UI)
     - ANTHROPIC_API_KEY, GROQ_API_KEY
     - Python config.py updated to look in project root first
+  - **Testing completed (2026-01-03):**
+    - CLI test: /tmp/speed_test.md → 15 KCs, 45 items in ~35 seconds ✓
+    - Web UI test: web_upload_test.md → 12 KCs, 33 items processed successfully ✓
+    - Parallel processing verified working with Groq qwen/qwen3-32b model
+    - Batch inserts confirmed (2 HTTP calls for KCs+states instead of N*2)
 
 
 ## Surprises and Discoveries
