@@ -314,47 +314,27 @@ This section tracks granular progress with timestamps. Each stopping point must 
 
 ## Surprises and Discoveries
 
-This section documents unexpected behaviors, bugs, optimizations, or insights discovered during implementation. Each observation includes concise evidence.
+Key lessons learned during implementation:
 
-2026-01-02: Python 3.9 type hints incompatibility. The system default Python 3.9 does not support the `X | None` union syntax (PEP 604). Had to use `Optional[X]` from typing module instead. Also `list[dict]` needed to be `List[Dict]`. Evidence: TypeError when importing modules.
+**Environment & Configuration:**
+- Single `.env` file in project root serves both Python (no `export` prefix) and Vite (`VITE_` prefix required)
+- Shell env vars override `.env` files - run `env | grep VITE_` to diagnose connection issues
+- API server must run on port 8001 to match frontend: `uvicorn app.api.server:app --port 8001`
 
-2026-01-03: Groq model deprecation. The `qwen-qwq-32b` model was decommissioned by Groq. Updated to `qwen/qwen3-32b` which is the recommended replacement. Evidence: Error "model_decommissioned" when testing CLI ingestion.
+**Supabase:**
+- Use `sb_publishable_` keys in browser (secret keys are blocked)
+- Realtime requires: `ALTER PUBLICATION supabase_realtime ADD TABLE public.content_sources;`
+- Always use polling fallback alongside Realtime subscriptions
+- Python library v2.27.0+ required for newer key formats
 
-2026-01-03: Single .env file configuration. Project uses one .env file in the root directory for both Python API and Vite web UI. Python-dotenv requires no `export` prefix, Vite requires `VITE_` prefix for env vars. Updated config.py to look in project root first. Evidence: SUPABASE_URL not found error when .env was only in learn_system/.
+**Python 3.9 Compatibility:**
+- Use `Optional[X]` instead of `X | None`, `List[Dict]` instead of `list[dict]`
+- Timestamp parsing needs try-except for variable microsecond precision
 
-2026-01-02: Supabase client library requires specific key format. The secret key (service role key) is needed for full database access, not the anon/publishable key. Evidence: Initial connection tests failed with anon key.
-
-2026-01-02: Curly brace escaping in Python format strings. The KC extraction prompt template contained JSON examples with curly braces, which conflicted with Python's `.format()` method. Fixed by using double braces `{{` and `}}` to escape literal braces. Evidence: KeyError when calling prompt.format().
-
-2026-01-02: Supabase timestamp parsing in Python 3.9. Timestamps returned from Supabase have variable microsecond precision (e.g., `.17045+00:00`) which Python 3.9's `datetime.fromisoformat()` cannot parse. Fixed with try-except fallback that strips timezone for comparison. Evidence: ValueError in end_session() function.
-
-2026-01-02: Practice items generated per KC. The LLM consistently generates exactly 3 practice items per KC as instructed, resulting in predictable item counts (36 items for 12 KCs). This 3:1 ratio holds across all knowledge types.
-
-2026-01-02: Vite environment variable caching with multiple projects. When multiple Vite dev servers run on different ports, environment variables may appear to cross over between projects if ports are reused. The solution is to add hardcoded fallbacks in the supabase client or ensure clean server restarts. Evidence: Network requests going to wrong Supabase URL despite correct .env file.
-
-2026-01-02: Supabase key formats (sb_publishable_ and sb_secret_) require service role key for table access when RLS is enabled. The web app needs the same service role key as the Python CLI to bypass RLS. For production, proper RLS policies should be configured. Evidence: 401 errors with publishable key, success with service role key.
-
-2026-01-02: Shell environment variables override Vite .env files. When VITE_* variables are exported in the shell (e.g., from sourcing another project's .env), they take precedence over the local .env file. Solution: Pass correct values explicitly when starting Vite (e.g., `VITE_SUPABASE_URL=... npm run dev`) or unset conflicting shell variables. Evidence: Vite served wrong Supabase URL despite correct .env file.
-
-2026-01-02: Supabase blocks secret API keys in browser. Keys starting with `sb_secret_` are rejected with "Forbidden use of secret API key in browser" error. Must use `sb_publishable_` key for client-side JavaScript. This is a Supabase security feature to prevent exposing service role keys. Evidence: 401 response with JSON message about secret key usage.
-
-2026-01-02: Practice item hints stored inconsistently. Some hints are stored as JSON arrays (e.g., `["hint1", "hint2"]`), others as plain text strings. The QuestionCard component needed try-catch around JSON.parse to handle both formats gracefully. Evidence: SyntaxError when trying to parse non-JSON hint text.
-
-2026-01-02: Null vs undefined check in JavaScript. The Analytics page ItemsNeedingAttention component checked `avgDifficulty !== undefined` before calling `.toFixed()`, but the value could be `null` (not undefined). In JavaScript, `null !== undefined` is true, so the check passed and `.toFixed()` was called on null, causing a crash. Fixed by using `avgDifficulty != null` which checks for both null and undefined. Evidence: TypeError "Cannot read properties of null (reading 'toFixed')" in browser console.
-
-2026-01-02: Supabase Python library key validation. The supabase-py library version 2.0.3 raised "Invalid API key" for the newer `sb_publishable_*` key format. Upgrading to supabase 2.27.0 resolved this. Also required upgrading websockets (for websockets.asyncio.client import). The web frontend JS library accepted this key format from the start. Evidence: SupabaseException "Invalid API key" resolved after pip3 install --upgrade supabase.
-
-2026-01-02: Supabase Realtime subscription not receiving updates during browser upload. Root cause identified: the content_sources table was not included in the `supabase_realtime` publication (showed "0 tables" in Publications dashboard). Fixed by running `ALTER PUBLICATION supabase_realtime ADD TABLE public.content_sources;` in Supabase SQL Editor. Additionally, the useSourceProcessing hook's polling fallback wasn't starting because it only triggered on subscription error, not proactively. Fixed by modifying useSourceProcessing.js to always start polling as backup alongside the Realtime subscription. After both fixes, progress updates display correctly in the UI. Lesson: Always verify Realtime publication includes required tables, and use polling as a reliable fallback. Evidence: After fix, Sources page showed progress badges updating correctly; test source src_98a441f0 (realtime_test.md) completed with 15 KCs, 45 items.
-
-2026-01-02: UploadZone progress stuck at 0% despite backend processing. Two bugs identified: (1) processingStatus was the full status object but code treated it as a string - fixed by accessing `processingStatus?.processing_status` instead of `processingStatus` in the step mapping. (2) UploadZone component was unmounting during upload when `refresh()` was called in Sources.jsx, because useSources set `loading=true` which caused Sources to render a full-page loading spinner instead of keeping UploadZone mounted. The sourceId state was lost when the component unmounted. Fixed by: (a) changing useSources to not set loading=true during refresh operations (pass isRefresh=true to fetchEnrichedSources), (b) changing Sources.jsx loading check to only show full-page loading when `allSources.length === 0 && !showUploadZone`. Evidence: Console logs showed sourceId staying null even after successful API response; database showed processing at 82% while UI showed 0%.
-
-2026-01-02: "Invalid API key" error on Sources page during testing. Root cause: Shell environment variables from another Supabase project were overriding the correct values in web/.env. The shell had stale `VITE_SUPABASE_URL` pointing to a different project. Fix: Start Vite dev server with explicit env vars from .env: `VITE_SUPABASE_URL=$YOUR_URL VITE_SUPABASE_ANON_KEY=$YOUR_KEY npm run dev`. Alternatively, unset shell variables first: `unset VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY VITE_SUPABASE_SECRET_KEY`. Lesson: Always check for stale shell VITE_* variables when debugging Supabase connection issues in browser apps. Run `env | grep VITE_` to diagnose. Evidence: After unsetting stale vars and using correct values from .env, Sources page loaded successfully.
-
-2026-01-02: Upload progress bar stuck at 82% during item generation. Root cause: The `progress_callback` function in `app/api/services/processing.py` had a hardcoded calculation `65 + int((100 - 65) * 0.5) = 82` instead of parsing the actual progress from the message. The message contains text like "Generating items for KC 5/10: ..." which can be parsed to calculate real progress. Fix: Added regex parsing `re.search(r'KC (\d+)/(\d+)', msg)` to extract current/total KC numbers, then calculate `65 + int((current_kc / total_kcs) * 33)` for progress between 65-98%. Evidence: After fix, progress bar correctly updates from 65% to 98% during item generation, then jumps to 100% on completion.
-
-2026-01-03: API server port mismatch. The web frontend is configured to send requests to port 8001, but the uvicorn server was started on port 8000. Must use `uvicorn app.api.server:app --host 0.0.0.0 --port 8001 --reload` to match frontend expectations. Evidence: Network requests to localhost:8001 failing while server ran on 8000.
-
-2026-01-03: Groq API rate limits causing stuck processing. During parallel practice item generation, the Groq API can hit rate limits causing individual KC generation to hang or timeout. Observed webapp_speed_test.md stuck at 84% for extended period during "Generating items for KC 9/15". The retry logic helps but doesn't fully prevent long hangs. Evidence: Processing card stuck at 84% for >60 seconds while other uploads completed.
+**LLM APIs:**
+- Groq model `qwen-qwq-32b` deprecated → use `qwen/qwen3-32b`
+- Groq rate limits can cause stuck processing - retry logic helps but timeouts needed
+- Practice items: 3 per KC consistently (predictable 3:1 ratio)
 
 
 ## Known Issues and Future Improvements
