@@ -83,7 +83,7 @@ export default function Sidebar({ collapsed, onToggle }) {
       <nav className="flex-1 px-2">
         <ul className="space-y-1">
           {navItems.map(item => (
-            <li key={item.to}>
+            <li key={item.to} className="relative">
               <NavLink
                 to={item.to}
                 className={({ isActive }) =>
@@ -97,7 +97,12 @@ export default function Sidebar({ collapsed, onToggle }) {
                 }
                 title={collapsed ? item.label : undefined}
               >
-                <item.icon size={20} />
+                <span className="relative">
+                  <item.icon size={20} />
+                  {collapsed && item.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-accent-alert rounded-full" />
+                  )}
+                </span>
                 {!collapsed && (
                   <>
                     <span className="flex-1">{item.label}</span>
@@ -107,11 +112,6 @@ export default function Sidebar({ collapsed, onToggle }) {
                       </span>
                     )}
                   </>
-                )}
-                {collapsed && item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-accent-alert text-white text-xs font-medium w-5 h-5 rounded-full flex items-center justify-center">
-                    {item.badge > 9 ? '9+' : item.badge}
-                  </span>
                 )}
               </NavLink>
             </li>
