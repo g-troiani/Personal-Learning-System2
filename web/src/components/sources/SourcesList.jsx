@@ -129,10 +129,16 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
   const hasError = source.processing_status === 'error'
   const isPending = source.processing_status === 'pending'
 
-  // Check if processing has failed (> 30 minutes)
+  // Check if processing/pending has failed (> 30 minutes)
   const hasFailed = (() => {
-    if (!isProcessing || !source.processing_started_at) return false
-    const startedAt = new Date(source.processing_started_at)
+    if (!isProcessing && !isPending) return false
+
+    // For processing sources, check processing_started_at
+    // For pending sources, check ingested_at (when upload was created)
+    const timestamp = isPending ? source.ingested_at : source.processing_started_at
+    if (!timestamp) return false
+
+    const startedAt = new Date(timestamp)
     const now = new Date()
     const minutesElapsed = (now - startedAt) / (1000 * 60)
     return minutesElapsed > 30
