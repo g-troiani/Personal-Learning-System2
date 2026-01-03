@@ -337,7 +337,7 @@ This section summarizes outcomes, gaps, and lessons learned at major milestones 
 - `/` - Home dashboard with source cards and quick actions
 - `/calendar` - Learning calendar and session scheduling
 - `/review` - Due for review items organized by urgency
-- `/sources` - Source library (placeholder - implementing in M16-M20)
+- `/sources` - Source library with upload, filtering, and real-time processing
 - `/progress` - Statistics dashboard with charts
 - `/analytics` - Deep insights and recommendations
 - `/study` - Interactive study session (full-screen)
@@ -347,6 +347,28 @@ This section summarizes outcomes, gaps, and lessons learned at major milestones 
 - Supabase client in React matched CLI data access patterns
 - Filter controls with useCallback avoided infinite re-render loops
 - Moving tooltip components outside main function avoided React hook warnings
+
+### All 19 Milestones Complete (2026-01-02)
+
+**Sources Feature Implementation Complete (M16-M19):**
+- Sources page with grid layout, search, domain filtering, and sorting by name/date/mastery
+- Drag-and-drop upload zone with file validation (PDF, DOCX, MD, TXT up to 25MB)
+- FastAPI backend on port 8001 wrapping CLI ingestion pipeline
+- Real-time processing progress via Supabase Realtime with polling fallback
+- Processing status tracking: pending → extracting_text → extracting_kcs → generating_items → ready
+- Retry mechanism for failed sources (backend + frontend wiring)
+
+**What's Working:**
+- End-to-end document upload flow from browser to processed practice items
+- Progress bar updates correctly during all processing stages
+- Source cards show processing state with animated indicators
+- Realtime subscription with reliable polling fallback
+
+**Known Gaps (M20 - Pending):**
+- Delete UI not implemented (backend endpoint exists)
+- SourceDetailPanel modal not created
+- Confirmation dialogs for destructive actions missing
+- Mobile responsive layout needs testing
 
 
 ## Context and Orientation
@@ -378,13 +400,13 @@ The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, p
 
 ## Plan of Work
 
-Implementation proceeds through twenty milestones. Milestones 1-15 are complete. Milestones 16-20 implement the Sources page with file upload and processing.
+Implementation proceeds through twenty milestones. Milestones 1-19 are complete. Milestone 20 (error handling and polish) is pending.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
 **Web UI Core (Complete):** M9: Foundation (React/Vite/Tailwind setup, sidebar layout). M10: Home dashboard. M11: Study session interface. M12: Calendar and scheduling. M13: Due for Review page. M14: Progress statistics. M15: Analytics and insights.
 
-**Sources Feature (Pending):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish.
+**Sources Feature (Complete except M20):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish (pending).
 
 
 ## CLI Usage Reference
@@ -754,15 +776,18 @@ All Web UI milestones are complete. See the **Progress** section for detailed im
 - **M14:** Progress (stat cards, mastery by source, weekly chart, streak)
 - **M15:** Analytics (insight cards, technique comparison, calibration analysis, items needing attention)
 
-### Sources Feature Milestones 16-20 (Pending)
+### Sources Feature Milestones 16-19 (Complete)
 
-These milestones implement the Sources page with document upload and processing functionality. The full specification is in `NEW FEATURES.md`. Key architecture: React frontend talks directly to Supabase for reads, but uploads go through a new FastAPI backend that wraps the existing CLI ingestion pipeline.
+These milestones implemented the Sources page with document upload and processing functionality. Key architecture: React frontend talks directly to Supabase for reads, but uploads go through a FastAPI backend that wraps the existing CLI ingestion pipeline.
 
 - **M16:** Sources page foundation (list display, filtering, sorting)
 - **M17:** Upload UI (drag-drop zone, file validation, progress indicators)
 - **M18:** FastAPI backend (upload endpoint, processing pipeline, status API)
 - **M19:** Real-time processing (Supabase Realtime subscriptions, live progress)
-- **M20:** Error handling and polish (retry mechanism, error states, delete functionality)
+
+### Milestone 20 (Pending)
+
+- **M20:** Error handling and polish (retry mechanism partially done, delete UI missing, SourceDetailPanel missing)
 
 ### Milestone 16: Sources Page Foundation
 
