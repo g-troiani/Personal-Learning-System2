@@ -2,6 +2,8 @@
 
 This ExecPlan is a living document maintained in accordance with PLANS.md. The sections Progress, Surprises and Discoveries, Decision Log, and Outcomes and Retrospective must be kept up to date as work proceeds. All content required to implement this system is contained within this document; no external references are needed.
 
+**SECURITY WARNING:** NEVER put API keys, secrets, URLs with credentials, or any sensitive values in this file or any file that will be committed to git. All credentials belong ONLY in .env files which are gitignored. Use placeholders like `$YOUR_KEY` or `<your-api-key>` when documenting commands that require credentials.
+
 
 ## Purpose and Big Picture
 
@@ -242,6 +244,8 @@ This section documents unexpected behaviors, bugs, optimizations, or insights di
 
 2026-01-02: UploadZone progress stuck at 0% despite backend processing. Two bugs identified: (1) processingStatus was the full status object but code treated it as a string - fixed by accessing `processingStatus?.processing_status` instead of `processingStatus` in the step mapping. (2) UploadZone component was unmounting during upload when `refresh()` was called in Sources.jsx, because useSources set `loading=true` which caused Sources to render a full-page loading spinner instead of keeping UploadZone mounted. The sourceId state was lost when the component unmounted. Fixed by: (a) changing useSources to not set loading=true during refresh operations (pass isRefresh=true to fetchEnrichedSources), (b) changing Sources.jsx loading check to only show full-page loading when `allSources.length === 0 && !showUploadZone`. Evidence: Console logs showed sourceId staying null even after successful API response; database showed processing at 82% while UI showed 0%.
 
+2026-01-02: "Invalid API key" error on Sources page during testing. Root cause: Shell environment variables from another Supabase project were overriding the correct values in web/.env. The shell had stale `VITE_SUPABASE_URL` pointing to a different project. Fix: Start Vite dev server with explicit env vars from .env: `VITE_SUPABASE_URL=$YOUR_URL VITE_SUPABASE_ANON_KEY=$YOUR_KEY npm run dev`. Alternatively, unset shell variables first: `unset VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY VITE_SUPABASE_SECRET_KEY`. Lesson: Always check for stale shell VITE_* variables when debugging Supabase connection issues in browser apps. Run `env | grep VITE_` to diagnose. Evidence: After unsetting stale vars and using correct values from .env, Sources page loaded successfully.
+
 
 ## Decision Log
 
@@ -405,8 +409,9 @@ To start the web UI development server:
 cd web/
 
 # Option 1: Pass environment variables explicitly (recommended if you have multiple Vite projects)
-VITE_SUPABASE_URL=https://bqrdwysxguktbiegkwss.supabase.co \
-VITE_SUPABASE_ANON_KEY=sb_publishable_Clg3cJKsuZXWmqlPC1k4Pg_p0BpjhVU \
+# Use values from your web/.env file
+VITE_SUPABASE_URL="$YOUR_SUPABASE_URL" \
+VITE_SUPABASE_ANON_KEY="$YOUR_PUBLISHABLE_KEY" \
 npm run dev
 
 # Option 2: Unset any stale shell variables first
