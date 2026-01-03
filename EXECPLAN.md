@@ -300,6 +300,10 @@ This section tracks granular progress with timestamps. Each stopping point must 
     - Logs error summary at end
     - Returns count of successfully generated items
   - All imports verified successful
+  - Note: Single .env file in project root (not in learn_system/) contains all API keys:
+    - SUPABASE_URL, SUPABASE_KEY (with export prefix for shell)
+    - ANTHROPIC_API_KEY, GROQ_API_KEY
+    - Python config.py updated to look in project root first
 
 
 ## Surprises and Discoveries
@@ -307,6 +311,10 @@ This section tracks granular progress with timestamps. Each stopping point must 
 This section documents unexpected behaviors, bugs, optimizations, or insights discovered during implementation. Each observation includes concise evidence.
 
 2026-01-02: Python 3.9 type hints incompatibility. The system default Python 3.9 does not support the `X | None` union syntax (PEP 604). Had to use `Optional[X]` from typing module instead. Also `list[dict]` needed to be `List[Dict]`. Evidence: TypeError when importing modules.
+
+2026-01-03: Groq model deprecation. The `qwen-qwq-32b` model was decommissioned by Groq. Updated to `qwen/qwen3-32b` which is the recommended replacement. Evidence: Error "model_decommissioned" when testing CLI ingestion.
+
+2026-01-03: Single .env file configuration. Project uses one .env file in the root directory for both Python API and Vite web UI. Python-dotenv requires no `export` prefix, Vite requires `VITE_` prefix for env vars. Updated config.py to look in project root first. Evidence: SUPABASE_URL not found error when .env was only in learn_system/.
 
 2026-01-02: Supabase client library requires specific key format. The secret key (service role key) is needed for full database access, not the anon/publishable key. Evidence: Initial connection tests failed with anon key.
 

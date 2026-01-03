@@ -4,8 +4,12 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-env_path = Path(__file__).parent.parent / '.env'
+# Load environment variables from .env file in project root
+# Try project root first, fall back to learn_system/.env
+project_root = Path(__file__).parent.parent.parent
+env_path = project_root / '.env'
+if not env_path.exists():
+    env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(env_path)
 
 # Database configuration (Supabase)
@@ -17,7 +21,8 @@ SUPABASE_KEY: str = os.getenv('SUPABASE_KEY', '')
 ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
 
 # Groq for fast structured output tasks (practice item generation)
-GROQ_MODEL: str = "qwen-qwq-32b"
+# Note: qwen-qwq-32b was deprecated, using qwen/qwen3-32b instead
+GROQ_MODEL: str = "qwen/qwen3-32b"
 GROQ_API_KEY: str = os.getenv('GROQ_API_KEY', '')
 
 # Parallelism configuration
