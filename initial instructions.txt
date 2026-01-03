@@ -103,3 +103,19 @@ Update @EXECPLAN.MD to prepare to implement the new feature from @NEW FEATURES.m
   Ensure business requirements follow good practice
   Establish clean service boundaries
   Prevent unnecessary coupling 
+
+# INVESTIGATE AND FIX A BUG 
+investigate the root cause of the bugs you identified but have not fixed yet when uploading files (for example, the fact
+  that the bar does not update as progress is made). Iterate until you find the causes and fix them. Use chrome to test
+  whether the fixes actually work. Spin up 6 parallel worktrees to investigate the most likely causes of the bugs. 
+Then,gather
+  the insights to inform the best ways forward to fix the problem. If the issues persist keep iterating spinning up 6
+  parallel worktrees until the root causes of the bugs are found and resolved. Keep iterating and testing with chrome and
+  checking in the backend until the issues are resolved and the app works seamlessly from documents upload moment to the 
+complete 
+  end of the process and population of the learning contents. Update EXECPLAN.md as necessary.
+
+
+# STRAIGHT TO THE POINT:
+Be extremely concise. Sacrifice grammar for the sake of concision.
+
