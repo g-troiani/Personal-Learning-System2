@@ -129,6 +129,15 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
   const hasError = source.processing_status === 'error'
   const isPending = source.processing_status === 'pending'
 
+  // Check if processing has failed (> 30 minutes)
+  const hasFailed = (() => {
+    if (!isProcessing || !source.processing_started_at) return false
+    const startedAt = new Date(source.processing_started_at)
+    const now = new Date()
+    const minutesElapsed = (now - startedAt) / (1000 * 60)
+    return minutesElapsed > 30
+  })()
+
   // Truncate title if too long
   const truncatedTitle = source.title?.length > 35
     ? source.title.substring(0, 35) + '...'
@@ -164,8 +173,8 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
         : 'border-bg-card-border cursor-pointer hover:shadow-md hover:border-accent-new/30'
   }`
 
-  // Disable menu during processing/pending states
-  const menuDisabled = isProcessing || isPending
+  // Disable menu during processing/pending states (unless failed due to timeout)
+  const menuDisabled = (isProcessing || isPending) && !hasFailed
 
   return (
     <div onClick={handleClick} className={cardClasses}>
@@ -205,6 +214,12 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
             step={source.processing_step}
             variant="compact"
           />
+          {hasFailed && (
+            <div className="mt-2 flex items-center gap-2 text-red-500 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>Failed upload - use menu to delete</span>
+            </div>
+          )}
         </div>
       )}
 
