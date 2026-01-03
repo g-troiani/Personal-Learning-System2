@@ -35,20 +35,21 @@ function getSourceEmoji(title) {
 }
 
 export default function Sidebar({ collapsed, onToggle }) {
-  const { getRecentSources, getDueCounts } = useSupabase()
+  const { getRecentSources, getDueCounts, sources } = useSupabase()
   const [recentSources, setRecentSources] = useState([])
   const [dueCount, setDueCount] = useState(0)
 
+  // Refresh sidebar data when sources change (including after deletes)
   useEffect(() => {
     const loadData = async () => {
-      const sources = await getRecentSources(3)
-      setRecentSources(sources)
+      const recent = await getRecentSources(3)
+      setRecentSources(recent)
 
       const counts = await getDueCounts()
       setDueCount(counts.total)
     }
     loadData()
-  }, [])
+  }, [sources])
 
   const navItems = [
     { to: '/', icon: Home, label: 'Home' },
