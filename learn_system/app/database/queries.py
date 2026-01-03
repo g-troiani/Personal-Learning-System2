@@ -455,3 +455,104 @@ def get_system_stats() -> Dict[str, Any]:
         'due_count': due_result.count if due_result.count else 0,
         'overdue_count': overdue_result.count if overdue_result.count else 0
     }
+
+
+# ============== Batch Insert Operations ==============
+
+def insert_kcs_batch(kcs_data: List[Dict[str, Any]]) -> List[str]:
+    """
+    Batch insert KCs and their states in 2 HTTP calls instead of N*2.
+
+    Args:
+        kcs_data: List of KC dictionaries with keys:
+            source_id, name, description, knowledge_type, cognitive_level,
+            intrinsic_complexity, domain, source_excerpt (optional), metadata (optional)
+
+    Returns:
+        List of generated KC IDs
+    """
+    if not kcs_data:
+        return []
+
+    client = get_client()
+    kc_records = []
+    state_records = []
+    kc_ids = []
+
+    for kc in kcs_data:
+        kc_id = generate_id('kc')
+        kc_ids.append(kc_id)
+
+        kc_records.append({
+            'id': kc_id,
+            'source_id': kc['source_id'],
+            'name': kc['name'],
+            'description': kc['description'],
+            'knowledge_type': kc['knowledge_type'],
+            'cognitive_level': kc.get('cognitive_level', 'remember'),
+            'intrinsic_complexity': kc.get('intrinsic_complexity', 3),
+            'domain': kc.get('domain', 'general'),
+            'source_excerpt': kc.get('source_excerpt'),
+            'metadata': kc.get('metadata', {})
+        })
+
+        state_records.append({
+            'kc_id': kc_id,
+            'mastery_level': 0.0,
+            'exposure_count': 0,
+            'correct_count': 0,
+            'consecutive_correct': 0,
+            'consecutive_incorrect': 0,
+            'current_interval_days': 1.0,
+            'easiness_factor': 2.5,
+            'plateau_detected': False,
+            'struggling_flag': False
+        })
+
+    # Batch insert KCs
+    client.table('knowledge_components').insert(kc_records).execute()
+
+    # Batch insert states
+    client.table('kc_state').insert(state_records).execute()
+
+    return kc_ids
+
+
+def insert_practice_items_batch(items: List[Dict[str, Any]]) -> List[str]:
+    """
+    Batch insert practice items in 1 HTTP call instead of N.
+
+    Args:
+        items: List of item dictionaries with keys:
+            kc_id, practice_mode, difficulty_level, prompt, expected_response,
+            hints, rubric (optional), success_criteria (optional)
+
+    Returns:
+        List of generated item IDs
+    """
+    if not items:
+        return []
+
+    client = get_client()
+    records = []
+    item_ids = []
+
+    for item in items:
+        item_id = generate_id('item')
+        item_ids.append(item_id)
+
+        records.append({
+            'id': item_id,
+            'kc_id': item['kc_id'],
+            'practice_mode': item.get('practice_mode', 'free_recall'),
+            'difficulty_level': item.get('difficulty_level', 2),
+            'prompt': item['prompt'],
+            'expected_response': item.get('expected_response', ''),
+            'hints': item.get('hints', []),
+            'rubric': item.get('rubric'),
+            'success_criteria': item.get('success_criteria')
+        })
+
+    client.table('practice_items').insert(records).execute()
+
+    return item_ids

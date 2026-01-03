@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 from anthropic import Anthropic
 
 from ..config import get_api_key, ANTHROPIC_MODEL
-from ..database.queries import insert_kc, get_kcs_for_source
+from ..database.queries import insert_kc, get_kcs_for_source, insert_kcs_batch
 
 
 # Extraction prompt template from EXECPLAN.md
@@ -259,7 +259,9 @@ def extract_kcs(source_id: str, content: str, domain: str) -> List[Dict[str, Any
 
 def store_extracted_kcs(source_id: str, kcs: List[Dict[str, Any]], domain: str) -> List[str]:
     """
-    Stores extracted knowledge components in the database.
+    Stores extracted knowledge components in the database using batch insert.
+
+    Uses batch insert for efficiency: 2 HTTP calls instead of N*2.
 
     Args:
         source_id: ID of the source document
@@ -269,22 +271,25 @@ def store_extracted_kcs(source_id: str, kcs: List[Dict[str, Any]], domain: str) 
     Returns:
         List of created KC IDs
     """
-    created_ids = []
+    if not kcs:
+        return []
 
+    # Prepare batch data
+    kcs_data = []
     for kc in kcs:
-        kc_id = insert_kc(
-            source_id=source_id,
-            name=kc['name'],
-            description=kc['description'],
-            knowledge_type=kc['knowledge_type'],
-            cognitive_level=kc['cognitive_level'],
-            intrinsic_complexity=kc['intrinsic_complexity'],
-            domain=domain,
-            metadata={'prerequisites': kc.get('prerequisites', [])}
-        )
-        created_ids.append(kc_id)
+        kcs_data.append({
+            'source_id': source_id,
+            'name': kc['name'],
+            'description': kc['description'],
+            'knowledge_type': kc['knowledge_type'],
+            'cognitive_level': kc['cognitive_level'],
+            'intrinsic_complexity': kc['intrinsic_complexity'],
+            'domain': domain,
+            'metadata': {'prerequisites': kc.get('prerequisites', [])}
+        })
 
-    return created_ids
+    # Batch insert all KCs and their states
+    return insert_kcs_batch(kcs_data)
 
 
 def extract_and_store_kcs(source_id: str, content: str, domain: str) -> int:

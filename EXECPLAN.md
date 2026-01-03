@@ -210,6 +210,62 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Browser upload test (2026-01-02): Programmatically triggered file upload via JavaScript, upload zone UI worked correctly (file selection, Upload & Process button), API received request (200 OK), processing completed successfully
   - Test source src_7f66a8d2 (browser_test.md) processed: 10 KCs extracted, 30 practice items generated, appears in Sources list after refresh
   - Fixed Realtime subscription issue (2026-01-02): Root cause was content_sources table not in supabase_realtime publication. Ran `ALTER PUBLICATION supabase_realtime ADD TABLE public.content_sources;` in Supabase SQL Editor. Also added polling fallback in useSourceProcessing.js to always poll every 2 seconds alongside Realtime subscription, ensuring reliable progress updates even if Realtime fails. Verified: upload progress now displays correctly and updates to "ready" state with KC/item counts.
+- [x] Milestone 20: Error handling and polish - Delete UI, SourceDetailPanel, confirmation dialogs (2026-01-03)
+  - Created ConfirmationDialog component in web/src/components/shared/ConfirmationDialog.jsx with:
+    - Danger/warning variants with appropriate icon colors
+    - Loading state for async operations
+    - Escape key and backdrop click to close
+    - Focus trap on confirm button
+    - Smooth animations (fade-in, zoom-in)
+  - Added SourceMenu dropdown to SourceCard with "View Details" and "Delete" options
+    - Three-dot menu icon in card header
+    - Click-outside and Escape key to close
+    - Red color styling for Delete action
+  - Created SourceDetailPanel slide-in drawer in web/src/components/sources/SourceDetailPanel.jsx:
+    - Full source information: title, domain, emoji, stats
+    - Quick stats cards: Concepts count, Items count, Mastery %
+    - Due items summary: overdue (red), due today (amber), new (cyan)
+    - Document info section: ingested date, word count, content type, processed date
+    - Knowledge Components list grouped by type (Factual, Conceptual, Procedural)
+    - Expandable KC items showing description and mastery progress bar
+    - Footer with "Study Now" and "Delete" buttons
+  - Wired Sources.jsx with delete and view details handlers:
+    - handleDeleteRequest opens confirmation dialog
+    - handleDeleteConfirm calls DELETE /api/sources/{id} endpoint
+    - handleViewDetails opens SourceDetailPanel
+    - States for dialog/panel visibility and loading
+  - Added CSS animation utilities to index.css:
+    - fadeIn, zoomIn95, slideInFromRight, slideInFromTop2 keyframes
+    - animate-in utility class with duration variants
+  - Verified in browser:
+    - Three-dot menu opens on source cards
+    - "View Details" opens SourceDetailPanel with correct data
+    - KC items expand to show description and mastery
+    - Escape key closes both panel and dialog
+    - "Delete" option opens confirmation dialog with source name and item counts
+    - Cancel closes dialog without deleting
+    - Backend DELETE endpoint already functional from M18
+- [x] Milestone 21: Groq client and batch database inserts (2026-01-03)
+  - Added groq>=0.4 to requirements.txt for speed optimization
+  - Updated app/config.py with Groq configuration:
+    - GROQ_MODEL = "qwen-qwq-32b" for fast structured output
+    - GROQ_API_KEY from environment
+    - MAX_LLM_WORKERS = 5 for parallel processing (M22 prep)
+    - get_groq_api_key() function
+  - Updated app/practice/generator.py to use Groq instead of Anthropic:
+    - Changed from Anthropic client to Groq client
+    - Updated generate_items_for_kc() to use Groq chat.completions API
+    - Response format differs: response.choices[0].message.content
+  - Added batch insert functions to app/database/queries.py:
+    - insert_kcs_batch(): 2 HTTP calls instead of N*2 (KCs + states)
+    - insert_practice_items_batch(): 1 HTTP call instead of N
+  - Updated app/ingestion/kc_extractor.py store_extracted_kcs() to use batch insert
+  - Updated app/practice/generator.py generate_all_items() to use batch insert:
+    - Collects all items from all KCs first
+    - Single batch insert at the end
+  - Added GROQ_API_KEY placeholder to learn_system/.env
+  - All imports verified successful
+  - Note: User must obtain GROQ_API_KEY from https://console.groq.com
 
 
 ## Surprises and Discoveries
@@ -407,15 +463,15 @@ The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, p
 
 ## Plan of Work
 
-Implementation proceeds through twenty-three milestones. Milestones 1-19 are complete. Milestone 20 (error handling and polish) is pending. Milestones 21-23 (speed optimization) are pending.
+Implementation proceeds through twenty-three milestones. Milestones 1-21 are complete. Milestones 22-23 (parallel item generation, error resilience) are pending.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
 **Web UI Core (Complete):** M9: Foundation (React/Vite/Tailwind setup, sidebar layout). M10: Home dashboard. M11: Study session interface. M12: Calendar and scheduling. M13: Due for Review page. M14: Progress statistics. M15: Analytics and insights.
 
-**Sources Feature (Complete except M20):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish (pending).
+**Sources Feature (Complete):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish.
 
-**Speed Optimization (Pending):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
+**Speed Optimization (M21 Complete, M22-23 Pending):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
 
 
 ## CLI Usage Reference

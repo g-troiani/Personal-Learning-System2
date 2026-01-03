@@ -5,6 +5,8 @@ import SourcesToolbar from '../components/sources/SourcesToolbar'
 import SourcesList from '../components/sources/SourcesList'
 import EmptyState from '../components/sources/EmptyState'
 import UploadZone from '../components/sources/UploadZone'
+import SourceDetailPanel from '../components/sources/SourceDetailPanel'
+import ConfirmationDialog from '../components/shared/ConfirmationDialog'
 import { Loader2, CheckCircle } from 'lucide-react'
 
 // API base URL from environment or default to localhost:8001
@@ -32,6 +34,15 @@ export default function Sources() {
   const [showUploadZone, setShowUploadZone] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(null)
   const [processingSourceId, setProcessingSourceId] = useState(null)
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [sourceToDelete, setSourceToDelete] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Source detail panel state
+  const [detailPanelOpen, setDetailPanelOpen] = useState(false)
+  const [selectedSource, setSelectedSource] = useState(null)
 
   const handleAddClick = () => {
     setShowUploadZone(true)
@@ -81,6 +92,59 @@ export default function Sources() {
       console.error('Retry error:', err)
     }
   }, [refresh])
+
+  // Handle delete action - show confirmation dialog
+  const handleDeleteRequest = useCallback((source) => {
+    setSourceToDelete(source)
+    setDeleteDialogOpen(true)
+    // Close detail panel if open
+    setDetailPanelOpen(false)
+  }, [])
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!sourceToDelete) return
+
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sources/${sourceToDelete.id}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Delete failed:', errorData.detail || response.status)
+        return
+      }
+
+      // Close dialog and refresh
+      setDeleteDialogOpen(false)
+      setSourceToDelete(null)
+      refresh()
+    } catch (err) {
+      console.error('Delete error:', err)
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [sourceToDelete, refresh])
+
+  // Handle delete dialog close
+  const handleDeleteCancel = useCallback(() => {
+    setDeleteDialogOpen(false)
+    setSourceToDelete(null)
+  }, [])
+
+  // Handle view details - open detail panel
+  const handleViewDetails = useCallback((source) => {
+    setSelectedSource(source)
+    setDetailPanelOpen(true)
+  }, [])
+
+  // Handle detail panel close
+  const handleDetailPanelClose = useCallback(() => {
+    setDetailPanelOpen(false)
+    setSelectedSource(null)
+  }, [])
 
   // Determine if empty state should show
   const hasNoSources = allSources.length === 0
@@ -166,8 +230,45 @@ export default function Sources() {
 
       {/* Sources list */}
       {sources.length > 0 && (
-        <SourcesList sources={sources} onRetry={handleRetry} />
+        <SourcesList
+          sources={sources}
+          onRetry={handleRetry}
+          onDelete={handleDeleteRequest}
+          onViewDetails={handleViewDetails}
+        />
       )}
+
+      {/* Source Detail Panel */}
+      <SourceDetailPanel
+        source={selectedSource}
+        isOpen={detailPanelOpen}
+        onClose={handleDetailPanelClose}
+        onDelete={handleDeleteRequest}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Source"
+        message={
+          <div>
+            <p className="mb-2">
+              Are you sure you want to delete <strong>{sourceToDelete?.title}</strong>?
+            </p>
+            <p className="text-sm text-gray-500">
+              This will permanently remove the source and all associated knowledge components
+              ({sourceToDelete?.kcCount || 0} concepts) and practice items ({sourceToDelete?.itemCount || 0} items).
+              This action cannot be undone.
+            </p>
+          </div>
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+        isLoading={isDeleting}
+      />
     </div>
   )
 }

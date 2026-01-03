@@ -13,7 +13,15 @@ SUPABASE_URL: str = os.getenv('SUPABASE_URL', '')
 SUPABASE_KEY: str = os.getenv('SUPABASE_KEY', '')
 
 # LLM configuration
+# Claude for high-reasoning tasks (KC extraction)
 ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+
+# Groq for fast structured output tasks (practice item generation)
+GROQ_MODEL: str = "qwen-qwq-32b"
+GROQ_API_KEY: str = os.getenv('GROQ_API_KEY', '')
+
+# Parallelism configuration
+MAX_LLM_WORKERS: int = int(os.getenv('MAX_LLM_WORKERS', '5'))
 
 # Local data path for any local files
 DATA_PATH: str = str(Path(__file__).parent.parent / 'data')
@@ -40,6 +48,14 @@ def get_api_key() -> str:
     key = os.getenv('ANTHROPIC_API_KEY', '')
     if not key:
         raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+    return key
+
+
+def get_groq_api_key() -> str:
+    """Returns Groq API key from environment, raises if not set."""
+    key = os.getenv('GROQ_API_KEY', GROQ_API_KEY)
+    if not key:
+        raise ValueError("GROQ_API_KEY environment variable is not set")
     return key
 
 

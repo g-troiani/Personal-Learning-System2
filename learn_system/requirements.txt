@@ -8,3 +8,5 @@ supabase>=2.0
 fastapi>=0.109
 uvicorn>=0.27
 python-multipart>=0.0.6
+# Speed optimization dependencies (M21)
+groq>=0.4

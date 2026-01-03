@@ -1,19 +1,24 @@
-"""Practice item generation using LLM."""
+"""Practice item generation using LLM.
+
+Uses Groq (Qwen3 32B) for fast structured output generation.
+Practice item generation is a template-following task that doesn't require
+high reasoning - the KC already defines what to test.
+"""
 
 import json
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-from anthropic import Anthropic
+from groq import Groq
 
-from ..config import get_api_key, ANTHROPIC_MODEL
-from ..database.queries import insert_practice_item, get_items_for_kc, get_kcs_for_source
+from ..config import get_groq_api_key, GROQ_MODEL
+from ..database.queries import insert_practice_item, get_items_for_kc, get_kcs_for_source, insert_practice_items_batch
 from .templates import get_prompt_for_kc_type
 
 
-def get_anthropic_client() -> Anthropic:
-    """Returns configured Anthropic client."""
-    return Anthropic(api_key=get_api_key())
+def get_groq_client() -> Groq:
+    """Returns configured Groq client."""
+    return Groq(api_key=get_groq_api_key())
 
 
 def parse_item_response(response_text: str) -> List[Dict[str, Any]]:
@@ -106,7 +111,10 @@ def parse_item_response(response_text: str) -> List[Dict[str, Any]]:
 
 def generate_items_for_kc(kc: dict) -> List[Dict[str, Any]]:
     """
-    Generates practice items appropriate for KC type.
+    Generates practice items appropriate for KC type using Groq.
+
+    Uses Qwen3 32B on Groq for fast structured output generation.
+    This is a template-following task with low reasoning requirements.
 
     Args:
         kc: Knowledge component dictionary
@@ -114,12 +122,12 @@ def generate_items_for_kc(kc: dict) -> List[Dict[str, Any]]:
     Returns:
         List with prompt, expected_response, hints, difficulty_level, practice_mode
     """
-    client = get_anthropic_client()
+    client = get_groq_client()
     prompt = get_prompt_for_kc_type(kc)
 
     try:
-        message = client.messages.create(
-            model=ANTHROPIC_MODEL,
+        response = client.chat.completions.create(
+            model=GROQ_MODEL,
             max_tokens=2048,
             messages=[
                 {
@@ -129,7 +137,7 @@ def generate_items_for_kc(kc: dict) -> List[Dict[str, Any]]:
             ]
         )
 
-        response_text = message.content[0].text
+        response_text = response.choices[0].message.content
         return parse_item_response(response_text)
     except Exception as e:
         print(f"Warning: Error generating items for KC '{kc.get('name', 'unknown')}': {e}")
@@ -192,7 +200,10 @@ def generate_items_for_kc_and_store(kc: dict) -> int:
 
 def generate_all_items(source_id: str, progress_callback=None) -> int:
     """
-    Generates items for all KCs in source.
+    Generates items for all KCs in source using batch insert.
+
+    Collects all items first, then batch inserts for efficiency.
+    Uses 1 HTTP call instead of N for database insertion.
 
     Args:
         source_id: ID of the source document
@@ -205,12 +216,34 @@ def generate_all_items(source_id: str, progress_callback=None) -> int:
     if not kcs:
         return 0
 
-    total_items = 0
+    all_items = []
+    errors = []
+
     for i, kc in enumerate(kcs):
         if progress_callback:
             progress_callback(f"Generating items for KC {i+1}/{len(kcs)}: {kc['name'][:40]}...")
 
-        count = generate_items_for_kc_and_store(kc)
-        total_items += count
+        kc_id = kc['id']
 
-    return total_items
+        # Check if items already exist for this KC
+        existing = get_items_for_kc(kc_id)
+        if existing:
+            continue  # Skip, already has items
+
+        # Generate items for this KC
+        try:
+            items = generate_items_for_kc(kc)
+            for item in items:
+                item['kc_id'] = kc_id
+            all_items.extend(items)
+        except Exception as e:
+            errors.append(f"{kc_id}: {e}")
+
+    # Batch insert all items at once
+    if all_items:
+        insert_practice_items_batch(all_items)
+
+    if errors:
+        print(f"Warnings: {len(errors)} KCs failed: {errors[:3]}...")
+
+    return len(all_items)

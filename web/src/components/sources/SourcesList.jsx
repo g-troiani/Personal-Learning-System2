@@ -1,7 +1,83 @@
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Brain, FileText, Clock, AlertCircle, RefreshCw } from 'lucide-react'
+import { BookOpen, Brain, FileText, Clock, AlertCircle, RefreshCw, MoreVertical, Trash2, Eye } from 'lucide-react'
 import { ProcessingBadge } from './ProcessingStatus'
 import ProcessingStatus from './ProcessingStatus'
+
+// Dropdown menu component for source actions
+function SourceMenu({ onDelete, onViewDetails, disabled }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setIsOpen(false)
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen])
+
+  // Close on escape
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') setIsOpen(false)
+    }
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape)
+    }
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [isOpen])
+
+  const handleToggle = (e) => {
+    e.stopPropagation()
+    setIsOpen(!isOpen)
+  }
+
+  const handleAction = (e, action) => {
+    e.stopPropagation()
+    setIsOpen(false)
+    action()
+  }
+
+  if (disabled) return null
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={handleToggle}
+        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+        aria-label="Source options"
+        aria-expanded={isOpen}
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 animate-in fade-in slide-in-from-top-2 duration-150">
+          <button
+            onClick={(e) => handleAction(e, onViewDetails)}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Eye className="w-4 h-4" />
+            View Details
+          </button>
+          <button
+            onClick={(e) => handleAction(e, onDelete)}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // Source emoji mapping based on domain
 const getSourceEmoji = (source) => {
@@ -44,7 +120,7 @@ const domainLabels = {
   'general': 'General'
 }
 
-function SourceCard({ source, onRetry }) {
+function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
   const navigate = useNavigate()
   const emoji = getSourceEmoji(source)
 
@@ -69,6 +145,14 @@ function SourceCard({ source, onRetry }) {
     if (onRetry) onRetry(source.id)
   }
 
+  const handleDelete = () => {
+    if (onDelete) onDelete(source)
+  }
+
+  const handleViewDetails = () => {
+    if (onViewDetails) onViewDetails(source)
+  }
+
   const totalDue = (source.overdueCount || 0) + (source.dueCount || 0) + (source.newCount || 0)
 
   // Card style based on state
@@ -80,9 +164,12 @@ function SourceCard({ source, onRetry }) {
         : 'border-bg-card-border cursor-pointer hover:shadow-md hover:border-accent-new/30'
   }`
 
+  // Disable menu during processing/pending states
+  const menuDisabled = isProcessing || isPending
+
   return (
     <div onClick={handleClick} className={cardClasses}>
-      {/* Header: Emoji and Title */}
+      {/* Header: Emoji, Title, and Menu */}
       <div className="flex items-start gap-3 mb-4">
         <span className={`text-3xl ${isProcessing ? 'animate-pulse' : ''}`}>{emoji}</span>
         <div className="flex-1 min-w-0">
@@ -94,6 +181,12 @@ function SourceCard({ source, onRetry }) {
             <ProcessingBadge
               status={source.processing_status}
               progress={source.processing_progress || 0}
+            />
+            {/* Source actions menu */}
+            <SourceMenu
+              onDelete={handleDelete}
+              onViewDetails={handleViewDetails}
+              disabled={menuDisabled}
             />
           </div>
           {/* Domain badge */}
@@ -197,7 +290,7 @@ function SourceCard({ source, onRetry }) {
   )
 }
 
-export default function SourcesList({ sources, onRetry }) {
+export default function SourcesList({ sources, onRetry, onDelete, onViewDetails }) {
   if (!sources || sources.length === 0) {
     return null
   }
@@ -205,7 +298,13 @@ export default function SourcesList({ sources, onRetry }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {sources.map(source => (
-        <SourceCard key={source.id} source={source} onRetry={onRetry} />
+        <SourceCard
+          key={source.id}
+          source={source}
+          onRetry={onRetry}
+          onDelete={onDelete}
+          onViewDetails={onViewDetails}
+        />
       ))}
     </div>
   )
