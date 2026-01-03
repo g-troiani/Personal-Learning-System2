@@ -3,15 +3,20 @@
 Uses Groq (Qwen3 32B) for fast structured output generation.
 Practice item generation is a template-following task that doesn't require
 high reasoning - the KC already defines what to test.
+
+M22: Uses ThreadPoolExecutor for parallel LLM calls across KCs.
+LLM API calls are I/O-bound, so Python's GIL doesn't block during network waits.
 """
 
 import json
 import re
-from typing import List, Dict, Any, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+from typing import List, Dict, Any, Optional, Tuple
 
 from groq import Groq
 
-from ..config import get_groq_api_key, GROQ_MODEL
+from ..config import get_groq_api_key, GROQ_MODEL, MAX_LLM_WORKERS
 from ..database.queries import insert_practice_item, get_items_for_kc, get_kcs_for_source, insert_practice_items_batch
 from .templates import get_prompt_for_kc_type
 
@@ -198,12 +203,43 @@ def generate_items_for_kc_and_store(kc: dict) -> int:
     return len(items)
 
 
+def _process_single_kc(kc: dict) -> Tuple[str, List[Dict[str, Any]], Optional[str]]:
+    """
+    Process a single KC for item generation (thread-safe).
+
+    Args:
+        kc: Knowledge component dictionary
+
+    Returns:
+        Tuple of (kc_id, items_list, error_or_none)
+    """
+    kc_id = kc['id']
+
+    try:
+        # Check if items already exist
+        existing = get_items_for_kc(kc_id)
+        if existing:
+            return (kc_id, [], None)  # Skip, already has items
+
+        # Generate items
+        items = generate_items_for_kc(kc)
+
+        # Add kc_id to each item
+        for item in items:
+            item['kc_id'] = kc_id
+
+        return (kc_id, items, None)
+    except Exception as e:
+        return (kc_id, [], str(e))
+
+
 def generate_all_items(source_id: str, progress_callback=None) -> int:
     """
-    Generates items for all KCs in source using batch insert.
+    Generates items for all KCs in source using parallel LLM calls and batch insert.
 
-    Collects all items first, then batch inserts for efficiency.
-    Uses 1 HTTP call instead of N for database insertion.
+    Uses ThreadPoolExecutor for parallel processing (M22 optimization).
+    LLM API calls are I/O-bound, so Python's GIL doesn't block during network waits.
+    Collects all items first, then batch inserts in 1 HTTP call.
 
     Args:
         source_id: ID of the source document
@@ -218,26 +254,32 @@ def generate_all_items(source_id: str, progress_callback=None) -> int:
 
     all_items = []
     errors = []
+    completed = 0
+    completed_lock = Lock()
 
-    for i, kc in enumerate(kcs):
-        if progress_callback:
-            progress_callback(f"Generating items for KC {i+1}/{len(kcs)}: {kc['name'][:40]}...")
+    # Use ThreadPoolExecutor for parallel LLM calls
+    with ThreadPoolExecutor(max_workers=MAX_LLM_WORKERS) as executor:
+        # Submit all tasks
+        future_to_kc = {}
+        for kc in kcs:
+            future = executor.submit(_process_single_kc, kc)
+            future_to_kc[future] = kc
 
-        kc_id = kc['id']
+        # Process results as they complete
+        for future in as_completed(future_to_kc):
+            kc = future_to_kc[future]
+            kc_id, items, error = future.result()
 
-        # Check if items already exist for this KC
-        existing = get_items_for_kc(kc_id)
-        if existing:
-            continue  # Skip, already has items
+            # Update progress with thread-safe counter
+            with completed_lock:
+                completed += 1
+                if progress_callback:
+                    progress_callback(f"Generating items for KC {completed}/{len(kcs)}: {kc['name'][:40]}...")
 
-        # Generate items for this KC
-        try:
-            items = generate_items_for_kc(kc)
-            for item in items:
-                item['kc_id'] = kc_id
-            all_items.extend(items)
-        except Exception as e:
-            errors.append(f"{kc_id}: {e}")
+            if items:
+                all_items.extend(items)
+            if error:
+                errors.append(f"{kc_id}: {error}")
 
     # Batch insert all items at once
     if all_items:

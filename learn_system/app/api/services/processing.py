@@ -1,16 +1,60 @@
 """Processing pipeline service for document ingestion with status updates."""
 
 import os
+import re
+import time
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from threading import Lock
+from typing import Optional, Dict, Any, Callable
 
 from ...database.connection import get_client
 from ...database.queries import generate_id
 from ...ingestion.extractors import extract_text, get_file_metadata
 from ...ingestion.kc_extractor import extract_and_store_kcs
 from ...practice.generator import generate_all_items
+
+
+class ProgressTracker:
+    """Thread-safe progress counter for parallel operations."""
+
+    def __init__(self, total: int):
+        self.total = total
+        self._completed = 0
+        self._lock = Lock()
+
+    def increment(self) -> tuple:
+        """Increment completed count and return (completed, total)."""
+        with self._lock:
+            self._completed += 1
+            return (self._completed, self.total)
+
+    @property
+    def completed(self) -> int:
+        with self._lock:
+            return self._completed
+
+
+class ThrottledUpdater:
+    """
+    Reduces DB update frequency to avoid overwhelming Supabase.
+    Only calls the update function if enough time has passed since last update.
+    """
+
+    def __init__(self, update_fn: Callable, min_interval: float = 0.5):
+        self.update_fn = update_fn
+        self.min_interval = min_interval
+        self._last_update = 0
+        self._lock = Lock()
+
+    def update(self, *args, **kwargs):
+        """Call update function if enough time has passed."""
+        with self._lock:
+            now = time.time()
+            if now - self._last_update >= self.min_interval:
+                self.update_fn(*args, **kwargs)
+                self._last_update = now
 
 
 class ProcessingPipeline:
@@ -111,13 +155,18 @@ class ProcessingPipeline:
 
             self.update_status("extracting_kcs", 60, f"Extracted {kc_count} knowledge components")
 
-            # Step 3: Generate practice items
+            # Step 3: Generate practice items (parallel with M22)
             if kc_count > 0:
                 self.update_status("generating_items", 65, "Generating practice items...")
 
+                # Use throttled updater to avoid overwhelming DB during parallel processing
+                def do_update(progress, msg):
+                    self.update_status("generating_items", progress, msg)
+
+                throttled_update = ThrottledUpdater(do_update, min_interval=0.5)
+
                 def progress_callback(msg):
                     # Parse progress from message like "Generating items for KC 5/10: ..."
-                    import re
                     match = re.search(r'KC (\d+)/(\d+)', msg)
                     if match:
                         current_kc = int(match.group(1))
@@ -126,7 +175,7 @@ class ProcessingPipeline:
                         current_progress = 65 + int((current_kc / total_kcs) * 33)
                     else:
                         current_progress = 65
-                    self.update_status("generating_items", current_progress, msg)
+                    throttled_update.update(current_progress, msg)
 
                 item_count = generate_all_items(self.source_id, progress_callback)
                 result["item_count"] = item_count

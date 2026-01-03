@@ -266,6 +266,23 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Added GROQ_API_KEY placeholder to learn_system/.env
   - All imports verified successful
   - Note: User must obtain GROQ_API_KEY from https://console.groq.com
+- [x] Milestone 22: Parallel practice item generation with ThreadPoolExecutor (2026-01-03)
+  - Added thread-safe utility classes to app/api/services/processing.py:
+    - ProgressTracker: Thread-safe counter with Lock for parallel operations
+    - ThrottledUpdater: Rate-limits DB updates to avoid overwhelming Supabase (0.5s min interval)
+  - Refactored app/practice/generator.py generate_all_items():
+    - Added _process_single_kc() helper function for thread-safe KC processing
+    - Uses ThreadPoolExecutor with MAX_LLM_WORKERS (default 5) parallel workers
+    - Uses concurrent.futures.as_completed() for result processing
+    - Thread-safe progress counting with Lock
+  - Updated ProcessingPipeline.process_file() progress_callback:
+    - Uses ThrottledUpdater to reduce DB update frequency during parallel processing
+  - Architecture rationale:
+    - ThreadPoolExecutor over asyncio: existing codebase is synchronous, minimal refactoring
+    - LLM API calls are I/O-bound: Python GIL doesn't block during network waits
+    - Threads can execute concurrently while waiting for API responses
+  - Expected performance: 15 KCs × 1 sec each → ~3-4 seconds with 5 workers (vs 15s sequential)
+  - All imports verified successful
 
 
 ## Surprises and Discoveries
@@ -463,7 +480,7 @@ The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, p
 
 ## Plan of Work
 
-Implementation proceeds through twenty-three milestones. Milestones 1-21 are complete. Milestones 22-23 (parallel item generation, error resilience) are pending.
+Implementation proceeds through twenty-three milestones. Milestones 1-22 are complete. Milestone 23 (error resilience) is pending.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -471,7 +488,7 @@ Implementation proceeds through twenty-three milestones. Milestones 1-21 are com
 
 **Sources Feature (Complete):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish.
 
-**Speed Optimization (M21 Complete, M22-23 Pending):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
+**Speed Optimization (M21-22 Complete, M23 Pending):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
 
 
 ## CLI Usage Reference
