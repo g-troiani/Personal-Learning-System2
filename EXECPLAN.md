@@ -246,6 +246,8 @@ This section documents unexpected behaviors, bugs, optimizations, or insights di
 
 2026-01-02: "Invalid API key" error on Sources page during testing. Root cause: Shell environment variables from another Supabase project were overriding the correct values in web/.env. The shell had stale `VITE_SUPABASE_URL` pointing to a different project. Fix: Start Vite dev server with explicit env vars from .env: `VITE_SUPABASE_URL=$YOUR_URL VITE_SUPABASE_ANON_KEY=$YOUR_KEY npm run dev`. Alternatively, unset shell variables first: `unset VITE_SUPABASE_URL VITE_SUPABASE_PUBLISHABLE_KEY VITE_SUPABASE_SECRET_KEY`. Lesson: Always check for stale shell VITE_* variables when debugging Supabase connection issues in browser apps. Run `env | grep VITE_` to diagnose. Evidence: After unsetting stale vars and using correct values from .env, Sources page loaded successfully.
 
+2026-01-02: Upload progress bar stuck at 82% during item generation. Root cause: The `progress_callback` function in `app/api/services/processing.py` had a hardcoded calculation `65 + int((100 - 65) * 0.5) = 82` instead of parsing the actual progress from the message. The message contains text like "Generating items for KC 5/10: ..." which can be parsed to calculate real progress. Fix: Added regex parsing `re.search(r'KC (\d+)/(\d+)', msg)` to extract current/total KC numbers, then calculate `65 + int((current_kc / total_kcs) * 33)` for progress between 65-98%. Evidence: After fix, progress bar correctly updates from 65% to 98% during item generation, then jumps to 100% on completion.
+
 
 ## Decision Log
 

@@ -116,8 +116,16 @@ class ProcessingPipeline:
                 self.update_status("generating_items", 65, "Generating practice items...")
 
                 def progress_callback(msg):
-                    # Parse progress from message if possible
-                    current_progress = 65 + int((100 - 65) * 0.5)  # Rough estimate
+                    # Parse progress from message like "Generating items for KC 5/10: ..."
+                    import re
+                    match = re.search(r'KC (\d+)/(\d+)', msg)
+                    if match:
+                        current_kc = int(match.group(1))
+                        total_kcs = int(match.group(2))
+                        # Progress goes from 65% to 98% during item generation
+                        current_progress = 65 + int((current_kc / total_kcs) * 33)
+                    else:
+                        current_progress = 65
                     self.update_status("generating_items", current_progress, msg)
 
                 item_count = generate_all_items(self.source_id, progress_callback)
