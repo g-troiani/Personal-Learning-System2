@@ -283,6 +283,23 @@ This section tracks granular progress with timestamps. Each stopping point must 
     - Threads can execute concurrently while waiting for API responses
   - Expected performance: 15 KCs × 1 sec each → ~3-4 seconds with 5 workers (vs 15s sequential)
   - All imports verified successful
+- [x] Milestone 23: Error resilience with retry logic (2026-01-03)
+  - Added call_with_retry() function to both generator.py and kc_extractor.py:
+    - Exponential backoff: 1s, 2s, 4s delays between retries
+    - MAX_RETRIES = 3 (total 4 attempts)
+    - Detects retryable errors by checking error name/message for:
+      ratelimit, rate_limit, connection, timeout, overloaded, apiconnection
+  - Updated generate_items_for_kc() in generator.py:
+    - Wraps Groq API call in call_with_retry() lambda
+    - Returns empty list on permanent failure (non-retryable errors)
+  - Updated extract_kcs_from_chunk() in kc_extractor.py:
+    - Wraps Anthropic API call in call_with_retry() lambda
+    - Re-raises with context on permanent failure
+  - Error handling in generate_all_items():
+    - Already handles partial failures (continues processing other KCs)
+    - Logs error summary at end
+    - Returns count of successfully generated items
+  - All imports verified successful
 
 
 ## Surprises and Discoveries
@@ -480,7 +497,7 @@ The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, p
 
 ## Plan of Work
 
-Implementation proceeds through twenty-three milestones. Milestones 1-22 are complete. Milestone 23 (error resilience) is pending.
+Implementation proceeds through twenty-three milestones. All milestones 1-23 are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -488,7 +505,7 @@ Implementation proceeds through twenty-three milestones. Milestones 1-22 are com
 
 **Sources Feature (Complete):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish.
 
-**Speed Optimization (M21-22 Complete, M23 Pending):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
+**Speed Optimization (Complete):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
 
 
 ## CLI Usage Reference

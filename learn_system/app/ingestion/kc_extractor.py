@@ -1,13 +1,63 @@
-"""Knowledge Component extraction using LLM."""
+"""Knowledge Component extraction using LLM.
+
+M23: Includes retry logic with exponential backoff for transient API errors.
+"""
 
 import json
 import re
-from typing import List, Dict, Any
+import time
+from typing import List, Dict, Any, Callable, TypeVar
 
 from anthropic import Anthropic
 
 from ..config import get_api_key, ANTHROPIC_MODEL
 from ..database.queries import insert_kc, get_kcs_for_source, insert_kcs_batch
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 1.0  # seconds
+
+T = TypeVar('T')
+
+
+def call_with_retry(fn: Callable[[], T], max_retries: int = MAX_RETRIES) -> T:
+    """
+    Call function with exponential backoff on transient errors.
+
+    Retries on rate limits, connection errors, overloaded, and timeouts.
+
+    Args:
+        fn: Zero-argument function to call
+        max_retries: Maximum number of retry attempts
+
+    Returns:
+        Result of fn()
+
+    Raises:
+        Exception: The last error after all retries exhausted
+    """
+    last_error = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            error_name = type(e).__name__.lower()
+            error_str = str(e).lower()
+
+            # Check if this is a retryable error
+            retryable_names = ['ratelimit', 'rate_limit', 'connection', 'timeout', 'overloaded']
+            retryable = any(keyword in error_name or keyword in error_str for keyword in retryable_names)
+
+            if not retryable or attempt == max_retries:
+                raise
+
+            wait_time = RETRY_BASE_DELAY * (2 ** attempt)  # 1s, 2s, 4s
+            print(f"  Retry {attempt + 1}/{max_retries} in {wait_time}s: {e}")
+            time.sleep(wait_time)
+            last_error = e
+
+    raise last_error
 
 
 # Extraction prompt template from EXECPLAN.md
@@ -189,6 +239,8 @@ def extract_kcs_from_chunk(client: Anthropic, content: str, domain: str) -> List
     """
     Extracts knowledge components from a single content chunk.
 
+    Includes retry logic for transient API errors (M23).
+
     Args:
         client: Anthropic client
         content: Content chunk to analyze
@@ -199,8 +251,8 @@ def extract_kcs_from_chunk(client: Anthropic, content: str, domain: str) -> List
     """
     prompt = KC_EXTRACTION_PROMPT.format(content=content)
 
-    try:
-        message = client.messages.create(
+    def _call_api():
+        return client.messages.create(
             model=ANTHROPIC_MODEL,
             max_tokens=4096,
             messages=[
@@ -211,6 +263,8 @@ def extract_kcs_from_chunk(client: Anthropic, content: str, domain: str) -> List
             ]
         )
 
+    try:
+        message = call_with_retry(_call_api)
         response_text = message.content[0].text
         return parse_llm_response(response_text)
     except Exception as e:

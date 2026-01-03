@@ -6,19 +6,68 @@ high reasoning - the KC already defines what to test.
 
 M22: Uses ThreadPoolExecutor for parallel LLM calls across KCs.
 LLM API calls are I/O-bound, so Python's GIL doesn't block during network waits.
+
+M23: Adds retry logic with exponential backoff for transient API errors.
 """
 
 import json
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Callable, TypeVar
 
 from groq import Groq
 
 from ..config import get_groq_api_key, GROQ_MODEL, MAX_LLM_WORKERS
 from ..database.queries import insert_practice_item, get_items_for_kc, get_kcs_for_source, insert_practice_items_batch
 from .templates import get_prompt_for_kc_type
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 1.0  # seconds
+
+T = TypeVar('T')
+
+
+def call_with_retry(fn: Callable[[], T], max_retries: int = MAX_RETRIES) -> T:
+    """
+    Call function with exponential backoff on transient errors.
+
+    Retries on rate limits, connection errors, and timeouts.
+
+    Args:
+        fn: Zero-argument function to call
+        max_retries: Maximum number of retry attempts
+
+    Returns:
+        Result of fn()
+
+    Raises:
+        Exception: The last error after all retries exhausted
+    """
+    last_error = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            error_name = type(e).__name__.lower()
+
+            # Check if this is a retryable error (rate limit, connection, timeout)
+            retryable = any(keyword in error_name for keyword in [
+                'ratelimit', 'rate_limit', 'connection', 'timeout', 'apiconnection'
+            ])
+
+            if not retryable or attempt == max_retries:
+                raise
+
+            wait_time = RETRY_BASE_DELAY * (2 ** attempt)  # 1s, 2s, 4s
+            print(f"  Retry {attempt + 1}/{max_retries} in {wait_time}s: {e}")
+            time.sleep(wait_time)
+            last_error = e
+
+    raise last_error
 
 
 def get_groq_client() -> Groq:
@@ -120,6 +169,7 @@ def generate_items_for_kc(kc: dict) -> List[Dict[str, Any]]:
 
     Uses Qwen3 32B on Groq for fast structured output generation.
     This is a template-following task with low reasoning requirements.
+    Includes retry logic for transient API errors (M23).
 
     Args:
         kc: Knowledge component dictionary
@@ -127,11 +177,11 @@ def generate_items_for_kc(kc: dict) -> List[Dict[str, Any]]:
     Returns:
         List with prompt, expected_response, hints, difficulty_level, practice_mode
     """
-    client = get_groq_client()
     prompt = get_prompt_for_kc_type(kc)
 
-    try:
-        response = client.chat.completions.create(
+    def _call_api():
+        client = get_groq_client()
+        return client.chat.completions.create(
             model=GROQ_MODEL,
             max_tokens=2048,
             messages=[
@@ -142,6 +192,8 @@ def generate_items_for_kc(kc: dict) -> List[Dict[str, Any]]:
             ]
         )
 
+    try:
+        response = call_with_retry(_call_api)
         response_text = response.choices[0].message.content
         return parse_item_response(response_text)
     except Exception as e:
