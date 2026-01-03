@@ -277,6 +277,10 @@ Decision: Use FastAPI with BackgroundTasks for Sources upload API. Rationale: Th
 
 Decision: Add processing_status as new column instead of using existing status field. Rationale: The existing `status` field in content_sources represents lifecycle state (active/archived). The new `processing_status` field tracks ingestion pipeline state (pending/extracting_kcs/generating_items/ready/error). These are orthogonal concerns - a source could be 'active' but still 'error' in processing. Keeping them separate avoids conflating different state machines. Date: 2026-01-02.
 
+Decision: Use Qwen3 32B on Groq for practice item generation instead of Claude. Rationale: Practice item generation is a template-following task with low reasoning requirements—the knowledge component already defines what to test, the generator just formats prompts and expected responses into structured JSON. Qwen3 32B on Groq provides 662 tokens per second (3-5x faster than alternatives) at 70% lower input cost and 88% lower output cost compared to Claude Haiku. KC extraction continues using Claude Sonnet 4 because it requires high reasoning for concept identification, classification, and prerequisite detection. This split optimizes cost and speed without sacrificing quality where reasoning matters. Date: 2026-01-03.
+
+Decision: Use ThreadPoolExecutor for parallel LLM calls instead of asyncio. Rationale: The existing codebase is fully synchronous, and converting to async would require significant refactoring across all modules. LLM API calls are I/O-bound, so Python's Global Interpreter Lock (GIL) does not block during network waits—threads can execute concurrently while waiting for API responses. ThreadPoolExecutor provides parallelism with minimal code changes: wrap the existing synchronous function, submit tasks, collect results. The Anthropic and Groq SDKs both work correctly from multiple threads. Date: 2026-01-03.
+
 
 ## Outcomes and Retrospective
 
@@ -364,11 +368,14 @@ This section summarizes outcomes, gaps, and lessons learned at major milestones 
 - Source cards show processing state with animated indicators
 - Realtime subscription with reliable polling fallback
 
-**Known Gaps (M20 - Pending):**
+**Known Gaps (M20-M23 - Pending):**
 - Delete UI not implemented (backend endpoint exists)
 - SourceDetailPanel modal not created
 - Confirmation dialogs for destructive actions missing
 - Mobile responsive layout needs testing
+- Processing speed bottleneck: 60-165s per document (M21-M23 will reduce to 15-40s)
+- No parallel LLM calls (sequential processing limits throughput)
+- No retry logic for transient API failures
 
 
 ## Context and Orientation
@@ -395,18 +402,20 @@ An attempt records a single interaction with a practice item. Each attempt captu
 
 The project has two main parts: `learn_system/` for the Python CLI and `web/` for the React web UI. Both connect to the same Supabase database. The CLI structure: `app/main.py` (CLI entry), `app/config.py` (configuration), `app/database/` (Supabase queries), `app/ingestion/` (document processing and KC extraction), `app/practice/` (item generation), `app/study/` (session loop and scheduler), `app/state/` (mastery and spacing algorithms). The web structure is defined in the "Web UI Technology Stack" section.
 
-The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, pypdf, anthropic, and supabase. The backend API (M18) additionally requires: fastapi, uvicorn, python-multipart. The web UI requires Node.js 18+ with React, Vite, Tailwind CSS, Recharts, and Supabase client. An Anthropic API key and Supabase credentials must be available in environment variables. An internet connection is required for database access and during document ingestion when the LLM API is called.
+The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, pypdf, anthropic, and supabase. The backend API (M18) additionally requires: fastapi, uvicorn, python-multipart. The speed optimization (M21-M23) adds: groq (for Qwen3 32B model access). The web UI requires Node.js 18+ with React, Vite, Tailwind CSS, Recharts, and Supabase client. An Anthropic API key and Supabase credentials must be available in environment variables. A Groq API key (GROQ_API_KEY) is required for practice item generation after M21. An internet connection is required for database access and during document ingestion when the LLM APIs are called.
 
 
 ## Plan of Work
 
-Implementation proceeds through twenty milestones. Milestones 1-19 are complete. Milestone 20 (error handling and polish) is pending.
+Implementation proceeds through twenty-three milestones. Milestones 1-19 are complete. Milestone 20 (error handling and polish) is pending. Milestones 21-23 (speed optimization) are pending.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
 **Web UI Core (Complete):** M9: Foundation (React/Vite/Tailwind setup, sidebar layout). M10: Home dashboard. M11: Study session interface. M12: Calendar and scheduling. M13: Due for Review page. M14: Progress statistics. M15: Analytics and insights.
 
 **Sources Feature (Complete except M20):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish (pending).
+
+**Speed Optimization (Pending):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
 
 
 ## CLI Usage Reference
@@ -838,6 +847,292 @@ The work involves adding error boundaries to Sources page components. Implement 
 To verify, upload a file that will fail (e.g., trigger LLM rate limit by uploading many files quickly). Error state shows clear message and "Retry" button. Click Retry - processing restarts. Delete a source - confirmation appears, source removed from list and database. View source details - modal shows KC list. Test on mobile viewport - layout remains usable.
 
 
+### Speed Optimization Milestones 21-23 (Pending)
+
+These milestones reduce document processing time from 60-165 seconds to 15-40 seconds (approximately 3-4x speedup). The bottleneck is sequential LLM API calls during practice item generation. Three optimizations provide the biggest gains: parallel item generation (50-70% time reduction), faster model for items (30-50% LLM latency reduction), and batch database inserts (10-15% time reduction).
+
+- **M21:** Groq client and batch database inserts (low effort, immediate gains)
+- **M22:** Parallel practice item generation with ThreadPoolExecutor (medium effort, major gains)
+- **M23:** Error resilience with retry logic and graceful degradation (optional polish)
+
+### Milestone 21: Groq Client and Batch Database Inserts
+
+At the end of this milestone, practice item generation uses the Qwen3 32B model on Groq instead of Claude for faster structured output, and database inserts use batch operations instead of individual calls.
+
+**Rationale for Model Selection:**
+
+Knowledge component extraction requires high reasoning (concept identification, classification, prerequisite detection) and continues using Claude Sonnet 4. Practice item generation is a template-following task with low reasoning requirements—the KC already defines what to test, the generator just formats prompts and expected responses. Qwen3 32B on Groq handles structured JSON output well at 662 tokens per second, 3-5x faster than alternatives.
+
+| Task | Reasoning Needed | Model | Provider |
+|------|------------------|-------|----------|
+| KC Extraction | High | claude-sonnet-4-20250514 | Anthropic |
+| Item Generation | Low | qwen-qwq-32b | Groq |
+
+**Cost comparison:**
+
+| Metric | Claude 3.5 Haiku | Qwen3 32B (Groq) |
+|--------|------------------|------------------|
+| Input | $1.00/M tokens | $0.29/M tokens |
+| Output | $5.00/M tokens | $0.59/M tokens |
+| Speed | 4-5x Sonnet | 662 TPS |
+
+**Work:**
+
+1. Add `groq` to `requirements.txt`.
+
+2. Update `learn_system/app/config.py` to add Groq configuration:
+
+        ANTHROPIC_MODEL_REASONING: str = "claude-sonnet-4-20250514"  # For KC extraction
+        GROQ_MODEL_FAST: str = "qwen-qwq-32b"  # For item generation
+        GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+
+3. Create Groq client wrapper in `learn_system/app/practice/generator.py`:
+
+        from groq import Groq
+
+        def get_groq_client():
+            return Groq(api_key=GROQ_API_KEY)
+
+4. Update `generate_items_for_kc()` to use Groq client instead of Anthropic:
+
+        def generate_items_for_kc(kc: dict) -> list[dict]:
+            client = get_groq_client()
+            response = client.chat.completions.create(
+                model=GROQ_MODEL_FAST,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2048
+            )
+            # Parse response.choices[0].message.content as JSON...
+
+5. Add batch insert functions to `learn_system/app/database/queries.py`:
+
+        def insert_kcs_batch(kcs_data: list[dict]) -> list[str]:
+            """Batch insert KCs and their states in 2 HTTP calls instead of N*2."""
+            client = get_client()
+            kc_records = []
+            state_records = []
+            kc_ids = []
+
+            for kc in kcs_data:
+                kc_id = generate_id('kc')
+                kc_ids.append(kc_id)
+                kc_records.append({...})
+                state_records.append({'kc_id': kc_id, 'mastery_level': 0.0, ...})
+
+            client.table('knowledge_components').insert(kc_records).execute()
+            client.table('kc_state').insert(state_records).execute()
+            return kc_ids
+
+        def insert_practice_items_batch(items: list[dict]) -> list[str]:
+            """Batch insert practice items in 1 HTTP call instead of N."""
+            client = get_client()
+            records = [{'id': generate_id('item'), **item} for item in items]
+            client.table('practice_items').insert(records).execute()
+            return [r['id'] for r in records]
+
+6. Update `learn_system/app/ingestion/kc_extractor.py` to use `insert_kcs_batch()` instead of individual inserts.
+
+7. Update `learn_system/app/practice/generator.py` to collect all items then call `insert_practice_items_batch()`.
+
+**To verify:**
+
+1. Set `GROQ_API_KEY` in `.env` file.
+
+2. Run CLI ingestion on a test document:
+
+        cd learn_system
+        python -m app.main ingest test_document.md --domain test
+
+3. Observe console output shows Groq model being used for item generation.
+
+4. Check Supabase dashboard to verify KCs and items were created.
+
+5. Time the operation. Expected improvement: item generation calls should complete in under 1 second each (down from 3-8 seconds with Claude).
+
+**Fallback:** If Qwen3 32B quality is insufficient, Llama 3.1 8B on Groq ($0.05/$0.08 per million tokens, 840 TPS) is worth testing as an alternative.
+
+
+### Milestone 22: Parallel Practice Item Generation
+
+At the end of this milestone, practice items for multiple KCs are generated concurrently using ThreadPoolExecutor, reducing total generation time from ~75 seconds (15 KCs × 5 sec) to ~15 seconds (parallel with 5 workers).
+
+**Why ThreadPoolExecutor over asyncio:**
+- Existing code is synchronous throughout
+- LLM API calls are I/O-bound; Python's GIL does not block during network waits
+- Minimal refactoring required compared to converting to async
+
+**Work:**
+
+1. Add thread-safe progress tracker to `learn_system/app/api/services/processing.py`:
+
+        from threading import Lock
+
+        class ProgressTracker:
+            def __init__(self, total: int):
+                self.total = total
+                self._completed = 0
+                self._lock = Lock()
+
+            def increment(self) -> tuple[int, int]:
+                with self._lock:
+                    self._completed += 1
+                    return (self._completed, self.total)
+
+        class ThrottledUpdater:
+            """Reduces DB update frequency to avoid overwhelming Supabase."""
+            def __init__(self, update_fn, min_interval: float = 0.5):
+                self.update_fn = update_fn
+                self.min_interval = min_interval
+                self._last_update = 0
+                self._lock = Lock()
+
+            def update(self, *args, **kwargs):
+                with self._lock:
+                    now = time.time()
+                    if now - self._last_update >= self.min_interval:
+                        self.update_fn(*args, **kwargs)
+                        self._last_update = now
+
+2. Refactor `generate_all_items()` in `learn_system/app/practice/generator.py`:
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import os
+
+        MAX_LLM_WORKERS = int(os.getenv('MAX_LLM_WORKERS', '5'))
+
+        def _process_single_kc(kc: dict) -> tuple[str, list[dict], str | None]:
+            """Process single KC. Returns (kc_id, items, error_or_none)."""
+            try:
+                existing = get_items_for_kc(kc['id'])
+                if existing:
+                    return (kc['id'], [], None)  # Skip, already has items
+                items = generate_items_for_kc(kc)
+                return (kc['id'], items, None)
+            except Exception as e:
+                return (kc['id'], [], str(e))
+
+        def generate_all_items(source_id: str, progress_callback=None) -> int:
+            """Generate items for all KCs using parallel LLM calls."""
+            kcs = get_kcs_for_source(source_id)
+            if not kcs:
+                return 0
+
+            all_items = []
+            completed = 0
+            errors = []
+
+            with ThreadPoolExecutor(max_workers=MAX_LLM_WORKERS) as executor:
+                future_to_kc = {executor.submit(_process_single_kc, kc): kc for kc in kcs}
+
+                for future in as_completed(future_to_kc):
+                    completed += 1
+                    kc_id, items, error = future.result()
+                    if items:
+                        for item in items:
+                            item['kc_id'] = kc_id
+                        all_items.extend(items)
+                    if error:
+                        errors.append(f"{kc_id}: {error}")
+                    if progress_callback:
+                        progress_callback(f"Generating items for KC {completed}/{len(kcs)}")
+
+            # Batch insert all items at once
+            if all_items:
+                insert_practice_items_batch(all_items)
+
+            if errors:
+                print(f"Warnings: {len(errors)} KCs failed: {errors[:3]}...")
+
+            return len(all_items)
+
+3. Add `MAX_LLM_WORKERS` configuration to `learn_system/app/config.py`:
+
+        MAX_LLM_WORKERS: int = int(os.getenv('MAX_LLM_WORKERS', '5'))
+
+4. Update `learn_system/app/api/services/processing.py` progress callback to use `ThrottledUpdater` to avoid excessive Supabase updates during parallel execution.
+
+**To verify:**
+
+1. Run CLI ingestion on a document with 10+ KCs:
+
+        cd learn_system
+        time python -m app.main ingest larger_document.md --domain test
+
+2. Observe console shows parallel progress ("Generating items for KC 3/15", etc.) with multiple completions in quick succession.
+
+3. Compare timing: with 5 workers processing 15 KCs at ~1 sec each, expect ~3-4 seconds total instead of ~15 seconds sequential.
+
+4. Verify all items created correctly in Supabase.
+
+5. Test web UI upload to confirm progress bar still updates (throttled updates working).
+
+
+### Milestone 23: Error Resilience and Retry Logic
+
+At the end of this milestone, LLM API calls have automatic retry with exponential backoff, and the system gracefully handles partial failures without losing successfully generated content.
+
+**Work:**
+
+1. Add retry wrapper to `learn_system/app/practice/generator.py`:
+
+        from groq import RateLimitError, APIConnectionError, APITimeoutError
+        import time
+
+        RETRYABLE_ERRORS = (RateLimitError, APIConnectionError, APITimeoutError)
+
+        def call_with_retry(fn, *args, max_retries=3, **kwargs):
+            """Call function with exponential backoff on transient errors."""
+            for attempt in range(max_retries + 1):
+                try:
+                    return fn(*args, **kwargs)
+                except RETRYABLE_ERRORS as e:
+                    if attempt == max_retries:
+                        raise
+                    wait_time = 2 ** attempt  # 1s, 2s, 4s
+                    print(f"Retrying in {wait_time}s after: {e}")
+                    time.sleep(wait_time)
+
+2. Wrap LLM calls in `generate_items_for_kc()` with retry logic:
+
+        def generate_items_for_kc(kc: dict) -> list[dict]:
+            def _call():
+                client = get_groq_client()
+                return client.chat.completions.create(
+                    model=GROQ_MODEL_FAST,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=2048
+                )
+            response = call_with_retry(_call)
+            # Parse response...
+
+3. Add similar retry wrapper to KC extraction in `learn_system/app/ingestion/kc_extractor.py` for Anthropic API calls.
+
+4. Update `generate_all_items()` error handling to:
+   - Continue processing remaining KCs when one fails
+   - Log all errors to a summary
+   - Return partial success (items for KCs that succeeded)
+   - Optionally store failed KC IDs for later retry
+
+5. Update web UI `ProcessingStatus` component to show partial success states: "Completed with warnings: 12/15 KCs processed successfully."
+
+**To verify:**
+
+1. Temporarily set `MAX_LLM_WORKERS=10` to trigger rate limits, then run ingestion.
+
+2. Observe retry messages in console ("Retrying in 2s after: RateLimitError").
+
+3. Verify processing completes with partial results if some KCs fail permanently.
+
+4. Check that successfully generated items are stored even when some fail.
+
+5. Web UI shows appropriate status message for partial success.
+
+**Optional enhancements (not required for milestone):**
+- Circuit breaker pattern for sustained API failures
+- Checkpoint file for resumable processing after crash
+- Per-KC retry queue for failed items
+
+
 ## Web UI Technology Stack
 
 The web interface uses the following technology stack:
@@ -1067,3 +1362,5 @@ From the Adaptive Learning Platform Blueprint: Bloom's cognitive levels are capt
 2026-01-02: Added Web UI milestones (9-15) based on UI design screenshots. Added comprehensive specifications for React-based web interface including: technology stack (React, Vite, Tailwind, Recharts, Supabase client), detailed milestone descriptions for all pages (Home, Calendar, Due for Review, Sources, Progress, Analytics, Study Session), directory structure, color palette, typography, spacing, and component specifications. Added Decision Log entries for web UI addition and technology choices.
 
 2026-01-02: Added Sources Feature milestones (16-20) from NEW FEATURES.md specification. Changes include: (1) Updated Plan of Work to show 20 milestones with M16-M20 pending, (2) Added detailed milestone descriptions for Sources page foundation, Upload UI, FastAPI backend, real-time processing, and error handling, (3) Added backend API directory structure in learn_system/app/api/, (4) Added frontend components/sources/ and hooks/ directories, (5) Added database schema migrations for processing_status tracking columns, (6) Updated CLI requirements to include fastapi, uvicorn, python-multipart dependencies. Full specification available in NEW FEATURES.md with architecture diagrams, API endpoints, state management design, and integration validation report.
+
+2026-01-03: Added Speed Optimization milestones (21-23) from NEW FEATURES.md specification. Changes include: (1) Updated Plan of Work to show 23 milestones with M20-M23 pending, (2) Added detailed milestone descriptions for Groq client integration (M21), parallel item generation with ThreadPoolExecutor (M22), and error resilience with retry logic (M23), (3) Added Decision Log entries for Qwen3 32B on Groq model choice and ThreadPoolExecutor over asyncio, (4) Updated Context and Orientation section to include groq dependency and GROQ_API_KEY requirement, (5) Added expected performance targets: 60-165s → 15-40s processing time (3-4x speedup). The optimization focuses on three bottlenecks: parallel LLM calls (50-70% reduction), faster model for items (30-50% reduction), batch DB inserts (10-15% reduction).
