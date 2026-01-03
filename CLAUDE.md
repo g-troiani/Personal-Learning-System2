@@ -45,7 +45,7 @@ All specifications and design decisions are documented in:
 | Layer | Technology | Notes |
 |-------|------------|-------|
 | Language | Python | 3.11+ |
-| Database | SQLite | Zero-config, file-based |
+| Database | Supabase | PostgreSQL, cloud-hosted |
 | Interface | CLI | Command-line, scriptable |
 | LLM | Claude API | Content processing during ingestion |
 | Document Processing | TBD | PDF, DOCX, Markdown parsing |
@@ -62,10 +62,9 @@ python -m learn stats     # View learning analytics
 
 ## Key Architectural Decisions
 
-- **Localhost only** (no cloud services beyond LLM API)
 - **Single user** (no auth, no multi-tenancy)
-- **CLI-first** (no web server, no GUI)
-- **SQLite database** (portable, zero-configuration)
+- **CLI + Web UI** (both interfaces share same Supabase backend)
+- **Supabase database** (cloud PostgreSQL)
 - **LLM for ingestion only** (not during practice sessions)
 
 ## Design Philosophy
@@ -119,8 +118,6 @@ These principles guide all implementation decisions:
 - Make CLI output clear and actionable
 
 **Do Not:**
-- Add web interfaces or GUIs
-- Store data in cloud services
 - Call LLM during practice sessions (only during ingestion)
 - Add gamification elements (badges, streaks, points)
 
