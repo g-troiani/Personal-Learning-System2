@@ -252,15 +252,18 @@ def get_source_status(source_id: str) -> Optional[Dict[str, Any]]:
 
             # Get KC and item counts
             kc_result = client.table("knowledge_components").select("id", count="exact").eq("source_id", source_id).execute()
-            item_result = client.table("practice_items").select(
-                "id", count="exact"
-            ).in_(
-                "kc_id",
-                client.table("knowledge_components").select("id").eq("source_id", source_id)
-            ).execute() if kc_result.count > 0 else type('obj', (object,), {'count': 0})()
+            kc_ids = [kc["id"] for kc in kc_result.data] if kc_result.data else []
+
+            if kc_ids:
+                item_result = client.table("practice_items").select(
+                    "id", count="exact"
+                ).in_("kc_id", kc_ids).execute()
+                item_count = item_result.count or 0
+            else:
+                item_count = 0
 
             source["kc_count"] = kc_result.count or 0
-            source["item_count"] = getattr(item_result, 'count', 0) or 0
+            source["item_count"] = item_count
 
             return source
 
