@@ -352,6 +352,33 @@ This section documents unexpected behaviors, bugs, optimizations, or insights di
 
 2026-01-02: Upload progress bar stuck at 82% during item generation. Root cause: The `progress_callback` function in `app/api/services/processing.py` had a hardcoded calculation `65 + int((100 - 65) * 0.5) = 82` instead of parsing the actual progress from the message. The message contains text like "Generating items for KC 5/10: ..." which can be parsed to calculate real progress. Fix: Added regex parsing `re.search(r'KC (\d+)/(\d+)', msg)` to extract current/total KC numbers, then calculate `65 + int((current_kc / total_kcs) * 33)` for progress between 65-98%. Evidence: After fix, progress bar correctly updates from 65% to 98% during item generation, then jumps to 100% on completion.
 
+2026-01-03: API server port mismatch. The web frontend is configured to send requests to port 8001, but the uvicorn server was started on port 8000. Must use `uvicorn app.api.server:app --host 0.0.0.0 --port 8001 --reload` to match frontend expectations. Evidence: Network requests to localhost:8001 failing while server ran on 8000.
+
+2026-01-03: Groq API rate limits causing stuck processing. During parallel practice item generation, the Groq API can hit rate limits causing individual KC generation to hang or timeout. Observed webapp_speed_test.md stuck at 84% for extended period during "Generating items for KC 9/15". The retry logic helps but doesn't fully prevent long hangs. Evidence: Processing card stuck at 84% for >60 seconds while other uploads completed.
+
+
+## Known Issues and Future Improvements
+
+**CRITICAL: Large Upload Reliability**
+- **Issue:** System can get stuck indefinitely when processing large documents if Groq API rate limits are hit or responses are slow
+- **Risk:** User uploads content, sees partial progress, then processing hangs forever with no timeout
+- **Current mitigations:**
+  - Retry logic with exponential backoff (M23)
+  - Parallel processing reduces total time (M22)
+  - Progress polling shows status updates
+- **Recommended improvements:**
+  1. Add per-KC timeout (e.g., 60 seconds) - if a single KC generation fails, skip it and continue
+  2. Add overall job timeout (e.g., 10 minutes) - mark as error if not complete
+  3. Add "partial completion" status - allow documents with some failed KCs to be marked as ready with a warning
+  4. Consider queuing large documents for background processing with email/notification on completion
+  5. Add retry button on stuck/stale processing jobs (>5 minutes without progress update)
+
+**Processing Speed Observations:**
+- Small documents (10-15 KCs): ~30-45 seconds with parallel Groq
+- Medium documents (38 KCs): ~2-3 minutes
+- Initial page load can feel slow due to polling/realtime subscriptions starting up
+- Progress updates throttled to 0.5s intervals to avoid overwhelming Supabase
+
 
 ## Decision Log
 
