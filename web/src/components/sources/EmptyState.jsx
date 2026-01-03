@@ -1,4 +1,4 @@
-import { FileText, Upload, BookOpen } from 'lucide-react'
+import { FileText, Upload, BookOpen, ArrowRight } from 'lucide-react'
 
 export default function EmptyState({ onAddClick, isFiltered = false }) {
   if (isFiltered) {
@@ -37,27 +37,51 @@ export default function EmptyState({ onAddClick, isFiltered = false }) {
         <Upload className="w-5 h-5" />
         Add Your First Document
       </button>
-      <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-2xl text-left">
-        <div className="p-4 bg-bg-card rounded-lg border border-bg-card-border">
-          <div className="text-2xl mb-2">📄</div>
-          <h4 className="font-medium text-text-primary mb-1">Upload</h4>
-          <p className="text-sm text-text-secondary">
-            PDF, DOCX, Markdown, or plain text files
-          </p>
-        </div>
-        <div className="p-4 bg-bg-card rounded-lg border border-bg-card-border">
-          <div className="text-2xl mb-2">🧠</div>
-          <h4 className="font-medium text-text-primary mb-1">Extract</h4>
-          <p className="text-sm text-text-secondary">
-            AI identifies key concepts and skills
-          </p>
-        </div>
-        <div className="p-4 bg-bg-card rounded-lg border border-bg-card-border">
-          <div className="text-2xl mb-2">📝</div>
-          <h4 className="font-medium text-text-primary mb-1">Practice</h4>
-          <p className="text-sm text-text-secondary">
-            Auto-generated questions for active recall
-          </p>
+      {/* How it works - workflow steps */}
+      <div className="mt-8 max-w-2xl">
+        <p className="text-xs uppercase tracking-wider text-text-muted mb-4">How it works</p>
+        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-2">
+          {/* Step 1: Upload */}
+          <div className="flex-1 p-4 bg-bg-card rounded-lg border border-bg-card-border text-center">
+            <div className="text-2xl mb-2">📄</div>
+            <h4 className="font-medium text-text-primary mb-1 flex items-center justify-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-accent-new/20 text-accent-new text-xs font-bold">1</span>
+              Upload
+            </h4>
+            <p className="text-sm text-text-secondary">
+              PDF, DOCX, Markdown, or plain text files
+            </p>
+          </div>
+
+          {/* Arrow */}
+          <ArrowRight className="hidden sm:block w-5 h-5 text-text-muted flex-shrink-0" />
+
+          {/* Step 2: Extract */}
+          <div className="flex-1 p-4 bg-bg-card rounded-lg border border-bg-card-border text-center">
+            <div className="text-2xl mb-2">🧠</div>
+            <h4 className="font-medium text-text-primary mb-1 flex items-center justify-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-accent-new/20 text-accent-new text-xs font-bold">2</span>
+              Extract
+            </h4>
+            <p className="text-sm text-text-secondary">
+              AI identifies key concepts and skills
+            </p>
+          </div>
+
+          {/* Arrow */}
+          <ArrowRight className="hidden sm:block w-5 h-5 text-text-muted flex-shrink-0" />
+
+          {/* Step 3: Practice */}
+          <div className="flex-1 p-4 bg-bg-card rounded-lg border border-bg-card-border text-center">
+            <div className="text-2xl mb-2">📝</div>
+            <h4 className="font-medium text-text-primary mb-1 flex items-center justify-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-accent-new/20 text-accent-new text-xs font-bold">3</span>
+              Practice
+            </h4>
+            <p className="text-sm text-text-secondary">
+              Auto-generated questions for active recall
+            </p>
+          </div>
         </div>
       </div>
     </div>
