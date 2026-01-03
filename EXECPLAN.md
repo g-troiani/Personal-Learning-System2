@@ -311,6 +311,23 @@ This section tracks granular progress with timestamps. Each stopping point must 
     - Parallel processing verified working with Groq qwen/qwen3-32b model
     - Batch inserts confirmed (2 HTTP calls for KCs+states instead of N*2)
 
+**Bug Fixes and Polish (2026-01-03):**
+- Fixed delete source returning 404 due to query builder bug in `processing.py`:
+  - `get_source_status()` was passing Supabase query builder to `.in_()` instead of list
+  - Error: `'SyncSelectRequestBuilder' object is not iterable`
+  - Fix: Extract KC IDs into list first, then pass to `.in_()`
+- Added stuck upload detection (>30 minutes):
+  - Processing sources stuck for >30 min show "Failed upload - use menu to delete"
+  - Pending sources stuck for >30 min also detected (checks `ingested_at`)
+  - Menu enabled for stuck sources so users can delete without API access
+- Fixed stale sidebar data after deletions:
+  - Sidebar only loaded counts once on mount, never refreshed
+  - Added `sources` dependency to useEffect so sidebar refreshes after deletes
+- UI improvements to empty state:
+  - Added "How it works" workflow with step numbers (1, 2, 3)
+  - Added arrows between steps to show flow
+  - Centered emojis and content in workflow boxes
+
 
 ## Surprises and Discoveries
 
