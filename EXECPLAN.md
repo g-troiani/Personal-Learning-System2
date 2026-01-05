@@ -536,6 +536,8 @@ The project has two main parts: `learn_system/` for the Python CLI and `web/` fo
 
 The CLI requires Python 3.9+ with packages: click, python-dotenv, python-docx, pypdf, anthropic, and supabase. The backend API (M18) additionally requires: fastapi, uvicorn, python-multipart. The speed optimization (M21-M23) adds: groq (for Qwen3 32B model access). The web UI requires Node.js 18+ with React, Vite, Tailwind CSS, Recharts, and Supabase client. An Anthropic API key and Supabase credentials must be available in environment variables. A Groq API key (GROQ_API_KEY) is required for practice item generation after M21. An internet connection is required for database access and during document ingestion when the LLM APIs are called.
 
+The project uses a tiered memory system (M24-M29) to manage EXECPLAN complexity. Core memory (CLAUDE.md and slim EXECPLAN.md) is always loaded. External memory in `.claude/memory/` contains archived milestones, decisions, schemas, and reference material, read on demand. This adapts the MemGPT "LLM as Operating System" pattern for file-based Claude Code.
+
 
 ## Plan of Work
 
@@ -548,6 +550,8 @@ Implementation proceeds through twenty-three milestones. All milestones 1-23 are
 **Sources Feature (Complete):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish.
 
 **Speed Optimization (Complete):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
+
+**Agent Memory System (Pending):** M24: Create memory directory structure. M25: Extract completed milestones to archive. M26: Extract decisions and schemas. M27: Extract reference material. M28: Slim EXECPLAN to active content only. M29: Update CLAUDE.md with memory access instructions.
 
 
 ## CLI Usage Reference
@@ -1265,6 +1269,301 @@ At the end of this milestone, LLM API calls have automatic retry with exponentia
 - Per-KC retry queue for failed items
 
 
+### Agent Memory System Milestones 24-29 (Pending)
+
+These milestones implement a tiered memory system to manage EXECPLAN complexity. The pattern adapts MemGPT's "LLM as Operating System" architecture for file-based Claude Code: core memory (always loaded) plus external memory (retrieved on demand). After completion, EXECPLAN.md shrinks from ~1500 lines to ~400 lines of active content while preserving full historical access.
+
+**Architecture:**
+
+    ┌─────────────────────────────────────────────────────────┐
+    │                    CORE MEMORY                          │
+    │              (Always in context)                        │
+    ├─────────────────────────────────────────────────────────┤
+    │  CLAUDE.md          │  EXECPLAN.md (slim)               │
+    │  - Instructions     │  - Active state                   │
+    │  - Memory access    │  - Current milestones             │
+    │  - Conventions      │  - Known issues                   │
+    └─────────────────────────────────────────────────────────┘
+                              │
+                              │ Read on demand
+                              ▼
+    ┌─────────────────────────────────────────────────────────┐
+    │                  EXTERNAL MEMORY                        │
+    │              (.claude/memory/)                          │
+    ├─────────────────────────────────────────────────────────┤
+    │  milestones/          │  decisions/                     │
+    │  schemas/             │  reference/                     │
+    └─────────────────────────────────────────────────────────┘
+
+- **M24:** Create memory directory structure
+- **M25:** Extract completed milestones to archive
+- **M26:** Extract decisions and schemas
+- **M27:** Extract reference material
+- **M28:** Slim EXECPLAN to active content only
+- **M29:** Update CLAUDE.md with memory access instructions
+
+
+### Milestone 24: Create Memory Directory Structure
+
+At the end of this milestone, the `.claude/memory/` directory exists with subdirectories and an INDEX.md template ready for content.
+
+**Work:**
+
+1. Create directory structure:
+
+        mkdir -p .claude/memory/{milestones,decisions,schemas,reference}
+
+2. Create `.claude/memory/INDEX.md` with template:
+
+        # Memory System Index
+
+        **Last Updated:** YYYY-MM-DD
+        **Total Files:** 0
+
+        ## Quick Navigation
+
+        | Category | Files | Key Topics |
+        |----------|-------|------------|
+        | Milestones | 0 | Implementation history |
+        | Decisions | 0 | Architectural choices |
+        | Schemas | 0 | Database, API, components |
+        | Reference | 0 | Research and context |
+
+        ## File Summaries
+
+        (Files will be added in subsequent milestones)
+
+**Verification:** Directory structure exists. INDEX.md contains template headers.
+
+
+### Milestone 25: Extract Completed Milestones
+
+At the end of this milestone, all M1-M23 detailed implementation notes are archived in `.claude/memory/milestones/` and EXECPLAN.md Progress section contains only summaries with links.
+
+**Work:**
+
+1. Create `milestones/cli_foundation.md` containing M1-M8 full details from Progress section
+2. Create `milestones/webui_core.md` containing M9-M15 full details
+3. Create `milestones/sources_feature.md` containing M16-M20 full details
+4. Create `milestones/speed_optimization.md` containing M21-M23 full details
+5. Update INDEX.md with file summaries
+6. Trim Progress section to one-line summaries with links to archives
+
+**File format for each archive:**
+
+    # [Category] Milestones Archive
+
+    **Last Updated:** YYYY-MM-DD
+    **Summary:** Implementation details for M[X]-M[Y]
+
+    ## Quick Reference
+    - Key commands and verification steps
+    - Critical dependencies
+
+    ## Milestone Details
+    [Full content extracted from Progress section]
+
+    ## Cross-References
+    - Related decisions: decisions/[file].md
+    - Related schemas: schemas/[file].md
+
+**Verification:** All milestone details accessible via `.claude/memory/milestones/`. Progress section under 100 lines.
+
+
+### Milestone 26: Extract Decisions and Schemas
+
+At the end of this milestone, Decision Log and schema definitions are archived externally with summaries remaining in EXECPLAN.md.
+
+**Work:**
+
+1. Create `decisions/architecture.md` with structural decisions (Supabase, FastAPI, hybrid architecture)
+2. Create `decisions/technology.md` with stack choices (Groq, ThreadPoolExecutor, React/Vite)
+3. Create `decisions/patterns.md` with implementation patterns (batch inserts, progress callbacks)
+4. Create `schemas/database.md` with full Supabase schema from Artifacts section
+5. Create `schemas/api.md` with FastAPI endpoint specifications
+6. Create `schemas/components.md` with React component hierarchy
+7. Update INDEX.md
+8. Trim Decision Log to recent entries only, link to archives
+9. Remove full schema from Artifacts section, replace with link
+
+**Verification:** All decisions and schemas accessible via `.claude/memory/`. Decision Log under 20 lines. Artifacts section under 50 lines.
+
+
+### Milestone 27: Extract Reference Material
+
+At the end of this milestone, research foundation and original context are archived externally.
+
+**Work:**
+
+1. Create `reference/research.md` with Research Foundation section content
+2. Create `reference/context.md` with Context and Orientation section (stable reference copy)
+3. Update INDEX.md
+4. Remove Research Foundation section from EXECPLAN.md (link only)
+5. Trim Feature Tracking by Research Source section
+
+**Verification:** Research and context accessible via `.claude/memory/reference/`. EXECPLAN.md reduced by ~150 lines.
+
+
+### Milestone 28: Slim EXECPLAN to Active Content Only
+
+At the end of this milestone, EXECPLAN.md is under 500 lines containing only active work content.
+
+**Sections to keep (with target lines):**
+- Purpose and Big Picture (20)
+- Progress - summaries only (50)
+- Active Milestones - M24-M29 full detail (200)
+- Known Issues and Future Improvements (30)
+- Surprises and Discoveries - recent only (20)
+- Memory Index - new section (30)
+- CLI and Web Usage Reference (50)
+- Recovery Notes (15)
+
+**Sections to archive or remove:**
+- Completed milestone details → already in milestones/
+- Full Decision Log → already in decisions/
+- Outcomes and Retrospective → archive to reference/
+- Context and Orientation → already in reference/
+- Full Artifacts → already in schemas/
+- Web UI Design Specifications → archive to schemas/
+- Research Foundation → already in reference/
+
+**Work:**
+
+1. Add Memory Index section pointing to all `.claude/memory/` files
+2. Remove archived content, replace with one-line links
+3. Consolidate redundant sections
+4. Verify all information still accessible
+
+**Verification:** EXECPLAN.md under 500 lines. `wc -l EXECPLAN.md` returns < 500. All content still accessible via memory files.
+
+
+### Milestone 29: Update CLAUDE.md with Memory Access Instructions
+
+At the end of this milestone, CLAUDE.md contains complete instructions for accessing the memory system, including proactive lookups before starting new work.
+
+**Work:**
+
+Add Memory System section to CLAUDE.md after ExecPlans section:
+
+    ## Memory System
+
+    This project uses a tiered memory system to manage complexity.
+
+    ### Core Memory (Always Loaded)
+    - `EXECPLAN.md`: Active state, current milestones, known issues
+    - `CLAUDE.md`: This file - instructions, conventions, memory access
+
+    ### External Memory (Read on Demand)
+    Stored in `.claude/memory/`:
+
+    | File | Contains | Read When |
+    |------|----------|-----------|
+    | `INDEX.md` | Summary of all memory files | Starting new topic |
+    | `milestones/cli_foundation.md` | M1-M8 details | Debugging CLI |
+    | `milestones/webui_core.md` | M9-M15 details | Modifying UI |
+    | `milestones/sources_feature.md` | M16-M20 details | Upload issues |
+    | `milestones/speed_optimization.md` | M21-M23 details | Performance |
+    | `decisions/architecture.md` | Structural choices | Proposing changes |
+    | `decisions/technology.md` | Stack choices | Evaluating alternatives |
+    | `schemas/database.md` | Supabase schema | Database work |
+    | `schemas/api.md` | FastAPI specs | API modifications |
+    | `reference/research.md` | Learning science | Justifying features |
+
+    ### Starting New Work Protocol (IMPORTANT)
+
+    Before implementing a new milestone, PROACTIVELY read relevant memory:
+
+    1. **Always read first:**
+       - `.claude/memory/INDEX.md` - orient to available memory
+       - `decisions/architecture.md` - check architectural constraints
+       - `decisions/technology.md` - verify stack choices still apply
+
+    2. **Read based on work type:**
+       - CLI work → `milestones/cli_foundation.md`
+       - Web UI work → `milestones/webui_core.md`
+       - Upload/processing → `milestones/sources_feature.md`
+       - Performance → `milestones/speed_optimization.md`
+       - Database changes → `schemas/database.md`
+       - API changes → `schemas/api.md`
+       - New features → `reference/research.md` (learning science basis)
+
+    3. **Check for patterns:**
+       - Similar past milestones for implementation patterns
+       - Related decisions for constraints and trade-offs
+       - Known issues that may affect new work
+
+    4. **Spawn scout subagents (for complex milestones):**
+
+       For milestones with 3+ work items or cross-cutting concerns, spawn 3 parallel subagents to search archived memory. Each agent receives the milestone goal and work items.
+
+       | Agent | Focus | Searches | Returns |
+       |-------|-------|----------|---------|
+       | **Decisions Scout** | Constraints & trade-offs | `decisions/*.md` | Relevant constraints, past rationale |
+       | **Patterns Scout** | Implementation precedents | `milestones/*.md` | Similar past work, reusable patterns, gotchas |
+       | **Schema Scout** | Data structures & APIs | `schemas/*.md`, `reference/*.md` | Affected tables, endpoints, type definitions |
+
+       **Subagent prompt template:**
+       ```
+       MILESTONE: [ID and title]
+       GOAL: [the "At the end of this milestone..." statement]
+       WORK ITEMS: [list of tasks]
+
+       Search .claude/memory/[your-area]/ and return:
+       1. RELEVANT: Items that directly affect this milestone
+       2. CONSTRAINTS: Rules/decisions we must follow
+       3. PATTERNS: Similar past implementations to reference
+       4. RISKS: Potential conflicts or issues to watch for
+
+       Be specific. Quote file paths and line references.
+       ```
+
+       **Workflow:**
+       1. Read EXECPLAN.md milestone description
+       2. Spawn 3 scouts in parallel (single message, multiple Task calls)
+       3. Wait for all results
+       4. Synthesize: conflicts? missing info? clear to proceed?
+       5. If clear → implement with focused context
+       6. If conflicts → resolve before coding
+
+    **Example: Starting M30 (hypothetical new CLI command)**
+
+    Step 1 - Quick reads:
+    → Read INDEX.md for orientation
+    → Read decisions/architecture.md for CLI design principles
+
+    Step 2 - Spawn scouts (parallel):
+    ```
+    Scout 1 (Decisions): "M30 adds `learn export` command. Search decisions/*.md
+    for CLI design principles, output format decisions, any constraints on new commands."
+
+    Scout 2 (Patterns): "M30 adds `learn export` command. Search milestones/*.md
+    for how previous CLI commands were implemented, error handling patterns, testing approach."
+
+    Scout 3 (Schemas): "M30 adds `learn export` command. Search schemas/*.md
+    for data structures needed for export, any API endpoints that might be affected."
+    ```
+
+    Step 3 - Synthesize scout results, resolve conflicts, then implement
+
+    ### Reactive Retrieval Triggers
+
+    Also read external memory when:
+    1. User asks about completed features
+    2. You encounter unexpected behavior
+    3. You're unsure about prior decisions
+    4. Debugging requires implementation context
+
+    ### Memory Update Protocol
+
+    After completing work:
+    1. Archive detailed notes to appropriate memory file
+    2. Update EXECPLAN.md Progress (keep concise - link to archive)
+    3. Update INDEX.md if new file created
+    4. Add new decisions to decisions/*.md with rationale
+
+**Verification:** CLAUDE.md contains Memory System section with both proactive and reactive protocols. New session starting a milestone reads relevant archives before implementation.
+
+
 ## Web UI Technology Stack
 
 The web interface uses the following technology stack:
@@ -1496,3 +1795,5 @@ From the Adaptive Learning Platform Blueprint: Bloom's cognitive levels are capt
 2026-01-02: Added Sources Feature milestones (16-20) from NEW FEATURES.md specification. Changes include: (1) Updated Plan of Work to show 20 milestones with M16-M20 pending, (2) Added detailed milestone descriptions for Sources page foundation, Upload UI, FastAPI backend, real-time processing, and error handling, (3) Added backend API directory structure in learn_system/app/api/, (4) Added frontend components/sources/ and hooks/ directories, (5) Added database schema migrations for processing_status tracking columns, (6) Updated CLI requirements to include fastapi, uvicorn, python-multipart dependencies. Full specification available in NEW FEATURES.md with architecture diagrams, API endpoints, state management design, and integration validation report.
 
 2026-01-03: Added Speed Optimization milestones (21-23) from NEW FEATURES.md specification. Changes include: (1) Updated Plan of Work to show 23 milestones with M20-M23 pending, (2) Added detailed milestone descriptions for Groq client integration (M21), parallel item generation with ThreadPoolExecutor (M22), and error resilience with retry logic (M23), (3) Added Decision Log entries for Qwen3 32B on Groq model choice and ThreadPoolExecutor over asyncio, (4) Updated Context and Orientation section to include groq dependency and GROQ_API_KEY requirement, (5) Added expected performance targets: 60-165s → 15-40s processing time (3-4x speedup). The optimization focuses on three bottlenecks: parallel LLM calls (50-70% reduction), faster model for items (30-50% reduction), batch DB inserts (10-15% reduction).
+
+2026-01-04: Added Agent Memory System milestones (24-29) from NEW FEATURES.md research. Changes include: (1) Updated Plan of Work to show 29 milestones with M24-M29 pending, (2) Added detailed milestone descriptions for memory directory structure (M24), milestone extraction (M25), decisions and schemas extraction (M26), reference material extraction (M27), EXECPLAN slimming (M28), and CLAUDE.md memory instructions (M29), (3) Updated Context and Orientation to describe tiered memory system, (4) Added architecture diagram showing core memory vs external memory pattern. The memory system adapts MemGPT's "LLM as Operating System" pattern for file-based Claude Code. Target outcome: EXECPLAN.md from ~1500 lines to ~400 lines while preserving full historical access via `.claude/memory/`.
