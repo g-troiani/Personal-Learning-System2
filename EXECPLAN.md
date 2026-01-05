@@ -19,6 +19,7 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Web UI work → `.claude/memory/milestones/webui_core.md`
    - Upload/processing → `.claude/memory/milestones/sources_feature.md`
    - Performance issues → `.claude/memory/milestones/speed_optimization.md`
+   - Document Reader (M30-M38) → `NEW FEATURES.md` (full specs)
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
 
@@ -44,6 +45,8 @@ After implementing this system, a user can upload educational documents and rece
 The observable behavior works as follows. On Monday, the user runs `python -m app.main ingest Evaluating_LLMs.docx --domain ai_ml` and the system extracts approximately fifty knowledge components, generates around one hundred fifty practice items, and stores them in a local database. The user then runs `python -m app.main study --duration 30` and spends thirty minutes practicing. The system presents items, collects responses, records confidence and difficulty ratings, and updates mastery estimates. On Tuesday, the user runs `python -m app.main todo` and sees output showing that fifteen items from the LLM evaluation document are due for review. The user runs `python -m app.main review eval` to focus on that specific topic. After a week of use across multiple documents, the database contains enough data to analyze which learning techniques produce better retention for which types of content.
 
 The system solves five problems. First, it eliminates the "I don't know what I don't know" problem by forcing retrieval practice that reveals actual gaps. Second, it fights forgetting through spaced repetition scheduling. Third, it measures learning objectively through tracked performance rather than felt fluency. Fourth, it enables self-experimentation by recording which techniques were used for which content. Fifth, it removes cognitive overhead by telling the user exactly what to practice and when.
+
+**Document Reader Feature (M30-M38):** After these milestones, users can read uploaded documents directly in the browser before starting practice. The workflow becomes: upload → read/study → practice, with documents always one click away. Users navigate to `/reader/:sourceId` to view PDFs or Markdown with a Table of Contents in the sidebar, take notes, highlight text, and ask AI questions about the content. They can generate practice questions from highlighted text, creating a seamless learning loop.
 
 
 ## Progress
@@ -90,6 +93,41 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M27: Extract reference material - 3 files created, Research Foundation trimmed (2026-01-04)
 - [x] M28: Slim EXECPLAN - reduced from 1500 to 502 lines (2026-01-04)
 - [x] M29: Update CLAUDE.md - memory access instructions added (2026-01-04)
+
+**Document Reader Feature (M30-M38)** - In Progress
+- [x] Research phase - 6 parallel agents, NEW FEATURES.md consolidated spec (2026-01-05)
+- [x] M30: Core infrastructure - database migration, Supabase Storage, /reader route (2026-01-05)
+  - Added storage_path, original_filename, file_size_bytes, mime_type to content_sources
+  - Created reading_progress, annotations, document_sections tables
+  - Created "documents" bucket in Supabase Storage with RLS policies
+  - Modified upload endpoint to store files in Storage
+  - Added /api/sources/{id}/file-url and /api/sources/{id}/sections endpoints
+  - Created DocumentReader.jsx page with header, document viewer, assistant panel placeholder
+- [x] M31: Sidebar TOC integration - TableOfContentsSection, route detection (2026-01-05)
+  - Created `useDocumentSections.js` hook fetching from `/api/sources/{id}/sections`
+  - Created `TableOfContentsSection.jsx` with collapse/expand, hierarchy indentation
+  - Modified `Sidebar.jsx` with route detection via `useLocation()`, conditional TOC rendering
+  - Added `scroll-to-section` custom event listener in DocumentReader.jsx
+  - TOC shows only on `/reader/:sourceId`, disappears on other routes
+- [x] M32: Document rendering - PDF, Markdown, text viewers (2026-01-05)
+  - Installed react-pdf, react-markdown, remark-gfm, rehype-highlight, @tailwindcss/typography
+  - Created `PDFRenderer.jsx` with page navigation, zoom controls, scroll-to-page listener
+  - Created `MarkdownRenderer.jsx` with GFM support, syntax highlighting, scroll-to-heading
+  - Created `TextRenderer.jsx` for plain text with line numbers
+  - Created `ReaderContent.jsx` container selecting renderer by content type
+  - Added `/api/sources/{id}/content` endpoint for extracted text
+  - Updated getContentType() to check filename extension (more reliable than mime_type)
+  - Fixed Tailwind config to use ESM import for typography plugin
+- [x] M33: Navigation entry points - Read buttons, upload redirect (2026-01-05)
+  - Added "Read" button to `SourceCard.jsx` in Home page with BookOpen icon
+  - Added "Read" button to `SourceDetailPanel.jsx` footer (alongside Study and Delete)
+  - Updated Sidebar recent sources to link to `/reader/:id` instead of sources page
+  - Added navigate redirect in `Sources.jsx` handleProcessingComplete after upload
+- [ ] M34: Text selection and highlights - SelectionTooltip, annotations
+- [ ] M35: Assistant panel - notes, AI chat tabs
+- [ ] M36: Reading progress - position tracking, completion percentage
+- [ ] M37: Highlight-to-generate - practice questions from selected text
+- [ ] M38: Polish and performance - caching, virtualization, responsive
 
 
 ## Surprises and Discoveries
@@ -153,7 +191,17 @@ Key lessons learned during implementation:
 
 Recent decisions only below. See archives for full rationale.
 
-(No new decisions since M26 archive created 2026-01-04)
+- **Decision:** Document Reader uses existing Sidebar with conditional TOC section (not separate panel)
+  **Rationale:** Reuses existing UI patterns, avoids redundant navigation, TOC in teal color differentiates from nav items
+  **Date:** 2026-01-05
+
+- **Decision:** Store uploaded files in Supabase Storage, not blob columns
+  **Rationale:** CDN delivery, signed URLs with expiry, separate storage from database, 50MB file limit
+  **Date:** 2026-01-05
+
+- **Decision:** TOC communicates with DocumentReader via custom events
+  **Rationale:** Decoupled components across different parts of component tree, no prop drilling needed
+  **Date:** 2026-01-05
 
 
 ## Outcomes and Retrospective
@@ -172,7 +220,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through twenty-three milestones. All milestones 1-23 are complete.
+Implementation proceeds through thirty-eight milestones. Milestones 1-29 are complete. Milestones 30-38 implement the AlphaXiv-style Document Reader feature.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -182,7 +230,9 @@ Implementation proceeds through twenty-three milestones. All milestones 1-23 are
 
 **Speed Optimization (Complete):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
 
-**Agent Memory System (Pending):** M24: Create memory directory structure. M25: Extract completed milestones to archive. M26: Extract decisions and schemas. M27: Extract reference material. M28: Slim EXECPLAN to active content only. M29: Update CLAUDE.md with memory access instructions.
+**Agent Memory System (Complete):** M24: Create memory directory structure. M25: Extract completed milestones to archive. M26: Extract decisions and schemas. M27: Extract reference material. M28: Slim EXECPLAN to active content only. M29: Update CLAUDE.md with memory access instructions.
+
+**Document Reader Feature (Pending):** M30: Core infrastructure (database, storage, route). M31: Sidebar TOC integration. M32: Document rendering (PDF, Markdown, text). M33: Navigation entry points. M34: Text selection and highlights. M35: Assistant panel (notes, AI chat). M36: Reading progress tracking. M37: Highlight-to-generate practice questions. M38: Polish and performance.
 
 
 ## CLI Usage Reference
@@ -513,6 +563,238 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 **Verification:** CLAUDE.md contains Memory System section with both proactive and reactive protocols. New session starting a milestone reads relevant archives before implementation.
 
 
+### Document Reader Feature Milestones 30-38 (Pending)
+
+These milestones implement an AlphaXiv-style document reader that enables users to read uploaded documents before practice. The core flow becomes: upload → read/study → practice (source always one click away).
+
+**Full specs:** `NEW FEATURES.md` (root directory)
+
+**Architecture:** The reader reuses the existing Sidebar and Layout components. A conditional Table of Contents section appears in the sidebar only when viewing `/reader/:sourceId`. The document view includes a collapsible right-side Assistant panel for notes and AI chat.
+
+    ┌─────────────────────────────────────────────────────────────────┐
+    │  ← Back   📖 Title   [PDF|Blog]   [Zen]   [Start Practice]      │
+    ├────────────┬────────────────────────────────────────────────────┤
+    │  SIDEBAR   │   DOCUMENT AREA          │   ASSISTANT PANEL      │
+    │  (existing)│                          │   (collapsible)        │
+    │            │   [PDF/Markdown/Text]    │                        │
+    │  Home      │                          │   [Notes | AI | KCs]   │
+    │  Calendar  │   Selection → Tooltip    │                        │
+    │  ...       │   • Ask AI               │   Chat with AI...      │
+    │            │   • Highlight            │                        │
+    │  Recent    │   • Copy                 │                        │
+    │            │                          │                        │
+    │  ▼ CONTENTS│ ← Only in /reader/:id   │                        │
+    │  (teal)    │                          │                        │
+    │  • Ch 1    │                          │                        │
+    └────────────┴────────────────────────────────────────────────────┘
+
+
+### Milestone 30: Core Infrastructure
+
+At the end of this milestone, the database has new tables for reading progress and annotations, files are stored in Supabase Storage, and a basic `/reader/:sourceId` route exists.
+
+**Database Migration:**
+
+    -- Run in Supabase SQL Editor
+
+    -- Extend content_sources for file storage
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS storage_path TEXT;
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS original_filename TEXT;
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT;
+    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS mime_type TEXT;
+
+    -- Reading progress tracking
+    CREATE TABLE IF NOT EXISTS reading_progress (
+        id TEXT PRIMARY KEY DEFAULT ('rp_' || substr(md5(random()::text), 1, 12)),
+        source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
+        last_page INTEGER,
+        last_scroll_position REAL,
+        total_pages INTEGER,
+        pages_viewed TEXT,
+        completion_percentage REAL DEFAULT 0.0,
+        first_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        total_reading_time_seconds INTEGER DEFAULT 0,
+        UNIQUE(source_id)
+    );
+
+    -- Annotations (highlights, notes, bookmarks)
+    CREATE TABLE IF NOT EXISTS annotations (
+        id TEXT PRIMARY KEY DEFAULT ('ann_' || substr(md5(random()::text), 1, 12)),
+        source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
+        annotation_type TEXT NOT NULL DEFAULT 'highlight',
+        start_offset INTEGER NOT NULL,
+        end_offset INTEGER NOT NULL,
+        anchor_text TEXT,
+        page_number INTEGER,
+        note_text TEXT,
+        color TEXT DEFAULT '#FFEB3B',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Document sections for TOC
+    CREATE TABLE IF NOT EXISTS document_sections (
+        id TEXT PRIMARY KEY DEFAULT ('sec_' || substr(md5(random()::text), 1, 12)),
+        source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        level INTEGER NOT NULL DEFAULT 1,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER,
+        sequence_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Storage bucket
+    INSERT INTO storage.buckets (id, name, public, file_size_limit)
+    VALUES ('documents', 'documents', false, 52428800);
+
+**Work:**
+
+1. Run database migration in Supabase SQL Editor
+2. Modify upload endpoint to store files in Supabase Storage instead of deleting after text extraction
+3. Add `GET /api/sources/{id}/file-url` endpoint returning signed URL
+4. Add `GET /api/sources/{id}/sections` endpoint returning document TOC
+5. Add `/reader/:sourceId` route to `App.jsx` using existing Layout
+6. Create basic `DocumentReader.jsx` page shell
+
+**Verification:** Navigate to `/reader/{sourceId}` and see a basic page layout. Upload a new document and confirm the file appears in Supabase Storage dashboard under "documents" bucket.
+
+
+### Milestone 31: Sidebar TOC Integration
+
+At the end of this milestone, when viewing `/reader/:sourceId`, a teal-colored "CONTENTS" section appears in the sidebar with collapsible document sections.
+
+**Work:**
+
+1. Create `TableOfContentsSection.jsx` in `web/src/components/reader/`
+2. Create `useDocumentSections.js` hook to fetch sections from API
+3. Modify `Sidebar.jsx` to detect `/reader/:sourceId` route via `useLocation()`
+4. Conditionally render TOC section with accent color (`text-accent-progress`)
+5. Implement collapse/expand toggle with ChevronDown/ChevronRight icons
+6. Wire TOC clicks to dispatch `scroll-to-section` custom event
+
+**Verification:** Navigate to `/reader/{sourceId}`. The sidebar shows normal nav items plus a teal "CONTENTS" section below "Recent". Click a section title and observe the custom event in browser console. Navigate to `/sources` and confirm TOC section disappears.
+
+
+### Milestone 32: Document Rendering
+
+At the end of this milestone, PDF, Markdown, and plain text documents render correctly in the document area with page navigation for PDFs.
+
+**Dependencies:**
+
+    cd web && npm install react-pdf pdfjs-dist react-markdown remark-gfm rehype-highlight highlight.js
+
+**Work:**
+
+1. Create `PDFRenderer.jsx` using react-pdf with text layer enabled
+2. Create `MarkdownRenderer.jsx` using react-markdown with syntax highlighting
+3. Create `TextRenderer.jsx` for plain text display
+4. Create `ReaderHeader.jsx` with title, view mode tabs (PDF|Blog), and Start Practice button
+5. Create `ReaderContent.jsx` container that selects renderer based on content_type
+6. Implement PDF page navigation (prev/next, page number input, zoom)
+7. Listen for `scroll-to-section` events and scroll document to matching section
+
+**Verification:** Upload a PDF and navigate to reader - see rendered pages with selectable text. Upload a Markdown file and see formatted content with syntax-highlighted code blocks. Click TOC items and observe document scrolling.
+
+
+### Milestone 33: Navigation Entry Points
+
+At the end of this milestone, users can access the document reader from Sources page, Home page, Sidebar recent, and post-upload redirect.
+
+**Work:**
+
+1. Add "Read" button to `SourceCard.jsx` → `navigate(/reader/${id})`
+2. Add "Read Document" button to `SourceDetailPanel.jsx`
+3. Update Sidebar recent sources to link to `/reader/:id` instead of `/sources/:id`
+4. Modify `UploadZone.jsx` to redirect to `/reader/:id` after successful upload
+5. Add "Start Practice" button in `ReaderHeader.jsx` → `navigate(/study?source=${id})`
+
+**Verification:** From Sources page, click "Read" on a source card - opens reader. From Home page, click recent source - opens reader. Upload new document - redirected to reader after processing. Click "Start Practice" in reader - starts practice session filtered to that source.
+
+
+### Milestone 34: Text Selection and Highlights
+
+At the end of this milestone, users can select text in documents and see a tooltip with actions (Ask AI, Highlight, Copy). Highlights persist to database.
+
+**Work:**
+
+1. Create `SelectionTooltip.jsx` component with three action buttons
+2. Create `useTextSelection.js` hook detecting selection via `window.getSelection()`
+3. Position tooltip above selection using `getBoundingClientRect()`
+4. Create `useAnnotations.js` hook with CRUD operations to annotations table
+5. Add annotations API endpoints (GET, POST, PUT, DELETE)
+6. Create `AnnotationLayer.jsx` overlay rendering saved highlights
+7. Implement optimistic updates for smooth UX
+
+**Verification:** Select text in document - tooltip appears. Click "Highlight" - text turns yellow. Refresh page - highlight persists. Check annotations table in Supabase - record exists.
+
+
+### Milestone 35: Assistant Panel
+
+At the end of this milestone, a collapsible right-side panel shows Notes, AI Chat, and KCs tabs.
+
+**Work:**
+
+1. Create `AssistantPanel.jsx` with three tabs (Notes | AI | KCs)
+2. Create `NotesList.jsx` displaying user notes for this source
+3. Create `NoteEditor.jsx` for creating/editing notes
+4. Add notes API endpoints using annotations table with type='note'
+5. Create `AIChatPanel.jsx` with message input and chat history
+6. Add `POST /api/ai/chat` endpoint integrating Claude API for document Q&A
+7. Wire "Ask AI" action from SelectionTooltip to pre-fill chat with selected text
+
+**Verification:** Click Notes tab - see list of notes. Create note - appears in list. Click AI tab - type question - receive answer about document content. Select text, click "Ask AI" - chat opens with selected text quoted.
+
+
+### Milestone 36: Reading Progress
+
+At the end of this milestone, reading position and completion percentage are tracked and restored on return.
+
+**Work:**
+
+1. Create `useReadingProgress.js` hook tracking scroll position and pages viewed
+2. Add `GET/PUT /api/sources/{id}/progress` endpoints
+3. Implement debounced sync (500ms) to avoid overwhelming database
+4. Restore scroll position when returning to previously-read document
+5. Show completion percentage in ReaderHeader ("45% read")
+6. Update reading_progress.last_opened_at on each visit
+
+**Verification:** Read half a document, navigate away, return - scroll position restored. Check reading_progress table - completion_percentage updated. See "45% read" in header.
+
+
+### Milestone 37: Highlight-to-Generate
+
+At the end of this milestone, users can generate practice questions from highlighted text.
+
+**Work:**
+
+1. Add "Generate Question" button to SelectionTooltip
+2. Create `GenerateQuestionModal.jsx` with question type selection (definition, explanation, application)
+3. Add `POST /api/items/generate-from-text` endpoint calling Groq to generate practice item
+4. Modify KC extraction prompt to populate `source_excerpt` field
+5. Link generated items to source via kc_id with source_excerpt
+6. Show success toast with option to practice immediately
+
+**Verification:** Select text, click "Generate Question", select type, submit - new practice item created. Check practice_items table - linked to source. Start practice - see the generated question with source context.
+
+
+### Milestone 38: Polish and Performance
+
+At the end of this milestone, the reader is production-ready with caching, virtualization, and responsive layouts.
+
+**Work:**
+
+1. Implement IndexedDB caching for documents using `idb` library
+2. Add PDF page virtualization using `@tanstack/react-virtual` for large documents
+3. Create Zen mode (hide sidebar and assistant panel, toggle via header button)
+4. Add responsive layouts: tablet (assistant as drawer), mobile (assistant as bottom sheet)
+5. Performance optimization: lazy loading, React.memo, useMemo for expensive computations
+6. Deep linking: update URL on section scroll, restore on page load
+
+**Verification:** Open 100-page PDF - pages load progressively without freezing. Toggle Zen mode - only document visible. Resize browser to mobile - assistant becomes bottom sheet. Offline: previously-viewed document loads from cache.
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -535,3 +817,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-02: M16-M19 Sources feature with FastAPI backend
 - 2026-01-03: M20-M23 Error handling, speed optimization (Groq, parallel processing)
 - 2026-01-04: M24-M29 Agent memory system implementation
+- 2026-01-05: M30-M38 Document Reader feature added (AlphaXiv-style, 6 research agents, consolidated spec)

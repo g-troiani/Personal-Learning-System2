@@ -168,6 +168,11 @@ export default function SourceDetailPanel({ source, isOpen, onClose, onDelete })
     }))
   }
 
+  const handleRead = () => {
+    navigate(`/reader/${source.id}`)
+    onClose()
+  }
+
   const handleStudy = () => {
     navigate(`/study?source=${source.id}`)
     onClose()
@@ -401,18 +406,24 @@ export default function SourceDetailPanel({ source, isOpen, onClose, onDelete })
         {/* Footer actions */}
         <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 flex gap-3">
           <button
+            onClick={handleRead}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+          >
+            <BookOpen className="w-4 h-4" />
+            Read
+          </button>
+          <button
             onClick={handleStudy}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
           >
             <Play className="w-4 h-4" />
-            Study Now
+            Study
           </button>
           <button
             onClick={handleDelete}
             className="flex items-center justify-center gap-2 px-4 py-2.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium"
           >
             <Trash2 className="w-4 h-4" />
-            Delete
           </button>
         </div>
       </div>

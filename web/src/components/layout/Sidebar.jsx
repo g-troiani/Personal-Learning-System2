@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import {
   Home,
@@ -11,6 +11,8 @@ import {
   ChevronRight
 } from 'lucide-react'
 import { useSupabase } from '../../contexts/SupabaseContext'
+import { useDocumentSections } from '../../hooks/useDocumentSections'
+import TableOfContentsSection from '../reader/TableOfContentsSection'
 
 // Emoji mapping for sources (can be customized per source)
 const sourceEmojis = {
@@ -38,6 +40,17 @@ export default function Sidebar({ collapsed, onToggle }) {
   const { getRecentSources, getDueCounts, sources } = useSupabase()
   const [recentSources, setRecentSources] = useState([])
   const [dueCount, setDueCount] = useState(0)
+
+  // Detect if we're on the document reader route
+  const location = useLocation()
+  const readerMatch = location.pathname.match(/^\/reader\/([^/]+)$/)
+  const isReaderRoute = Boolean(readerMatch)
+  const currentSourceId = readerMatch ? readerMatch[1] : null
+
+  // Fetch document sections for TOC (only when on reader route)
+  const { sections: tocSections, loading: tocLoading } = useDocumentSections(
+    isReaderRoute ? currentSourceId : null
+  )
 
   // Refresh sidebar data when sources change (including after deletes)
   useEffect(() => {
@@ -129,7 +142,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               {recentSources.map(source => (
                 <li key={source.id}>
                   <NavLink
-                    to={`/sources/${source.id}`}
+                    to={`/reader/${source.id}`}
                     className="flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-btn-secondary/50 rounded-lg transition-colors"
                   >
                     <span>{getSourceEmoji(source.title)}</span>
@@ -139,6 +152,11 @@ export default function Sidebar({ collapsed, onToggle }) {
               ))}
             </ul>
           </div>
+        )}
+
+        {/* TOC Section - only show when expanded and on reader route */}
+        {!collapsed && isReaderRoute && (
+          <TableOfContentsSection sections={tocSections} loading={tocLoading} />
         )}
       </nav>
 

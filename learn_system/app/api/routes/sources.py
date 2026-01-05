@@ -1,11 +1,13 @@
-"""Source management endpoints - upload, status, retry, delete."""
+"""Source management endpoints - upload, status, retry, delete, file-url, sections."""
 
 import os
 import tempfile
-from typing import Optional
+import mimetypes
+from typing import Optional, List
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from ..models.schemas import (
     UploadResponse,
@@ -22,6 +24,30 @@ from ..services.processing import (
     retry_processing,
     delete_source
 )
+from ...database.connection import get_client
+
+
+# Response models for new endpoints
+class FileUrlResponse(BaseModel):
+    url: str
+    expires_in: int = 3600  # 1 hour default
+
+
+class DocumentSection(BaseModel):
+    id: str
+    title: str
+    level: int
+    page_number: Optional[int] = None
+    scroll_position: Optional[float] = None
+
+
+class SectionsResponse(BaseModel):
+    sections: List[DocumentSection]
+
+
+class ContentResponse(BaseModel):
+    content: Optional[str] = None
+    source_id: str
 
 
 router = APIRouter()
@@ -55,6 +81,32 @@ async def process_document_background(source_id: str, file_path: str, domain: st
         pass
 
 
+def upload_to_storage(source_id: str, content: bytes, filename: str) -> str:
+    """
+    Upload file to Supabase Storage.
+
+    Args:
+        source_id: The source ID (used in storage path)
+        content: File content bytes
+        filename: Original filename
+
+    Returns:
+        storage_path: Path in storage bucket
+    """
+    client = get_client()
+    ext = os.path.splitext(filename)[1].lower()
+    storage_path = f"{source_id}{ext}"
+
+    # Upload to 'documents' bucket
+    client.storage.from_("documents").upload(
+        path=storage_path,
+        file=content,
+        file_options={"content-type": mimetypes.guess_type(filename)[0] or "application/octet-stream"}
+    )
+
+    return storage_path
+
+
 @router.post("/upload", response_model=UploadResponse)
 async def upload_source(
     background_tasks: BackgroundTasks,
@@ -65,7 +117,7 @@ async def upload_source(
     Upload a document for processing.
 
     The document will be processed in the background. Use the status endpoint
-    to check processing progress.
+    to check processing progress. File is stored in Supabase Storage for later viewing.
 
     Args:
         file: The document file to upload
@@ -81,20 +133,43 @@ async def upload_source(
 
     # Read file content to check size
     content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
+    file_size = len(content)
+
+    if file_size > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
             detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB"
         )
 
-    if len(content) == 0:
+    if file_size == 0:
         raise HTTPException(status_code=400, detail="File is empty")
 
-    # Create pending source entry
-    source_id = create_pending_source(file.filename or "untitled", domain)
+    original_filename = file.filename or "untitled"
+    mime_type = mimetypes.guess_type(original_filename)[0] or "application/octet-stream"
 
-    # Save file to temp location
-    ext = os.path.splitext(file.filename or "")[1].lower()
+    # Create pending source entry
+    source_id = create_pending_source(original_filename, domain)
+
+    # Upload to Supabase Storage
+    try:
+        storage_path = upload_to_storage(source_id, content, original_filename)
+
+        # Update source with storage metadata
+        db_client = get_client()
+        db_client.table("content_sources").update({
+            "storage_path": storage_path,
+            "original_filename": original_filename,
+            "file_size_bytes": file_size,
+            "mime_type": mime_type
+        }).eq("id", source_id).execute()
+
+    except Exception as e:
+        # If storage upload fails, still proceed with processing
+        print(f"Warning: Failed to upload to storage: {e}")
+        storage_path = None
+
+    # Save file to temp location for processing
+    ext = os.path.splitext(original_filename)[1].lower()
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
         tmp.write(content)
         temp_path = tmp.name
@@ -134,7 +209,12 @@ async def get_status(source_id: str):
         kc_count=status.get("kc_count"),
         item_count=status.get("item_count"),
         started_at=status.get("processing_started_at"),
-        completed_at=status.get("processing_completed_at")
+        completed_at=status.get("processing_completed_at"),
+        # Additional fields for document reader
+        title=status.get("title"),
+        domain=status.get("domain"),
+        word_count=status.get("word_count"),
+        mime_type=status.get("mime_type")
     )
 
 
@@ -209,4 +289,113 @@ async def delete_source_endpoint(source_id: str):
     return DeleteResponse(
         success=True,
         message=f"Source {source_id} and all associated data deleted successfully"
+    )
+
+
+@router.get("/{source_id}/file-url", response_model=FileUrlResponse)
+async def get_file_url(source_id: str, expires_in: int = 3600):
+    """
+    Get a signed URL for accessing the source document.
+
+    Args:
+        source_id: The source ID
+        expires_in: URL expiry time in seconds (default: 3600 = 1 hour)
+
+    Returns:
+        FileUrlResponse with signed URL
+    """
+    client = get_client()
+
+    # Get storage path from source
+    result = client.table("content_sources").select(
+        "storage_path"
+    ).eq("id", source_id).execute()
+
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail=f"Source not found: {source_id}")
+
+    storage_path = result.data[0].get("storage_path")
+
+    if not storage_path:
+        raise HTTPException(
+            status_code=404,
+            detail="No file stored for this source. It may have been uploaded before file storage was enabled."
+        )
+
+    # Generate signed URL
+    try:
+        signed_url = client.storage.from_("documents").create_signed_url(
+            path=storage_path,
+            expires_in=expires_in
+        )
+        return FileUrlResponse(url=signed_url["signedURL"], expires_in=expires_in)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate signed URL: {str(e)}")
+
+
+@router.get("/{source_id}/sections", response_model=SectionsResponse)
+async def get_sections(source_id: str):
+    """
+    Get the table of contents (document sections) for a source.
+
+    Args:
+        source_id: The source ID
+
+    Returns:
+        SectionsResponse with list of sections
+    """
+    client = get_client()
+
+    # Verify source exists
+    source_result = client.table("content_sources").select("id").eq("id", source_id).execute()
+
+    if not source_result.data or len(source_result.data) == 0:
+        raise HTTPException(status_code=404, detail=f"Source not found: {source_id}")
+
+    # Get sections ordered by section_order
+    result = client.table("document_sections").select(
+        "id, title, level, page_number, scroll_position"
+    ).eq("source_id", source_id).order("section_order").execute()
+
+    sections = [
+        DocumentSection(
+            id=s["id"],
+            title=s["title"],
+            level=s["level"],
+            page_number=s.get("page_number"),
+            scroll_position=s.get("scroll_position")
+        )
+        for s in (result.data or [])
+    ]
+
+    return SectionsResponse(sections=sections)
+
+
+@router.get("/{source_id}/content", response_model=ContentResponse)
+async def get_content(source_id: str):
+    """
+    Get the extracted text content for a source.
+
+    This is useful for rendering Markdown or text files that need the
+    actual text content rather than just a file URL.
+
+    Args:
+        source_id: The source ID
+
+    Returns:
+        ContentResponse with the extracted text content
+    """
+    client = get_client()
+
+    # Get content from source
+    result = client.table("content_sources").select(
+        "id, content"
+    ).eq("id", source_id).execute()
+
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail=f"Source not found: {source_id}")
+
+    return ContentResponse(
+        source_id=source_id,
+        content=result.data[0].get("content")
     )
