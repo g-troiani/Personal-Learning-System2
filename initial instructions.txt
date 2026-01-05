@@ -170,26 +170,58 @@ TARGET FEATURE = "How to create a memory system for an AI. Initial research is p
 
 
 
+
+
 # FINAL RESULT 
 Create six git worktrees dedicated to researching RESEARCH_TARGET.
 Give each worktree a distinct focus so the research is not duplicated (for example: UI and UX, data model and storage, upload pipeline, practice-question 
 generation flow, and system integration details).
 In each worktree, produce a concise, implementation-ready writeup and add it to NEW FEATURES.md under a clearly labeled section for that worktree.
 After all five writeups exist, consolidate them into a single cohesive plan for RESEARCH_TARGET that matches the architecture and conventions already present in 
-the system.
-
-RESEARCH_TARGET = ""
+the system. 
 
   Planning Phase Decisions:
   - Verify complex logic is correct
   - Ensure business requirements follow good practice
   - Establish clean service boundaries
-  - Prevent unnecessary coupling  TARGET FEATURE = "How to create a memory system for an AI. Initial research is provided in @agent_memory_memo.md and
+  - Prevent unnecessary coupling  
+
+Again: After all five writeups exist, consolidate them into a single cohesive plan for 
+RESEARCH_TARGET that matches the architecture and conventions already present in the system. Ultrathink
+
+
+  
+  TARGET FEATURE = "How to create a memory system for an AI. Initial research is provided in @agent_memory_memo.md and
   @memory-systems-llm-ai-agents-research.md. The objective is to
     create a memory system accessible (instructions on how to access it as needed to be provided in CLAUDE.md and EXECPLAN.md) for you to handle the increasing
     complexity and length of the EXECPLAN effectively. The better you can access memories, the better you can help me and be more powerful. For example, an idea
   would
     be to take the milestones already achieved and bring them outside EXECPLAN.md but reference that s
     hould they or their implementation be needed  they can be
-    accessed through an external file and provide the path to it." Again: After all five writeups exist, consolidate them into a single cohesive plan for 
-RESEARCH_TARGET that matches the architecture and conventions already present in the system. Ultrathink
+    accessed through an external file and provide the path to it." 
+    
+    
+
+
+
+
+# IMPROVE THE PROMPT 
+step 1) 
+consider this prompt : 
+
+  TARGET FEATURE = "How to create a memory system for an AI. Initial research is provided in @agent_memory_memo.md and
+  @memory-systems-llm-ai-agents-research.md. The objective is to
+    create a memory system accessible (instructions on how to access it as needed to be provided in CLAUDE.md and EXECPLAN.md) for you to handle the increasing
+    complexity and length of the EXECPLAN effectively. The better you can access memories, the better you can help me and be more powerful. For example, an idea
+  would
+    be to take the milestones already achieved and bring them outside EXECPLAN.md but reference that s
+    hould they or their implementation be needed  they can be
+    accessed through an external file and provide the path to it." 
+
+ Answer ".. '" if you understand
+
+step 2)
+following the style of the previous prompt, modify this prompt:
+
+- essence of what you are trying to do and concept that you are trying to achieve 
+
