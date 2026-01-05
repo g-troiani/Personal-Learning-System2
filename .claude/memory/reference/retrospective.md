@@ -90,11 +90,41 @@
 - SourceDetailPanel modal not created
 - Confirmation dialogs for destructive actions missing
 - Mobile responsive layout needs testing
-- Processing speed bottleneck: 60-165s per document (M21-M23 reduced to 15-40s)
-- No parallel LLM calls (sequential processing limits throughput)
-- No retry logic for transient API failures
+- ~~Processing speed bottleneck: 60-165s per document~~ ✅ Fixed M21-M23
+- ~~No parallel LLM calls~~ ✅ Fixed M22
+- ~~No retry logic for transient API failures~~ ✅ Fixed M23
+
+## All 23 Milestones Complete (2026-01-03) - Speed Optimization
+
+**Speed Optimization Implementation Complete (M21-M23):**
+- M21: Groq client for practice items, batch DB inserts
+- M22: ThreadPoolExecutor parallel processing (5 workers)
+- M23: Retry logic with exponential backoff (1s, 2s, 4s)
+
+**Performance Results:**
+- Before: 60-165 seconds per document
+- After: ~25-55 seconds (~35s typical for 15 KCs, 45 items)
+- ~3x overall speedup
+
+**What's Working:**
+- Parallel LLM calls via ThreadPoolExecutor (I/O bound, GIL doesn't block)
+- Groq qwen/qwen3-32b for fast practice item generation
+- Batch inserts: 3 DB calls instead of N*4
+- ThrottledUpdater reduces status update frequency
+- Retry handles rate limits, timeouts, connection errors
+
+**Technical Decisions:**
+- ThreadPoolExecutor over asyncio: existing codebase sync, minimal refactor
+- Groq over Anthropic for items: faster, items are template-following (low reasoning)
+- Keep Anthropic for KC extraction: needs reasoning for content analysis
+
+**Not Implemented (deferred):**
+- Parallel KC chunk processing: most docs single-chunk, low ROI
+- Streaming responses: not needed at current speed
+- Celery queue: overkill for single-user
 
 ## Cross-References
 
-- Related milestones: `milestones/cli_foundation.md`, `milestones/webui_core.md`, `milestones/sources_feature.md`
+- Related milestones: `milestones/cli_foundation.md`, `milestones/webui_core.md`, `milestones/sources_feature.md`, `milestones/speed_optimization.md`
 - Related decisions: `decisions/architecture.md`, `decisions/technology.md`
+- Analysis document: `UPLOAD SPEED BOTTLENECKS.md` (project root)

@@ -1,6 +1,6 @@
 # Memory System Index
 
-**Last Updated:** 2026-01-04
+**Last Updated:** 2026-01-05
 **Total Files:** 14
 
 ## Quick Navigation
@@ -47,3 +47,9 @@
 | `research.md` | Learning science sources (Make It Stick, A Mind for Numbers, Ultralearning), core findings, feature mapping |
 | `context.md` | Complete glossary, project structure, requirements, memory system overview |
 | `retrospective.md` | Major milestone retrospectives, what worked, gaps, lessons learned |
+
+### Project Root Analysis Documents
+
+| File | Topics |
+|------|--------|
+| `UPLOAD SPEED BOTTLENECKS.md` | Pipeline analysis, bottleneck identification, implementation status (updated 2026-01-05) |

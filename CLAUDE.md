@@ -121,6 +121,8 @@ After completing work:
 3. Update INDEX.md if new file created
 4. Add new decisions to decisions/*.md with rationale
 
+**Writing style for memory:** Be concise. Sacrifice grammar for brevity but explain the system thoroughly and preserve full meaning. Use tables, bullet points, code snippets over prose. Link to source files with line numbers. Future sessions need context, not narrative.
+
 
 ## Technology Stack
 

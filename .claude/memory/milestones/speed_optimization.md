@@ -120,8 +120,26 @@ Issues discovered and fixed after M23.
 - Added arrows between steps to show flow
 - Centered emojis and content in workflow boxes
 
+## Bottleneck Analysis Summary
+
+Full analysis: `UPLOAD SPEED BOTTLENECKS.md` (project root)
+
+| Bottleneck | Severity | Status |
+|------------|----------|--------|
+| Sequential practice item gen | CRITICAL | ✅ Fixed (ThreadPoolExecutor + Groq) |
+| Sequential KC chunk processing | MODERATE | ❌ Deferred (most docs single-chunk) |
+| Individual DB inserts | LOW | ✅ Fixed (batch inserts) |
+| Status update frequency | NEGLIGIBLE | ✅ Improved (ThrottledUpdater) |
+
+**Key code locations:**
+- `generator.py:288-343` - parallel item gen with futures
+- `generator.py:33-70` - retry logic
+- `queries.py:462-558` - batch insert functions
+- `kc_extractor.py:23-60` - retry logic for KC extraction
+
 ## Cross-References
 
 - Related decisions: decisions/technology.md (Groq choice, ThreadPoolExecutor rationale)
 - Related schemas: schemas/api.md (processing status updates)
 - Related milestones: milestones/sources_feature.md (processing pipeline foundation)
+- Analysis document: `UPLOAD SPEED BOTTLENECKS.md` (project root, updated 2026-01-05)
