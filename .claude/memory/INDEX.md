@@ -1,14 +1,14 @@
 # Memory System Index
 
 **Last Updated:** 2026-01-04
-**Total Files:** 13
+**Total Files:** 14
 
 ## Quick Navigation
 
 | Category | Files | Key Topics |
 |----------|-------|------------|
 | Milestones | 4 | M1-M23 implementation history |
-| Decisions | 3 | Architecture, technology, patterns |
+| Decisions | 4 | Architecture, technology, patterns, memory system |
 | Schemas | 3 | Database, API, React components |
 | Reference | 3 | Research, context, retrospectives |
 
@@ -30,6 +30,7 @@
 | `architecture.md` | Supabase choice, hybrid CLI/web, FastAPI backend, processing status, single user |
 | `technology.md` | Claude/Groq LLMs, SM-2 algorithm, React/Vite/Tailwind, ThreadPoolExecutor, Python 3.9 |
 | `patterns.md` | Batch inserts, progress callbacks, retry logic, thread-safe tracking, ID generation, env config |
+| `memory_system.md` | How memory works, lookup process, extraction protocol, maintenance, MemGPT pattern rationale |
 
 ### schemas/
 
