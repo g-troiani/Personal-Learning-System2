@@ -239,7 +239,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through thirty-nine milestones. M1-M38 are complete. M39 (PDF Highlighting) is pending implementation.
+Implementation proceeds through thirty-nine milestones. All milestones (M1-M39) are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -758,7 +758,7 @@ If docx-preview fidelity is insufficient for specific documents, consider implem
 - Using existing PDFRenderer for display
 
 
-### Milestone 39: PDF Highlighting (PENDING)
+### Milestone 39: PDF Highlighting (COMPLETE)
 
 At the end of this milestone, users can highlight text in PDFs and see those highlights persist across sessions.
 
@@ -823,4 +823,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-04: M24-M29 Agent memory system implementation
 - 2026-01-05: M30-M37 Document Reader feature complete (AlphaXiv-style reader with zen mode, AI chat, highlights, reading progress)
 - 2026-01-06: M38 Complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview, text selection, highlights)
-- 2026-01-06: M39 Research Complete - PDF Highlighting (6 worktrees, page-based architecture validated)
+- 2026-01-06: M39 Complete - PDF Highlighting (page-based percentage coordinates, PDFHighlightLayer component)
