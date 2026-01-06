@@ -1,774 +1,579 @@
-# AlphaXiv-Style Document Reader
+# Document Viewer Fidelity Improvement
 
 **Consolidated Implementation Plan**
-**Date:** 2026-01-05
-**Target:** Document rendering with integrated TOC and AI assistant
+**Date:** 2026-01-06
+**Target:** Render uploaded documents with full visual fidelity (AlphaXiv-style)
 
 ---
 
 ## Executive Summary
 
-This plan integrates an AlphaXiv-style document reader into the Personal Learning System. The reader enables users to:
-1. Upload documents and **read them fully** before practice
-2. Access documents persistently via Sources (one click away)
-3. Take notes, highlight text, and ask AI questions while reading
-4. Generate practice questions from highlighted text
+The current document viewer renders DOCX files as plain text, losing all formatting (headings, tables, images, colors, fonts). This plan consolidates research from 6 parallel worktrees to deliver a production-ready solution.
 
-**Core Flow:** Upload → Read/Study → Practice (source always accessible)
+**The Problem:**
+- DOCX files → extracted as plain text via `python-docx` → displayed with line numbers
+- Users see: "Chapter 1" instead of "**Chapter 1**" with proper heading styling
+- Lost: headings, bold/italic, colors, tables, images, lists, alignment
 
----
+**The Solution:**
+- **Primary:** Client-side DOCX rendering with `docx-preview` library
+- **Alternative:** Server-side DOCX→PDF conversion with LibreOffice (higher fidelity, more complex)
 
-## Architecture Overview
-
-### Two-Panel Layout (Adapted to Existing UI)
-
-The document reader reuses the **existing Sidebar** and adds a conditional **Table of Contents** section that only appears when viewing a document. The right panel contains the AI Assistant.
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  ← Back   📖 Document Title   [PDF|Blog]   [Zen Mode]   [Start Practice]│
-├──────────────┬──────────────────────────────────────────────────────────┤
-│              │                                                          │
-│  SIDEBAR     │           DOCUMENT + ASSISTANT                           │
-│  (existing)  │           (flexible layout)                              │
-│              │  ┌─────────────────────────────┬────────────────────┐    │
-│  Home        │  │                             │                    │    │
-│  Calendar    │  │  Document Content           │  ASSISTANT PANEL   │    │
-│  Due Review  │  │  - PDF (react-pdf)          │  (320px, toggle)   │    │
-│  Sources     │  │  - Markdown                 │                    │    │
-│  Progress    │  │  - Plain text               │  [Notes|AI|KCs]    │    │
-│  Analytics   │  │                             │                    │    │
-│              │  │  [Text selection → tooltip] │  AI Assistant      │    │
-│  Recent      │  │  - Ask AI                   │  ────────────      │    │
-│  📚 Source 1 │  │  - Highlight                │  "Explain this     │    │
-│  🧠 Source 2 │  │  - Copy                     │   concept..."      │    │
-│              │  │                             │                    │    │
-│  ▼ CONTENTS  │  │                             │  [Chat Input]      │    │
-│  (teal/cyan) │  └─────────────────────────────┴────────────────────┘    │
-│  • Chapter 1 │                                                          │
-│    - 1.1     ├──────────────────────────────────────────────────────────┤
-│    - 1.2     │  Progress: 45% read │ 12 concepts │ 28% mastery          │
-│  • Chapter 2 │                                                          │
-└──────────────┴──────────────────────────────────────────────────────────┘
-```
-
-### Sidebar Behavior by Route
-
-| Route | Sidebar Shows |
-|-------|---------------|
-| `/` `/calendar` `/review` `/sources` `/progress` `/analytics` | Nav + Recent |
-| `/reader/:sourceId` | Nav + Recent + **TABLE OF CONTENTS** (accent color) |
-| `/study` | Sidebar hidden (existing fullscreen behavior) |
-
-### Route Structure
-
-```
-/                       → Home (existing)
-/sources                → Sources list (existing)
-/study                  → Practice session (existing)
-/reader/:sourceId       → Document Reader (NEW)
-/reader/:sourceId/section/:sectionId   → Deep link to section
-```
-
-### Component Tree
-
-```
-App
-├── BrowserRouter
-│   ├── Route (/) [Layout]                    # Existing
-│   │   └── Outlet → Home, Sources, etc.
-│   │
-│   └── Route (/reader/:sourceId) [Layout]    # Reuses existing Layout
-│       └── DocumentReaderPage
-│           ├── ReaderHeader (title, tabs, controls)
-│           ├── ReaderContent (document area)
-│           │   ├── PDFRenderer | MarkdownRenderer | TextRenderer
-│           │   ├── SelectionTooltip
-│           │   └── AnnotationLayer
-│           └── AssistantPanel (right, collapsible)
-│               ├── TabBar (Notes | AI | KCs)
-│               ├── NotesList / NoteEditor
-│               └── AIChatPanel
-
-Sidebar (modified)
-├── Nav items (existing)
-├── Recent sources (existing)
-└── TableOfContents (NEW - conditional)
-    └── Only renders when route matches /reader/:sourceId
-    └── Fetches sections for current sourceId
-    └── Accent color (teal/cyan) to differentiate
-    └── Collapsible with chevron toggle
-```
+**Implementation Timeline:** 4-6 days for core functionality
 
 ---
 
-## Database Schema
+## Research Summary (6 Worktrees)
 
-### New Tables
-
-```sql
--- Run in Supabase SQL Editor
-
--- 1. Extend content_sources for file storage
-ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS storage_path TEXT;
-ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS original_filename TEXT;
-ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT;
-ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS mime_type TEXT;
-
--- 2. Reading progress tracking
-CREATE TABLE IF NOT EXISTS reading_progress (
-    id TEXT PRIMARY KEY DEFAULT ('rp_' || substr(md5(random()::text), 1, 12)),
-    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
-    last_page INTEGER,
-    last_scroll_position REAL,  -- 0.0-1.0 percentage
-    total_pages INTEGER,
-    pages_viewed TEXT,          -- JSON array: [1, 2, 5, 6, ...]
-    completion_percentage REAL DEFAULT 0.0,
-    first_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    total_reading_time_seconds INTEGER DEFAULT 0,
-    UNIQUE(source_id)
-);
-
-CREATE INDEX idx_reading_progress_source ON reading_progress(source_id);
-
--- 3. Annotations (highlights, notes, bookmarks)
-CREATE TABLE IF NOT EXISTS annotations (
-    id TEXT PRIMARY KEY DEFAULT ('ann_' || substr(md5(random()::text), 1, 12)),
-    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
-    annotation_type TEXT NOT NULL DEFAULT 'highlight',  -- highlight, note, bookmark
-    start_offset INTEGER NOT NULL,
-    end_offset INTEGER NOT NULL,
-    anchor_text TEXT,           -- The highlighted text (for validation)
-    page_number INTEGER,        -- For PDFs
-    note_text TEXT,             -- User's note (null for pure highlights)
-    color TEXT DEFAULT '#FFEB3B',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    linked_kc_id TEXT REFERENCES knowledge_components(id) ON DELETE SET NULL
-);
-
-CREATE INDEX idx_annotations_source ON annotations(source_id);
-CREATE INDEX idx_annotations_type ON annotations(annotation_type);
-CREATE INDEX idx_annotations_page ON annotations(page_number);
-
--- 4. Document sections (for TOC)
-CREATE TABLE IF NOT EXISTS document_sections (
-    id TEXT PRIMARY KEY DEFAULT ('sec_' || substr(md5(random()::text), 1, 12)),
-    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    level INTEGER NOT NULL DEFAULT 1,  -- 1=h1, 2=h2, etc.
-    start_line INTEGER NOT NULL,
-    end_line INTEGER,
-    parent_section_id TEXT REFERENCES document_sections(id),
-    sequence_order INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_sections_source ON document_sections(source_id);
-
--- 5. AI chat history (optional, for context persistence)
-CREATE TABLE IF NOT EXISTS ai_chat_history (
-    id TEXT PRIMARY KEY DEFAULT ('chat_' || substr(md5(random()::text), 1, 12)),
-    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
-    role TEXT NOT NULL,  -- 'user' or 'assistant'
-    message TEXT NOT NULL,
-    citations TEXT,      -- JSON array of citation objects
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_chat_source ON ai_chat_history(source_id);
-
--- 6. Enable realtime for new tables
-ALTER PUBLICATION supabase_realtime ADD TABLE reading_progress;
-ALTER PUBLICATION supabase_realtime ADD TABLE annotations;
-
--- 7. Helper function for reading time
-CREATE OR REPLACE FUNCTION increment_reading_time(p_source_id TEXT, p_delta INTEGER)
-RETURNS INTEGER AS $$
-DECLARE
-    new_total INTEGER;
-BEGIN
-    UPDATE reading_progress
-    SET total_reading_time_seconds = total_reading_time_seconds + p_delta
-    WHERE source_id = p_source_id
-    RETURNING total_reading_time_seconds INTO new_total;
-    RETURN COALESCE(new_total, p_delta);
-END;
-$$ LANGUAGE plpgsql;
-```
-
-### Supabase Storage Bucket
-
-```sql
--- Create storage bucket for documents
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-  'documents',
-  'documents',
-  false,
-  52428800,  -- 50MB limit
-  ARRAY['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/markdown', 'text/plain']
-);
-
--- Storage policy
-CREATE POLICY "Allow all operations on documents bucket"
-ON storage.objects FOR ALL
-USING (bucket_id = 'documents')
-WITH CHECK (bucket_id = 'documents');
-```
+| Worktree | Key Finding |
+|----------|-------------|
+| **UI/UX** | docx-preview recommended; most AlphaXiv patterns already implemented |
+| **Data Model** | Need `document_versions` table + dual annotation schema (offset + page_rect) |
+| **Upload Pipeline** | LibreOffice + unoserver for server-side PDF conversion (alternative approach) |
+| **Rendering Engine** | docx-preview best for client-side; mammoth.js insufficient fidelity |
+| **Format Handling** | DOCX highest priority; PDF virtualization for large docs; add math to Markdown |
+| **Integration** | KC extraction unaffected; annotations need dual-schema; backward compatible |
 
 ---
 
-## API Endpoints
+## Architecture Decision
 
-### New FastAPI Routes
+### Recommended: Client-Side docx-preview
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| **File Access** | | |
-| GET | `/api/sources/{id}/file-url` | Get signed URL for document |
-| GET | `/api/sources/{id}/content` | Get rendered HTML content |
-| GET | `/api/sources/{id}/sections` | Get document TOC |
-| **Reading Progress** | | |
-| GET | `/api/sources/{id}/progress` | Get reading progress |
-| PUT | `/api/sources/{id}/progress` | Update reading progress |
-| **Annotations** | | |
-| GET | `/api/sources/{id}/annotations` | List all annotations |
-| POST | `/api/sources/{id}/annotations` | Create annotation |
-| PUT | `/api/annotations/{id}` | Update annotation |
-| DELETE | `/api/annotations/{id}` | Delete annotation |
-| **AI Assistant** | | |
-| POST | `/api/ai/chat` | Send chat message |
-| GET | `/api/sources/{id}/chat-history` | Get chat history |
-| **Practice Generation** | | |
-| POST | `/api/items/generate-from-text` | Generate question from highlight |
+**Why:**
+1. No server infrastructure changes required
+2. 1-2 day implementation vs 3-5 days for server PDF
+3. Native HTML output enables text selection and existing AnnotationLayer
+4. 168 projects use it in production
+5. ~1.7MB bundle addition (acceptable for document viewer)
 
-### Pydantic Models
+**Trade-offs:**
+- No page breaks (continuous scroll vs paginated PDF)
+- Font substitution if system fonts differ from document fonts
+- Complex tables may render imperfectly
 
-```python
-# app/api/models/reader_schemas.py
+### Alternative: Server-Side PDF Conversion
 
-class ReadingProgressUpdate(BaseModel):
-    last_page: Optional[int] = None
-    last_scroll_position: Optional[float] = None
-    pages_viewed: Optional[List[int]] = None
-    reading_time_delta: Optional[int] = None
+Use if client-side fidelity is insufficient:
 
-class AnnotationCreate(BaseModel):
-    annotation_type: str  # highlight, note, bookmark
-    start_offset: int
-    end_offset: int
-    anchor_text: Optional[str] = None
-    page_number: Optional[int] = None
-    note_text: Optional[str] = None
-    color: Optional[str] = "#FFEB3B"
-    linked_kc_id: Optional[str] = None
-
-class AIChatRequest(BaseModel):
-    source_id: str
-    message: str
-    context: Optional[str] = None  # Current selection for grounding
-
-class GenerateFromTextRequest(BaseModel):
-    source_id: str
-    selected_text: str
-    question_type: str = "explanation"  # definition, explanation, application
 ```
+Upload DOCX → LibreOffice headless → PDF → Supabase Storage → PDFRenderer
+```
+
+**When to consider:**
+- Academic papers requiring page break fidelity
+- Complex documents with precise layouts
+- Already running LibreOffice in infrastructure
 
 ---
 
-## User Flow & Navigation
+## Implementation Plan
 
-### Entry Points to Document Reader
+### Phase 1: DOCX Client-Side Rendering (Priority: P0)
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           HOW USERS GET TO /reader/:sourceId                 │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  1. SOURCES PAGE (/sources)                                                  │
-│     └── SourceCard component                                                 │
-│         └── "Read" button → navigate(`/reader/${source.id}`)                │
-│                                                                              │
-│  2. SOURCE DETAIL PANEL (slide-in on /sources)                              │
-│     └── "Read Document" button → navigate(`/reader/${source.id}`)           │
-│                                                                              │
-│  3. HOME PAGE (/)                                                            │
-│     └── SourceCard in "Continue Learning" section                           │
-│         └── "Read" action → navigate(`/reader/${source.id}`)                │
-│                                                                              │
-│  4. SIDEBAR - RECENT SOURCES                                                 │
-│     └── Click recent source → navigate(`/reader/${source.id}`)              │
-│         (change from current /sources/${id} behavior)                        │
-│                                                                              │
-│  5. POST-UPLOAD REDIRECT                                                     │
-│     └── After successful upload → navigate(`/reader/${newSourceId}`)        │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+**Time:** 1-2 days | **Impact:** High | **Risk:** Low
+
+#### 1.1 Install Dependencies
+
+```bash
+cd web && npm install docx-preview
+# JSZip is a peer dependency, installed automatically
 ```
 
-### Exit Points from Document Reader
+#### 1.2 Create DOCXRenderer Component
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           HOW USERS LEAVE /reader/:sourceId                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  1. SIDEBAR NAVIGATION                                                       │
-│     └── Click any nav item (Home, Sources, etc.)                            │
-│         └── TOC section disappears, normal sidebar view                     │
-│                                                                              │
-│  2. "START PRACTICE" BUTTON (in ReaderHeader)                               │
-│     └── navigate(`/study?source=${sourceId}`)                               │
-│         └── Practice session scoped to this document                        │
-│                                                                              │
-│  3. BACK BUTTON (in ReaderHeader)                                           │
-│     └── navigate(-1) or navigate('/sources')                                │
-│                                                                              │
-│  4. TOC CLICK → SECTION (stays in reader, scrolls document)                 │
-│     └── NOT an exit, but important interaction                              │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+**File:** `web/src/components/reader/DOCXRenderer.jsx`
 
-### Sidebar State Detection
+```jsx
+import { useState, useEffect, useRef, memo } from 'react'
+import { renderAsync } from 'docx-preview'
+import { Loader2 } from 'lucide-react'
 
-```javascript
-// In Sidebar.jsx - detect if we're in reader view
-import { useLocation, useParams } from 'react-router-dom'
+const DOCXRenderer = memo(function DOCXRenderer({
+  fileUrl,
+  highlights = [],
+  onDeleteHighlight
+}) {
+  const containerRef = useRef(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-function Sidebar() {
-  const location = useLocation()
-  const isReaderView = location.pathname.startsWith('/reader/')
+  useEffect(() => {
+    if (!fileUrl) {
+      setError('No document URL provided')
+      setLoading(false)
+      return
+    }
 
-  // Extract sourceId from path if in reader view
-  const sourceIdMatch = location.pathname.match(/\/reader\/([^/]+)/)
-  const readerSourceId = sourceIdMatch ? sourceIdMatch[1] : null
+    async function render() {
+      setLoading(true)
+      setError(null)
+
+      try {
+        const response = await fetch(fileUrl)
+        if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`)
+
+        const arrayBuffer = await response.arrayBuffer()
+
+        await renderAsync(arrayBuffer, containerRef.current, {
+          inWrapper: true,
+          ignoreWidth: false,
+          ignoreHeight: false,
+          ignoreFonts: false,
+          breakPages: false,
+          useBase64URL: true,
+          className: 'docx-wrapper'
+        })
+
+        setLoading(false)
+      } catch (err) {
+        console.error('DOCX render error:', err)
+        setError('Failed to render document')
+        setLoading(false)
+      }
+    }
+
+    render()
+  }, [fileUrl])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-3 text-gray-400">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span>Rendering document...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full text-red-400">
+        {error}
+      </div>
+    )
+  }
 
   return (
-    <aside>
-      {/* ... existing nav items ... */}
-      {/* ... existing Recent section ... */}
-
-      {/* NEW: Table of Contents - only in reader view */}
-      {isReaderView && readerSourceId && (
-        <TableOfContentsSection
-          sourceId={readerSourceId}
-          collapsed={collapsed}
-        />
-      )}
-    </aside>
+    <div className="h-full overflow-auto bg-white">
+      <div
+        ref={containerRef}
+        className="docx-container mx-auto max-w-4xl p-8"
+      />
+    </div>
   )
+})
+
+export default DOCXRenderer
+```
+
+#### 1.3 Add DOCX Styles
+
+**File:** `web/src/styles/docx.css`
+
+```css
+/* Scope docx-preview styles */
+.docx-container {
+  font-family: 'Calibri', 'Arial', sans-serif;
+}
+
+.docx-container .docx-wrapper {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 2rem;
+  border-radius: 4px;
+}
+
+/* Ensure tables are visible */
+.docx-container table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.docx-container td, .docx-container th {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+/* Images responsive */
+.docx-container img {
+  max-width: 100%;
+  height: auto;
+}
+```
+
+#### 1.4 Update ReaderContent.jsx
+
+**File:** `web/src/components/reader/ReaderContent.jsx`
+
+```diff
++ import DOCXRenderer from './DOCXRenderer'
+
+function getContentType(mimeType, title) {
+  if (title) {
+    const ext = title.toLowerCase().split('.').pop()
+    if (ext === 'pdf') return 'pdf'
+    if (ext === 'md' || ext === 'markdown') return 'markdown'
+    if (ext === 'txt') return 'text'
+-   if (ext === 'docx' || ext === 'doc') return 'text'
++   if (ext === 'docx' || ext === 'doc') return 'docx'
+  }
+  // ... rest unchanged
+}
+
+// In renderContent() switch:
++ case 'docx':
++   if (!fileUrl) {
++     return (
++       <FallbackView
++         message="Document file not available"
++         hint="The original file may have been uploaded before file storage was enabled."
++       />
++     )
++   }
++   return (
++     <DOCXRenderer
++       fileUrl={fileUrl}
++       highlights={highlights}
++       onDeleteHighlight={onDeleteHighlight}
++     />
++   )
+```
+
+#### 1.5 Verification
+
+- [ ] Upload a DOCX file with headings, tables, images
+- [ ] Navigate to `/reader/:sourceId`
+- [ ] Verify headings are styled correctly
+- [ ] Verify tables are rendered with borders
+- [ ] Verify images are displayed
+- [ ] Verify text selection works
+
+---
+
+### Phase 2: Annotation System Updates (Priority: P1)
+
+**Time:** 2-3 days | **Impact:** Medium | **Risk:** Medium
+
+#### 2.1 Database Schema Changes
+
+**File:** `migrations/m38_document_versions.sql`
+
+```sql
+-- M38: Document Viewer Fidelity - Schema Updates
+-- Run in Supabase SQL Editor
+
+-- 1. Create document_versions table for converted formats
+CREATE TABLE IF NOT EXISTS document_versions (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
+    version_type TEXT NOT NULL,  -- 'html', 'thumbnail', 'pdf'
+    format TEXT NOT NULL,        -- MIME type
+    storage_path TEXT,           -- Path in Supabase Storage (NULL if inline)
+    inline_content TEXT,         -- For small content stored in DB
+    file_size_bytes BIGINT,
+    converter_name TEXT,         -- 'docx-preview', 'mammoth', 'libreoffice'
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(source_id, version_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_versions_source ON document_versions(source_id);
+
+-- 2. Extend annotations for multi-format positioning
+ALTER TABLE annotations ADD COLUMN IF NOT EXISTS position_type TEXT DEFAULT 'offset';
+ALTER TABLE annotations ADD COLUMN IF NOT EXISTS pdf_rect JSONB;
+ALTER TABLE annotations ADD COLUMN IF NOT EXISTS html_xpath TEXT;
+
+-- 3. Extend content_sources for conversion tracking
+ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS has_html_version BOOLEAN DEFAULT FALSE;
+ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS page_count INTEGER;
+
+-- 4. Migrate existing annotations
+UPDATE annotations
+SET position_type = 'offset'
+WHERE position_type IS NULL;
+
+-- 5. Create thumbnails bucket (public for fast loading)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'thumbnails',
+  'thumbnails',
+  true,
+  1048576,
+  ARRAY['image/png', 'image/jpeg', 'image/webp']
+) ON CONFLICT (id) DO NOTHING;
+
+-- 6. Enable realtime
+ALTER PUBLICATION supabase_realtime ADD TABLE document_versions;
+```
+
+#### 2.2 Update useAnnotations Hook
+
+Support dual positioning (offset for text, page_rect for PDF):
+
+```javascript
+// In useAnnotations.js - createAnnotation function
+function createAnnotation(selection, contentType) {
+  const annotation = {
+    source_id: sourceId,
+    annotation_type: 'highlight',
+    selected_text: selection.text.substring(0, 500),
+    start_offset: selection.startOffset,
+    end_offset: selection.endOffset,
+    position_type: 'offset', // Default
+  }
+
+  // For PDF, add page-based coordinates
+  if (contentType === 'pdf' && selection.pageRect) {
+    annotation.position_type = 'page_rect'
+    annotation.page_number = selection.pageNumber
+    annotation.pdf_rect = selection.pageRect
+  }
+
+  return annotation
 }
 ```
 
 ---
 
-## React Components
+### Phase 3: UI Polish (Priority: P2)
 
-### New Files Structure
+**Time:** 1-2 days | **Impact:** Medium | **Risk:** Low
 
-```
-web/src/
-├── pages/
-│   └── DocumentReader.jsx           # Main reader page
-├── components/
-│   ├── layout/
-│   │   └── Sidebar.jsx              # MODIFY - add conditional TOC
-│   └── reader/
-│       ├── ReaderHeader.jsx         # Title, tabs, zen toggle, practice btn
-│       ├── ReaderContent.jsx        # Document area container
-│       ├── PDFRenderer.jsx          # react-pdf wrapper
-│       ├── MarkdownRenderer.jsx     # react-markdown wrapper
-│       ├── TextRenderer.jsx         # Plain text display
-│       ├── SelectionTooltip.jsx     # Ask AI / Highlight / Copy
-│       ├── AnnotationLayer.jsx      # Highlights overlay
-│       ├── TableOfContentsSection.jsx  # NEW - sidebar TOC component
-│       ├── AssistantPanel.jsx       # Right panel container
-│       ├── NotesList.jsx            # User notes list
-│       ├── NoteEditor.jsx           # Note create/edit form
-│       ├── AIChatPanel.jsx          # AI chat interface
-│       └── GenerateQuestionModal.jsx # Highlight-to-generate
-├── hooks/
-│   ├── useDocumentLoader.js         # Document fetching + signed URLs
-│   ├── useDocumentSections.js       # Fetch TOC sections for sidebar
-│   ├── useReadingProgress.js        # Progress tracking
-│   ├── useAnnotations.js            # Annotations CRUD
-│   ├── useDocumentCache.js          # IndexedDB caching
-│   ├── useTextSelection.js          # Selection detection
-│   └── useDeepLink.js               # URL deep linking
-├── contexts/
-│   └── DocumentViewerContext.jsx    # Reader state management
-└── services/
-    ├── readerApi.js                 # Document content API
-    ├── notesApi.js                  # Notes CRUD
-    └── aiChatApi.js                 # AI chat API
-```
+#### 3.1 Unified Document Toolbar
 
-### TableOfContentsSection Component (Sidebar Integration)
-
-This component is rendered **inside the existing Sidebar** when `isReaderView` is true.
+Extract toolbar from PDFRenderer into shared component:
 
 ```jsx
-// web/src/components/reader/TableOfContentsSection.jsx
-
-import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronRight, List } from 'lucide-react'
-import { useDocumentSections } from '../../hooks/useDocumentSections'
-
-export default function TableOfContentsSection({ sourceId, collapsed: sidebarCollapsed }) {
-  const [expanded, setExpanded] = useState(true)
-  const { sections, loading } = useDocumentSections(sourceId)
-
-  // Don't render if sidebar is collapsed
-  if (sidebarCollapsed) return null
-
+// web/src/components/reader/DocumentToolbar.jsx
+export default function DocumentToolbar({
+  title,
+  hasZoom,
+  hasPages,
+  currentPage,
+  totalPages,
+  zoom,
+  onZoomChange,
+  onPageChange,
+  onZenModeToggle,
+  zenMode
+}) {
   return (
-    <div className="mt-6 border-t border-bg-card-border pt-4">
-      {/* Header - accent color (teal/cyan) */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 px-3 w-full text-left group"
-      >
-        {expanded ? (
-          <ChevronDown size={14} className="text-accent-progress" />
-        ) : (
-          <ChevronRight size={14} className="text-accent-progress" />
+    <div className="flex items-center justify-between px-4 py-2 border-b bg-white">
+      <div className="flex items-center gap-2">
+        <h1 className="text-lg font-medium truncate max-w-md">{title}</h1>
+      </div>
+
+      <div className="flex items-center gap-4">
+        {hasZoom && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => onZoomChange(zoom - 0.25)}>-</button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button onClick={() => onZoomChange(zoom + 0.25)}>+</button>
+          </div>
         )}
-        <List size={16} className="text-accent-progress" />
-        <span className="text-xs font-medium text-accent-progress uppercase tracking-wider">
-          Contents
-        </span>
-      </button>
 
-      {/* TOC Items */}
-      {expanded && !loading && (
-        <ul className="mt-2 space-y-0.5 max-h-64 overflow-y-auto">
-          {sections.map(section => (
-            <li key={section.id}>
-              <button
-                onClick={() => scrollToSection(section.id)}
-                className={`
-                  w-full text-left px-3 py-1.5 text-sm rounded-md
-                  text-text-secondary hover:text-accent-progress hover:bg-btn-secondary/50
-                  transition-colors truncate
-                  ${section.level === 1 ? 'font-medium' : 'pl-6 text-xs'}
-                `}
-                title={section.title}
-              >
-                {section.title}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+        {hasPages && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => onPageChange(currentPage - 1)}>←</button>
+            <span>{currentPage} / {totalPages}</span>
+            <button onClick={() => onPageChange(currentPage + 1)}>→</button>
+          </div>
+        )}
 
-      {expanded && loading && (
-        <div className="px-3 py-2 text-xs text-text-muted">Loading...</div>
-      )}
+        <button onClick={onZenModeToggle}>
+          {zenMode ? 'Exit Zen' : 'Zen Mode'}
+        </button>
+      </div>
     </div>
   )
 }
-
-// Scroll handler - communicates with DocumentReader via context or custom event
-function scrollToSection(sectionId) {
-  // Option 1: Custom event
-  window.dispatchEvent(new CustomEvent('scroll-to-section', { detail: { sectionId } }))
-
-  // Option 2: Update URL (deep link)
-  // window.history.pushState(null, '', `/reader/${sourceId}/section/${sectionId}`)
-}
 ```
 
-**Styling Notes:**
-- Header uses `text-accent-progress` (teal/cyan) to differentiate from nav items
-- Max height with overflow for long TOCs
-- Indentation for nested headings (h2, h3)
-- Hover state matches accent color
+#### 3.2 View Mode Toggle
 
-### Key Component Props
+Add ability to switch between rendered view and text view:
 
-```typescript
-// Type definitions
+```jsx
+// In DocumentReader.jsx
+const [viewMode, setViewMode] = useState('rendered') // 'rendered' | 'text'
 
-interface ReaderHeaderProps {
-  source: Source
-  viewMode: 'pdf' | 'blog'
-  onViewModeChange: (mode: 'pdf' | 'blog') => void
-  zenMode: boolean
-  onToggleZen: () => void
-}
-
-interface ReaderContentProps {
-  source: Source
-  viewMode: 'pdf' | 'blog'
-  onTextSelect: (selection: TextSelection | null) => void
-}
-
-interface TextSelection {
-  text: string
-  startOffset: number
-  endOffset: number
-  pageNumber?: number
-  position: { top: number, left: number, width: number, height: number }
-}
-
-interface AssistantPanelProps {
-  sourceId: string
-  selection?: TextSelection | null
-  onGenerateQuestion: (text: string) => void
-}
+{viewMode === 'rendered' ? (
+  <DOCXRenderer fileUrl={fileUrl} />
+) : (
+  <TextRenderer content={extractedContent} />
+)}
 ```
 
 ---
 
-## Dependencies
+### Phase 4: Server-Side PDF Conversion (Optional, P3)
 
-### npm Packages (Frontend)
+**Time:** 3-5 days | **Impact:** High | **Risk:** High
 
-```bash
-cd web && npm install \
-  react-pdf \
-  pdfjs-dist \
-  react-markdown \
-  remark-gfm \
-  rehype-highlight \
-  highlight.js \
-  @tanstack/react-virtual \
-  idb
+Only implement if client-side docx-preview fidelity is insufficient.
+
+#### 4.1 Install LibreOffice + unoserver
+
+```dockerfile
+# Add to Dockerfile
+RUN apt-get update && apt-get install -y \
+    libreoffice \
+    fonts-liberation \
+    fonts-dejavu \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install unoserver
 ```
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `react-pdf` | ^9.0.0 | PDF rendering with text layer |
-| `pdfjs-dist` | ^4.0.0 | PDF.js core (peer dep) |
-| `react-markdown` | ^9.0.0 | Markdown rendering |
-| `remark-gfm` | ^4.0.0 | GitHub Flavored Markdown |
-| `rehype-highlight` | ^7.0.0 | Syntax highlighting |
-| `highlight.js` | ^11.0.0 | Highlighting engine |
-| `@tanstack/react-virtual` | ^3.0.0 | PDF page virtualization |
-| `idb` | ^8.0.0 | IndexedDB wrapper for caching |
+#### 4.2 Converter Module
 
-### pip Packages (Backend)
-
-```bash
-pip install mammoth
-```
-
-| Package | Purpose |
-|---------|---------|
-| `mammoth` | DOCX to HTML conversion |
-
----
-
-## Tailwind Config Additions
-
-```javascript
-// tailwind.config.js
-module.exports = {
-  theme: {
-    extend: {
-      spacing: {
-        'sidebar': '240px',
-        'sidebar-collapsed': '64px',
-        'assistant': '320px',
-        'assistant-min': '280px',
-        'assistant-max': '480px',
-      },
-      screens: {
-        'reader': '1280px',  // Three-column minimum
-      }
-    }
-  }
-}
-```
-
----
-
-## Responsive Breakpoints
-
-| Breakpoint | Layout | Behavior |
-|------------|--------|----------|
-| >= 1280px | Full layout | Sidebar (with TOC) + Document + Assistant panel |
-| 1024-1279px | Compact | Sidebar collapsed + Document + Assistant panel |
-| 768-1023px | Tablet | No sidebar, Document + Assistant as drawer |
-| < 768px | Mobile | Full-width document, Assistant as bottom sheet, TOC hidden |
-
-**Note:** The TOC section in the sidebar follows the sidebar's collapse state. When sidebar is collapsed, TOC is hidden. On mobile, users access document sections via a floating TOC button or in-document navigation.
-
----
-
-## Implementation Phases
-
-### Phase 1: Core Infrastructure (M-R1)
-**Goal:** Database ready, file storage working, basic reader route
-
-- [ ] Run database migration (new tables + columns)
-- [ ] Create Supabase Storage bucket "documents"
-- [ ] Modify upload endpoint to store files in Storage
-- [ ] Add `/api/sources/{id}/file-url` endpoint
-- [ ] Add `/api/sources/{id}/sections` endpoint (for TOC)
-- [ ] Add `/reader/:sourceId` route to App.jsx (uses existing Layout)
-- [ ] Create basic `DocumentReader.jsx` page shell
-
-### Phase 2: Sidebar TOC Integration (M-R2)
-**Goal:** Table of Contents appears in sidebar when viewing documents
-
-- [ ] Create `TableOfContentsSection.jsx` component
-- [ ] Create `useDocumentSections.js` hook
-- [ ] Modify `Sidebar.jsx` to detect `/reader/:sourceId` route
-- [ ] Conditionally render TOC section with accent color (teal)
-- [ ] Implement collapse/expand toggle
-- [ ] Wire TOC clicks to scroll document via custom event
-
-### Phase 3: Document Rendering (M-R3)
-**Goal:** PDF and text documents render correctly
-
-- [ ] Install PDF dependencies (react-pdf, pdfjs-dist)
-- [ ] Create `PDFRenderer.jsx` with text layer
-- [ ] Create `MarkdownRenderer.jsx` with syntax highlighting
-- [ ] Create `TextRenderer.jsx` for plain text
-- [ ] Create `ReaderHeader.jsx` with view mode tabs + Start Practice button
-- [ ] Implement PDF page navigation and zoom controls
-- [ ] Listen for `scroll-to-section` events from TOC
-
-### Phase 4: Navigation Entry Points (M-R4)
-**Goal:** Users can access reader from multiple locations
-
-- [ ] Add "Read" button to SourceCard component
-- [ ] Add "Read Document" button to SourceDetailPanel
-- [ ] Update Sidebar recent sources to link to `/reader/:id`
-- [ ] Modify upload flow to redirect to `/reader/:id` after success
-- [ ] Add "Start Practice" button → `/study?source=${id}`
-
-### Phase 5: Text Selection & Highlights (M-R5)
-**Goal:** Users can select text, create highlights
-
-- [ ] Create `SelectionTooltip.jsx` component
-- [ ] Implement `useTextSelection.js` hook
-- [ ] Create `useAnnotations.js` hook with Supabase sync
-- [ ] Add annotations API endpoints
-- [ ] Create `AnnotationLayer.jsx` for rendering highlights
-- [ ] Implement optimistic updates for annotations
-
-### Phase 6: Assistant Panel (M-R6)
-**Goal:** Right-side panel for notes and AI chat
-
-- [ ] Create `AssistantPanel.jsx` with tabs (Notes | AI | KCs)
-- [ ] Create `NotesList.jsx` and `NoteEditor.jsx`
-- [ ] Add notes API endpoints
-- [ ] Create `AIChatPanel.jsx` component
-- [ ] Add `/api/ai/chat` endpoint with Claude integration
-- [ ] Add "Ask AI" action to selection tooltip
-
-### Phase 7: Reading Progress (M-R7)
-**Goal:** Track and persist reading position
-
-- [ ] Create `useReadingProgress.js` hook
-- [ ] Add progress API endpoints
-- [ ] Implement debounced sync to database
-- [ ] Restore position on document reopen
-- [ ] Show completion percentage in ReaderHeader
-
-### Phase 8: Highlight-to-Generate (M-R8)
-**Goal:** Generate practice questions from selected text
-
-- [ ] Create `GenerateQuestionModal.jsx`
-- [ ] Add `/api/items/generate-from-text` endpoint
-- [ ] Modify KC extraction to populate source_excerpt
-- [ ] Link generated items to source location
-- [ ] Add "Generate Question" action to SelectionTooltip
-
-### Phase 9: Polish & Performance (M-R9)
-**Goal:** Production-ready experience
-
-- [ ] Implement IndexedDB caching for offline support
-- [ ] Add PDF page virtualization for large documents
-- [ ] Create Zen mode (hide assistant panel)
-- [ ] Add responsive mobile layouts
-- [ ] Performance optimization (lazy loading, memoization)
-- [ ] Deep linking with URL updates on section scroll
-
----
-
-## Upload Flow Changes
-
-### Current Flow
-```
-Upload → Extract text → Store in content column → Delete file
-```
-
-### New Flow
-```
-Upload → Store file in Supabase Storage → Extract text → Store path in storage_path
-                                                       ↓
-                                        Redirect to /reader/:sourceId
-```
-
-### Modified Upload Endpoint
+**File:** `learn_system/app/ingestion/converter.py`
 
 ```python
-@router.post("/upload")
-async def upload_source(file: UploadFile, background_tasks: BackgroundTasks):
-    # 1. Create pending source to get ID
-    source_id = create_pending_source(file.filename)
+"""Document conversion utilities using LibreOffice."""
 
-    # 2. Upload to Supabase Storage
-    storage_path = await upload_to_storage(source_id, file.filename, content)
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Optional
 
-    # 3. Update source with storage path
-    update_source_storage_path(source_id, storage_path)
+class ConversionError(Exception):
+    pass
 
-    # 4. Start background processing
-    background_tasks.add_task(process_document, source_id, temp_path)
+def convert_docx_to_pdf(docx_path: str, output_dir: Optional[str] = None) -> str:
+    """Convert DOCX to PDF using LibreOffice headless."""
+    input_path = Path(docx_path)
+    output_dir = output_dir or input_path.parent
+    output_path = Path(output_dir) / f"{input_path.stem}.pdf"
 
-    # 5. Return immediately - user can start reading
-    return {"source_id": source_id, "status": "pending"}
+    try:
+        subprocess.run([
+            'soffice', '--headless', '--convert-to', 'pdf',
+            '--outdir', str(output_dir), str(input_path)
+        ], check=True, timeout=60)
+
+        return str(output_path)
+    except subprocess.CalledProcessError as e:
+        raise ConversionError(f"LibreOffice conversion failed: {e}")
+    except subprocess.TimeoutExpired:
+        raise ConversionError("Conversion timed out")
+```
+
+#### 4.3 Modify Upload Pipeline
+
+```python
+# In sources.py upload endpoint
+if ext == '.docx':
+    try:
+        pdf_path = convert_docx_to_pdf(temp_path)
+        storage_path_pdf = upload_to_storage(source_id, pdf_content, f"{source_id}.pdf")
+        # Update DB with storage_path_pdf
+    except ConversionError as e:
+        # Continue without PDF - reader will use docx-preview
+        logger.warning(f"DOCX conversion failed: {e}")
 ```
 
 ---
 
-## Key Design Decisions
+## File Changes Summary
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| File storage | Supabase Storage | CDN, signed URLs, separate from DB |
-| PDF rendering | react-pdf | Lightweight, text layer support |
-| Layout | Existing Sidebar + Document area | Reuses existing UI, no redundant panels |
-| TOC location | Inside Sidebar (conditional) | Appears only on `/reader/:id`, consistent nav |
-| TOC styling | Accent color (teal) | Differentiates from nav items, draws attention |
-| State management | Context + hooks | Local state, no Redux needed |
-| Annotation anchoring | Text offsets | Survives zoom, reflow, edits |
-| Caching | IndexedDB | Offline support, large files |
-| Route structure | `/reader/:sourceId` | Clean URLs, uses existing Layout wrapper |
-| TOC→Document communication | Custom events | Decoupled, works across component tree |
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `web/src/components/reader/DOCXRenderer.jsx` | Client-side DOCX rendering |
+| `web/src/styles/docx.css` | DOCX-specific styles |
+| `migrations/m38_document_versions.sql` | Schema updates |
+| `learn_system/app/ingestion/converter.py` | Server-side conversion (optional) |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `web/src/components/reader/ReaderContent.jsx` | Add 'docx' content type routing |
+| `web/src/hooks/useAnnotations.js` | Support dual position types |
+| `web/package.json` | Add docx-preview dependency |
 
 ---
 
 ## Success Criteria
 
-1. **Upload → Read:** User can read uploaded document within 2 seconds
-2. **Source Accessibility:** Document is one click away from any practice question
-3. **Text Selection:** Users can highlight and ask AI about any text
-4. **Progress Persistence:** Reading position restored on return
-5. **Mobile Support:** Full functionality on tablet, graceful degradation on mobile
-6. **Performance:** Large PDFs (100+ pages) load progressively without freezing
+| Metric | Current | Target |
+|--------|---------|--------|
+| DOCX heading visibility | 0% | 100% |
+| DOCX formatting preservation | ~10% | ~85% |
+| DOCX table rendering | Text only | Full structure |
+| DOCX image display | None | Embedded images visible |
+| Bundle size increase | - | < 2MB |
 
 ---
 
-## Cross-References
+## Risks and Mitigations
 
-- **Memory Files:**
-  - `milestones/sources_feature.md` - Current upload implementation
-  - `schemas/database.md` - Existing schema
-  - `schemas/api.md` - Existing API patterns
-  - `schemas/components.md` - React component structure
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| docx-preview fidelity insufficient | Low | High | Fall back to server PDF conversion |
+| Large DOCX performance | Medium | Medium | Add loading skeleton, chunked rendering |
+| Annotation system breaks | Low | High | Keep offset-based as fallback |
+| Font substitution issues | Medium | Low | Document known font issues |
 
-- **Research Worktrees:**
-  - `research-ui-layout` - Three-panel layout details
-  - `research-document-rendering` - PDF/Markdown rendering
-  - `research-data-model` - State management, caching
-  - `research-upload-pipeline` - Storage integration
-  - `research-practice-flow` - Question generation
-  - `research-integration` - Navigation, deep linking
+---
+
+## Testing Checklist
+
+### Phase 1 Verification
+- [ ] DOCX with headings (H1, H2, H3) renders correctly
+- [ ] DOCX with bold, italic, underline visible
+- [ ] DOCX tables render with borders
+- [ ] DOCX images display inline
+- [ ] DOCX bullet/numbered lists formatted
+- [ ] Text selection works in rendered DOCX
+- [ ] Existing PDF rendering unchanged
+- [ ] Existing Markdown rendering unchanged
+- [ ] Existing Text rendering unchanged
+
+### Phase 2 Verification
+- [ ] Existing text/markdown highlights still work
+- [ ] New DOCX highlights save to database
+- [ ] Highlights persist after page refresh
+- [ ] "Ask AI" works from DOCX selection
+- [ ] Copy works from DOCX selection
+
+### Phase 3 Verification
+- [ ] Unified toolbar shows on all document types
+- [ ] View mode toggle switches between rendered/text
+- [ ] Responsive layout works at all breakpoints
+
+---
+
+## Research Worktree References
+
+Full research documents available in:
+
+- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-ui-ux/DOCUMENT_VIEWER_FIDELITY_UX_RESEARCH.md`
+- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-data-model/NEW FEATURES.md`
+- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-upload-pipeline/NEW FEATURES.md`
+- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-rendering-engine/NEW FEATURES.md`
+- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-format-handling/NEW FEATURES.md`
+- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-integration/NEW FEATURES.md`
+
+---
+
+## Appendix: Alternative Approaches Evaluated
+
+### Mammoth.js (Rejected)
+- Produces semantic HTML but loses visual formatting
+- Font sizes, colors, alignment not preserved
+- Suitable for content extraction, not display
+
+### react-doc-viewer (Evaluated)
+- Generic document viewer
+- Less control over DOCX rendering
+- Heavier bundle
+
+### Apryse/PSPDFKit (Commercial)
+- Excellent fidelity
+- Requires commercial license
+- Overkill for this use case

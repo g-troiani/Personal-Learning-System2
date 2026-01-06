@@ -19,7 +19,8 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Web UI work → `.claude/memory/milestones/webui_core.md`
    - Upload/processing → `.claude/memory/milestones/sources_feature.md`
    - Performance issues → `.claude/memory/milestones/speed_optimization.md`
-   - Document Reader (M30-M37) → `NEW FEATURES.md` (full specs)
+   - Document Reader (M30-M37) → See completed milestones in Progress section
+   - Document Viewer Fidelity (M38) → `NEW FEATURES.md` (full implementation plan)
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
 
@@ -47,6 +48,8 @@ The observable behavior works as follows. On Monday, the user runs `python -m ap
 The system solves five problems. First, it eliminates the "I don't know what I don't know" problem by forcing retrieval practice that reveals actual gaps. Second, it fights forgetting through spaced repetition scheduling. Third, it measures learning objectively through tracked performance rather than felt fluency. Fourth, it enables self-experimentation by recording which techniques were used for which content. Fifth, it removes cognitive overhead by telling the user exactly what to practice and when.
 
 **Document Reader Feature (M30-M37):** After these milestones, users can read uploaded documents directly in the browser before starting practice. The workflow becomes: upload → read/study → practice, with documents always one click away. Users navigate to `/reader/:sourceId` to view PDFs or Markdown with a Table of Contents in the sidebar, take notes, highlight text, and ask AI questions about the content.
+
+**Document Viewer Fidelity (M38):** This milestone fixes a critical gap where DOCX files render as plain text, losing all formatting. After M38, uploaded DOCX files display with full visual fidelity—headings, tables, images, colors, and formatting preserved—using the `docx-preview` library for client-side rendering.
 
 
 ## Progress
@@ -94,7 +97,7 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M28: Slim EXECPLAN - reduced from 1500 to 502 lines (2026-01-04)
 - [x] M29: Update CLAUDE.md - memory access instructions added (2026-01-04)
 
-**Document Reader Feature (M30-M37)** - In Progress
+**Document Reader Feature (M30-M38)** - In Progress
 - [x] Research phase - 6 parallel agents, NEW FEATURES.md consolidated spec (2026-01-05)
 - [x] M30: Core infrastructure - database migration, Supabase Storage, /reader route (2026-01-05)
   - Added storage_path, original_filename, file_size_bytes, mime_type to content_sources
@@ -152,6 +155,11 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Added useMemo for expensive calculations (line splitting, plugin arrays)
   - Implemented deep linking with URL page parameter (?page=5) for PDF sharing
   - Deferred: responsive mobile layouts, PDF virtualization, IndexedDB caching (lower priority)
+- [x] M38 Research: Document Viewer Fidelity - 6 parallel worktrees, consolidated plan (2026-01-06)
+  - Researched: UI/UX, data model, upload pipeline, rendering engine, format handling, system integration
+  - Recommendation: docx-preview (client-side) over server-side LibreOffice conversion
+  - Full plan in `NEW FEATURES.md` - ready for implementation
+- [ ] M38: Document Viewer Fidelity - DOCX high-fidelity rendering (pending)
 
 
 ## Surprises and Discoveries
@@ -241,6 +249,10 @@ Recent decisions only below. See archives for full rationale.
   **Rationale:** Core polish items (zen mode, memoization, deep linking) deliver most value. Mobile responsive, 100+ page PDF virtualization, and offline caching are lower priority for single-user desktop tool. Dependencies installed for future use.
   **Date:** 2026-01-05
 
+- **Decision:** Use docx-preview library for DOCX rendering (client-side) over server-side LibreOffice PDF conversion
+  **Rationale:** (1) No server infrastructure changes required - works with Netlify + Supabase architecture. (2) 1-2 day implementation vs 3-5 days for server PDF. (3) Native HTML output enables text selection and existing AnnotationLayer. (4) ~1.7MB bundle addition acceptable for document viewer. (5) 168 projects use it in production. Server-side LibreOffice option remains as fallback if fidelity insufficient.
+  **Date:** 2026-01-06
+
 
 ## Outcomes and Retrospective
 
@@ -258,7 +270,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through thirty-seven milestones. Milestones 1-29 are complete. Milestones 30-37 implement the AlphaXiv-style Document Reader feature.
+Implementation proceeds through thirty-eight milestones. Milestones 1-37 are complete. Milestone 38 implements Document Viewer Fidelity for high-fidelity DOCX rendering.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -270,7 +282,9 @@ Implementation proceeds through thirty-seven milestones. Milestones 1-29 are com
 
 **Agent Memory System (Complete):** M24: Create memory directory structure. M25: Extract completed milestones to archive. M26: Extract decisions and schemas. M27: Extract reference material. M28: Slim EXECPLAN to active content only. M29: Update CLAUDE.md with memory access instructions.
 
-**Document Reader Feature (Pending):** M30: Core infrastructure (database, storage, route). M31: Sidebar TOC integration. M32: Document rendering (PDF, Markdown, text). M33: Navigation entry points. M34: Text selection and highlights. M35: Assistant panel (notes, AI chat). M36: Reading progress tracking. M37: Polish and performance.
+**Document Reader Feature (Complete):** M30: Core infrastructure (database, storage, route). M31: Sidebar TOC integration. M32: Document rendering (PDF, Markdown, text). M33: Navigation entry points. M34: Text selection and highlights. M35: Assistant panel (notes, AI chat). M36: Reading progress tracking. M37: Polish and performance.
+
+**Document Viewer Fidelity (Pending):** M38: DOCX high-fidelity rendering with docx-preview (client-side). See `NEW FEATURES.md` for full implementation plan.
 
 
 ## CLI Usage Reference
@@ -601,7 +615,7 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 **Verification:** CLAUDE.md contains Memory System section with both proactive and reactive protocols. New session starting a milestone reads relevant archives before implementation.
 
 
-### Document Reader Feature Milestones 30-37 (Pending)
+### Document Reader Feature Milestones 30-38 (In Progress)
 
 These milestones implement an AlphaXiv-style document reader that enables users to read uploaded documents before practice. The core flow becomes: upload → read/study → practice (source always one click away).
 
@@ -817,6 +831,143 @@ At the end of this milestone, the reader is production-ready with caching, virtu
 **Verification:** Open 100-page PDF - pages load progressively without freezing. Toggle Zen mode - only document visible. Resize browser to mobile - assistant becomes bottom sheet. Offline: previously-viewed document loads from cache.
 
 
+### Milestone 38: Document Viewer Fidelity
+
+At the end of this milestone, DOCX files render with full visual fidelity—headings, tables, images, colors, and formatting are preserved instead of displaying as plain text.
+
+**The Problem:**
+
+Currently, DOCX files are extracted as plain text via `python-docx` and displayed with line numbers in `TextRenderer.jsx`. Users see "Chapter 1" instead of styled headings, lose all tables, images, bold/italic, colors, and formatting. The code path is:
+
+    ReaderContent.jsx line 17: if (ext === 'docx') return 'text'
+    → TextRenderer.jsx renders plain monospace text
+
+**The Solution:**
+
+Use `docx-preview` library to render DOCX files with high fidelity directly in the browser. This is a client-side solution requiring no server changes—works with Netlify + Supabase architecture.
+
+**Full specs:** `NEW FEATURES.md` (root directory) contains complete implementation plan with code examples, database migrations, and testing checklist.
+
+**Dependencies:**
+
+    cd web && npm install docx-preview
+    # JSZip is a peer dependency, installed automatically
+
+**Work:**
+
+1. Create `DOCXRenderer.jsx` component in `web/src/components/reader/`:
+   - Fetch DOCX blob from Supabase Storage signed URL
+   - Call `renderAsync(blob, containerRef.current, options)` from docx-preview
+   - Handle loading and error states
+   - Apply CSS scoping for docx-preview output
+
+2. Add DOCX-specific styles in `web/src/styles/docx.css`:
+   - Scope styles to `.docx-container`
+   - Ensure tables have visible borders
+   - Make images responsive
+
+3. Update `ReaderContent.jsx` to route DOCX to new renderer:
+   - Change line 17: `if (ext === 'docx' || ext === 'doc') return 'docx'`
+   - Add case in switch for 'docx' rendering DOCXRenderer
+   - Pass fileUrl from Supabase Storage
+
+4. Verify original DOCX files are stored in Supabase Storage:
+   - Check upload endpoint stores files (should be from M30)
+   - Confirm `/api/sources/{id}/file-url` returns signed URL
+
+5. Test annotation compatibility:
+   - Verify text selection works on rendered DOCX
+   - Confirm highlights save to database
+   - Check existing AnnotationLayer renders on DOCX content
+
+**Code Example - DOCXRenderer.jsx:**
+
+    import { useState, useEffect, useRef, memo } from 'react'
+    import { renderAsync } from 'docx-preview'
+    import { Loader2 } from 'lucide-react'
+
+    const DOCXRenderer = memo(function DOCXRenderer({ fileUrl }) {
+      const containerRef = useRef(null)
+      const [loading, setLoading] = useState(true)
+      const [error, setError] = useState(null)
+
+      useEffect(() => {
+        if (!fileUrl) {
+          setError('No document URL provided')
+          setLoading(false)
+          return
+        }
+
+        async function render() {
+          setLoading(true)
+          try {
+            const response = await fetch(fileUrl)
+            const arrayBuffer = await response.arrayBuffer()
+            await renderAsync(arrayBuffer, containerRef.current, {
+              inWrapper: true,
+              ignoreWidth: false,
+              breakPages: false,
+              useBase64URL: true,
+              className: 'docx-wrapper'
+            })
+            setLoading(false)
+          } catch (err) {
+            console.error('DOCX render error:', err)
+            setError('Failed to render document')
+            setLoading(false)
+          }
+        }
+        render()
+      }, [fileUrl])
+
+      if (loading) {
+        return (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          </div>
+        )
+      }
+
+      if (error) {
+        return (
+          <div className="flex items-center justify-center h-full text-red-400">
+            {error}
+          </div>
+        )
+      }
+
+      return (
+        <div className="h-full overflow-auto bg-white">
+          <div ref={containerRef} className="docx-container mx-auto max-w-4xl p-8" />
+        </div>
+      )
+    })
+
+    export default DOCXRenderer
+
+**Verification:**
+
+1. Upload a DOCX file with headings (H1, H2, H3), tables, images, and formatted text
+2. Navigate to `/reader/:sourceId`
+3. Observe:
+   - Headings display with proper hierarchy and sizing
+   - Tables render with borders and structure
+   - Images display inline
+   - Bold, italic, colors are preserved
+   - Text selection works for highlighting
+4. Create a highlight on DOCX content
+5. Refresh page - highlight persists
+6. Check browser console for errors - should be none
+
+**Fallback:**
+
+If docx-preview fidelity is insufficient for specific documents, consider implementing server-side LibreOffice PDF conversion as documented in `NEW FEATURES.md`. This would require:
+- LibreOffice installation on backend server
+- Conversion during upload pipeline
+- Storing converted PDF alongside original DOCX
+- Using existing PDFRenderer for display
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -840,3 +991,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-03: M20-M23 Error handling, speed optimization (Groq, parallel processing)
 - 2026-01-04: M24-M29 Agent memory system implementation
 - 2026-01-05: M30-M37 Document Reader feature complete (AlphaXiv-style reader with zen mode, AI chat, highlights, reading progress)
+- 2026-01-06: M38 Research complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview)
