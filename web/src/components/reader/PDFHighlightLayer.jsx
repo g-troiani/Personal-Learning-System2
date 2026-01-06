@@ -28,32 +28,31 @@ const PDFHighlightLayer = memo(function PDFHighlightLayer({
           .map((rect, i) => (
             <div
               key={`${highlight.id}-${i}`}
-              className="absolute pointer-events-auto cursor-pointer transition-all duration-150 hover:brightness-90"
+              className="absolute pointer-events-auto transition-all duration-150"
               style={{
                 left: `${rect.x}%`,
                 top: `${rect.y}%`,
                 width: `${rect.width}%`,
                 height: `${rect.height}%`,
                 backgroundColor: highlight.color || '#FFEB3B',
-                opacity: 0.4,
+                opacity: hoveredId === highlight.id ? 0.6 : 0.4,
                 borderRadius: '2px',
                 mixBlendMode: 'multiply'
               }}
               onMouseEnter={() => setHoveredId(highlight.id)}
               onMouseLeave={() => setHoveredId(null)}
-              onClick={(e) => {
-                e.stopPropagation()
-                onDeleteHighlight?.(highlight.id)
-              }}
             >
               {hoveredId === highlight.id && i === 0 && (
-                <div
-                  className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-2 py-1 rounded text-xs flex items-center gap-1 whitespace-nowrap z-50 shadow-lg"
-                  style={{ pointerEvents: 'none' }}
+                <button
+                  className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 hover:bg-red-600 text-white px-2 py-1 rounded text-xs flex items-center gap-1 whitespace-nowrap z-50 shadow-lg cursor-pointer transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDeleteHighlight?.(highlight.id)
+                  }}
                 >
                   <Trash2 className="w-3 h-3" />
-                  Click to delete
-                </div>
+                  Delete
+                </button>
               )}
             </div>
           ))
