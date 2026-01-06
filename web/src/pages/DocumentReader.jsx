@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import { FileText, ArrowLeft, Loader2, AlertCircle, BookOpen, CheckCircle } from 'lucide-react'
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
+import { FileText, ArrowLeft, Loader2, AlertCircle, BookOpen, CheckCircle, Maximize2, Minimize2 } from 'lucide-react'
 import ReaderContent from '../components/reader/ReaderContent'
 import SelectionTooltip from '../components/reader/SelectionTooltip'
 import AssistantPanel from '../components/reader/AssistantPanel'
 import { useTextSelection } from '../hooks/useTextSelection'
 import { useAnnotations } from '../hooks/useAnnotations'
 import { useReadingProgress } from '../hooks/useReadingProgress'
+import { useZenMode } from '../contexts/ZenModeContext'
 
 // API base URL from environment or default to localhost:8001
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
@@ -14,7 +15,12 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 export default function DocumentReader() {
   const { sourceId } = useParams()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const contentContainerRef = useRef(null)
+  const { isZenMode, toggleZenMode } = useZenMode()
+
+  // Get initial page from URL params (for deep linking)
+  const urlPage = parseInt(searchParams.get('page'), 10) || null
 
   const [source, setSource] = useState(null)
   const [fileUrl, setFileUrl] = useState(null)
@@ -22,7 +28,7 @@ export default function DocumentReader() {
   const [sections, setSections] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(urlPage || 1)
   const [totalPages, setTotalPages] = useState(null)
 
   // Text selection and annotations hooks
@@ -46,12 +52,21 @@ export default function DocumentReader() {
     forceSave
   } = useReadingProgress(sourceId, { totalPages })
 
-  // Handle page change from PDF renderer
-  const handlePageChange = (page, total) => {
+  // Handle page change from PDF renderer - update state and URL
+  const handlePageChange = useCallback((page, total) => {
     setCurrentPage(page)
     setTotalPages(total)
     updatePage(page, total)
-  }
+
+    // Update URL with page number for deep linking (without navigation)
+    const newParams = new URLSearchParams(searchParams)
+    if (page > 1) {
+      newParams.set('page', page.toString())
+    } else {
+      newParams.delete('page') // Don't clutter URL for page 1
+    }
+    setSearchParams(newParams, { replace: true })
+  }, [updatePage, searchParams, setSearchParams])
 
   // Handle scroll tracking for non-PDF content
   const handleScroll = useCallback((event) => {
@@ -71,6 +86,17 @@ export default function DocumentReader() {
       forceSave()
     }
   }, [forceSave])
+
+  // ESC key exits zen mode
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isZenMode) {
+        toggleZenMode()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isZenMode, toggleZenMode])
 
   // Handle highlight creation
   const handleHighlight = useCallback(async (sel, color) => {
@@ -236,7 +262,20 @@ export default function DocumentReader() {
             </div>
           )}
 
-          {source && (
+          {/* Zen Mode Toggle */}
+          <button
+            onClick={toggleZenMode}
+            className={`p-2 rounded-lg transition-colors ${
+              isZenMode
+                ? 'bg-teal-600 text-white'
+                : 'hover:bg-gray-700 text-gray-400 hover:text-white'
+            }`}
+            title={isZenMode ? 'Exit Zen Mode (show sidebar)' : 'Zen Mode (hide distractions)'}
+          >
+            {isZenMode ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+          </button>
+
+          {source && !isZenMode && (
             <Link
               to={`/study/${sourceId}`}
               className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm transition-colors"
@@ -265,7 +304,7 @@ export default function DocumentReader() {
             highlights={highlights}
             onDeleteHighlight={handleDeleteHighlight}
             initialScrollPosition={readingProgress.scrollPosition}
-            initialPage={readingProgress.currentPage}
+            initialPage={urlPage || readingProgress.currentPage}
             onScroll={handleScroll}
           />
 
@@ -279,22 +318,24 @@ export default function DocumentReader() {
           />
         </div>
 
-        {/* Right Panel - Assistant/Notes */}
-        <div className="hidden lg:block">
-          <AssistantPanel
-            sourceId={sourceId}
-            source={source}
-            notes={notes}
-            onCreateNote={handleCreateNote}
-            onDeleteNote={handleDeleteNote}
-            initialMessage={aiInitialMessage}
-            onClearInitialMessage={handleClearAiMessage}
-          />
-        </div>
+        {/* Right Panel - Assistant/Notes (hidden in zen mode) */}
+        {!isZenMode && (
+          <div className="hidden lg:block">
+            <AssistantPanel
+              sourceId={sourceId}
+              source={source}
+              notes={notes}
+              onCreateNote={handleCreateNote}
+              onDeleteNote={handleDeleteNote}
+              initialMessage={aiInitialMessage}
+              onClearInitialMessage={handleClearAiMessage}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Source Info Footer */}
-      {source && (
+      {/* Source Info Footer (hidden in zen mode) */}
+      {source && !isZenMode && (
         <div className="px-4 py-2 border-t border-gray-700 text-xs text-gray-500 flex items-center gap-4">
           <span>Domain: {source.domain || 'general'}</span>
           <span>|</span>

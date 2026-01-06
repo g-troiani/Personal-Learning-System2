@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2 } from 'lucide-react'
 
@@ -12,12 +12,13 @@ import 'react-pdf/dist/Page/TextLayer.css'
 /**
  * PDF Renderer component using react-pdf with text layer enabled.
  * Supports page navigation, zoom, and scroll-to-page events.
+ * Memoized to prevent unnecessary re-renders.
  *
  * @param {string} fileUrl - Signed URL to the PDF file
  * @param {Function} onPageChange - Callback when page changes (page, totalPages)
  * @param {number} initialPage - Page number to restore (default: 1)
  */
-export default function PDFRenderer({ fileUrl, onPageChange, initialPage = 1 }) {
+const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPage = 1 }) {
   const [numPages, setNumPages] = useState(null)
   const [pageNumber, setPageNumber] = useState(initialPage)
   const [scale, setScale] = useState(1.0)
@@ -196,4 +197,6 @@ export default function PDFRenderer({ fileUrl, onPageChange, initialPage = 1 }) 
       </div>
     </div>
   )
-}
+})
+
+export default PDFRenderer

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -7,6 +7,10 @@ import AnnotationLayer from './AnnotationLayer'
 
 // Import highlight.js styles
 import 'highlight.js/styles/github-dark.css'
+
+// Memoize plugin arrays to prevent unnecessary re-renders
+const remarkPlugins = [remarkGfm]
+const rehypePlugins = [rehypeHighlight]
 
 /**
  * Markdown Renderer component using react-markdown with syntax highlighting.
@@ -18,7 +22,7 @@ import 'highlight.js/styles/github-dark.css'
  * @param {Array} highlights - Highlight annotations to display
  * @param {Function} onDeleteHighlight - Callback when highlight is deleted
  */
-export default function MarkdownRenderer({
+const MarkdownRenderer = memo(function MarkdownRenderer({
   fileUrl,
   content: directContent,
   sections = [],
@@ -155,8 +159,8 @@ export default function MarkdownRenderer({
         prose-img:rounded-lg prose-img:shadow-lg
       ">
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[rehypeHighlight]}
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
         >
           {content}
         </ReactMarkdown>
@@ -170,4 +174,6 @@ export default function MarkdownRenderer({
       />
     </div>
   )
-}
+})
+
+export default MarkdownRenderer

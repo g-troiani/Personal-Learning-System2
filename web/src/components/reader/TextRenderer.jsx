@@ -1,14 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, memo } from 'react'
 import { Loader2 } from 'lucide-react'
 
 /**
  * Plain text renderer component.
  * Displays text content with proper formatting and line numbers.
+ * Memoized to prevent unnecessary re-renders.
  *
  * @param {string} fileUrl - URL to fetch text content from (optional)
  * @param {string} content - Direct text content (preferred over fileUrl)
  */
-export default function TextRenderer({ fileUrl, content: directContent }) {
+const TextRenderer = memo(function TextRenderer({ fileUrl, content: directContent }) {
   const [content, setContent] = useState(directContent || '')
   const [loading, setLoading] = useState(!directContent)
   const [error, setError] = useState(null)
@@ -87,8 +88,8 @@ export default function TextRenderer({ fileUrl, content: directContent }) {
     )
   }
 
-  // Split content into lines for display
-  const lines = content.split('\n')
+  // Memoize line splitting to prevent recalculation on every render
+  const lines = useMemo(() => content.split('\n'), [content])
 
   return (
     <div
@@ -109,4 +110,6 @@ export default function TextRenderer({ fileUrl, content: directContent }) {
       </div>
     </div>
   )
-}
+})
+
+export default TextRenderer

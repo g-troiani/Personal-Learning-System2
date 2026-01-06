@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef } from 'react'
+import { useMemo, useEffect, useRef, memo, useCallback } from 'react'
 import { FileText, AlertCircle, ExternalLink } from 'lucide-react'
 import PDFRenderer from './PDFRenderer'
 import MarkdownRenderer from './MarkdownRenderer'
@@ -49,7 +49,7 @@ function getContentType(mimeType, title) {
  * @param {number} initialPage - Page number to restore (for PDFs)
  * @param {Function} onScroll - Callback for scroll tracking
  */
-export default function ReaderContent({
+const ReaderContent = memo(function ReaderContent({
   source,
   fileUrl,
   extractedContent,
@@ -171,12 +171,13 @@ export default function ReaderContent({
       {renderContent()}
     </div>
   )
-}
+})
 
 /**
  * Fallback view when document cannot be rendered
+ * Memoized to prevent unnecessary re-renders
  */
-function FallbackView({ message, hint, fileUrl, mimeType }) {
+const FallbackView = memo(function FallbackView({ message, hint, fileUrl, mimeType }) {
   return (
     <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-4 p-8">
       <div className="bg-gray-800 rounded-lg p-8 max-w-md text-center">
@@ -204,4 +205,6 @@ function FallbackView({ message, hint, fileUrl, mimeType }) {
       </div>
     </div>
   )
-}
+})
+
+export default ReaderContent

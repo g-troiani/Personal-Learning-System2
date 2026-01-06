@@ -145,7 +145,13 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Shows progress indicator with percentage and progress bar in header
   - Uses upsert to prevent duplicate records
   - Restores scroll position for non-PDF, page number for PDF on return
-- [ ] M37: Polish and performance - caching, virtualization, responsive
+- [x] M37: Polish and performance - zen mode, memoization, deep linking (2026-01-05)
+  - Created `ZenModeContext.jsx` for distraction-free reading (hides sidebar, assistant, footer)
+  - Added zen mode toggle button (Maximize2/Minimize2) with ESC key to exit
+  - Memoized reader components with React.memo: PDFRenderer, MarkdownRenderer, TextRenderer, ReaderContent
+  - Added useMemo for expensive calculations (line splitting, plugin arrays)
+  - Implemented deep linking with URL page parameter (?page=5) for PDF sharing
+  - Deferred: responsive mobile layouts, PDF virtualization, IndexedDB caching (lower priority)
 
 
 ## Surprises and Discoveries
@@ -229,6 +235,10 @@ Recent decisions only below. See archives for full rationale.
 
 - **Decision:** Remove Highlight-to-Generate milestone (formerly M37)
   **Rationale:** Misaligned with VISION.md - manual question creation contradicts "I should not have to manually create flashcards" and reintroduces cognitive overhead. Learners are poor judges of what they need to practice; automatic KC extraction addresses this.
+  **Date:** 2026-01-05
+
+- **Decision:** Defer M37 advanced optimizations (mobile layouts, virtualization, caching)
+  **Rationale:** Core polish items (zen mode, memoization, deep linking) deliver most value. Mobile responsive, 100+ page PDF virtualization, and offline caching are lower priority for single-user desktop tool. Dependencies installed for future use.
   **Date:** 2026-01-05
 
 
@@ -829,4 +839,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-02: M16-M19 Sources feature with FastAPI backend
 - 2026-01-03: M20-M23 Error handling, speed optimization (Groq, parallel processing)
 - 2026-01-04: M24-M29 Agent memory system implementation
-- 2026-01-05: M30-M37 Document Reader feature added (AlphaXiv-style, 6 research agents, consolidated spec)
+- 2026-01-05: M30-M37 Document Reader feature complete (AlphaXiv-style reader with zen mode, AI chat, highlights, reading progress)
