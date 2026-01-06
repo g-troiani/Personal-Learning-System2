@@ -179,15 +179,15 @@ const ReaderContent = memo(function ReaderContent({
  */
 const FallbackView = memo(function FallbackView({ message, hint, fileUrl, mimeType }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-4 p-8">
-      <div className="bg-gray-800 rounded-lg p-8 max-w-md text-center">
-        <FileText className="h-16 w-16 mx-auto mb-4 text-gray-500" />
-        <p className="text-lg text-gray-300 mb-2">{message}</p>
+    <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4 p-8 bg-gray-50">
+      <div className="bg-white rounded-lg p-8 max-w-md text-center border border-gray-300 shadow-sm">
+        <FileText className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+        <p className="text-lg text-gray-700 mb-2">{message}</p>
         {hint && (
           <p className="text-sm text-gray-500 mb-4">{hint}</p>
         )}
         {mimeType && (
-          <p className="text-xs text-gray-600 mb-4">
+          <p className="text-xs text-gray-400 mb-4">
             File type: {mimeType}
           </p>
         )}

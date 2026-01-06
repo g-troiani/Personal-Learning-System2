@@ -94,13 +94,13 @@ const TextRenderer = memo(function TextRenderer({ fileUrl, content: directConten
   return (
     <div
       ref={containerRef}
-      className="h-full overflow-auto bg-gray-800 rounded-lg"
+      className="h-full overflow-auto bg-gray-50"
     >
       <div className="p-4 md:p-6">
-        <pre className="font-mono text-sm text-gray-300 whitespace-pre-wrap break-words leading-relaxed">
+        <pre className="font-mono text-sm text-gray-700 whitespace-pre-wrap break-words leading-relaxed">
           {lines.map((line, index) => (
-            <div key={index} className="flex hover:bg-gray-700/30 -mx-2 px-2 rounded">
-              <span className="select-none text-gray-600 w-12 pr-4 text-right shrink-0 border-r border-gray-700 mr-4">
+            <div key={index} className="flex hover:bg-gray-200/50 -mx-2 px-2 rounded">
+              <span className="select-none text-gray-400 w-12 pr-4 text-right shrink-0 border-r border-gray-300 mr-4">
                 {index + 1}
               </span>
               <span className="flex-1">{line || '\u00A0'}</span>

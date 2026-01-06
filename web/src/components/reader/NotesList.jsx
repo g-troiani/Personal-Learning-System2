@@ -38,13 +38,13 @@ export default function NotesList({ notes = [], onCreateNote, onDeleteNote }) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-gray-200">
       {/* Header with add button */}
-      <div className="p-3 border-b border-gray-700">
+      <div className="p-3 border-b border-gray-300">
         {!isEditing ? (
           <button
             onClick={() => setIsEditing(true)}
-            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-300 rounded-lg transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>Add a note</span>
@@ -55,7 +55,7 @@ export default function NotesList({ notes = [], onCreateNote, onDeleteNote }) {
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
               placeholder="Write your note..."
-              className="w-full px-3 py-2 text-sm bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-teal-500 focus:outline-none resize-none"
+              className="w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:border-teal-500 focus:outline-none resize-none"
               rows={4}
               autoFocus
             />
@@ -63,7 +63,7 @@ export default function NotesList({ notes = [], onCreateNote, onDeleteNote }) {
               <button
                 type="button"
                 onClick={handleCancel}
-                className="px-3 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+                className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
               >
                 Cancel
               </button>
@@ -92,16 +92,16 @@ export default function NotesList({ notes = [], onCreateNote, onDeleteNote }) {
             {notes.map((note) => (
               <div
                 key={note.id}
-                className="group p-3 bg-gray-900/50 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors"
+                className="group p-3 bg-white rounded-lg border border-gray-300 hover:border-gray-400 transition-colors"
               >
                 {/* Note text */}
-                <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">
                   {note.note_content}
                 </p>
 
                 {/* Anchored text (if note was created from selection) */}
                 {note.selected_text && (
-                  <div className="mt-2 pl-2 border-l-2 border-gray-600">
+                  <div className="mt-2 pl-2 border-l-2 border-gray-400">
                     <p className="text-xs text-gray-500 italic line-clamp-2">
                       "{note.selected_text}"
                     </p>
@@ -109,13 +109,13 @@ export default function NotesList({ notes = [], onCreateNote, onDeleteNote }) {
                 )}
 
                 {/* Footer with date and delete */}
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-700/50">
-                  <span className="text-xs text-gray-500">
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200">
+                  <span className="text-xs text-gray-400">
                     {formatDate(note.created_at)}
                   </span>
                   <button
                     onClick={() => onDeleteNote?.(note.id)}
-                    className="p-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                    className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                     title="Delete note"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

@@ -135,27 +135,27 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
   return (
     <div
       ref={containerRef}
-      className="h-full overflow-auto bg-gray-800 rounded-lg relative"
+      className="h-full overflow-auto bg-gray-50 relative"
     >
       <article
         ref={articleRef}
-        className="prose prose-invert prose-lg max-w-none p-6 md:p-8
-        prose-headings:text-white prose-headings:font-semibold
-        prose-h1:text-3xl prose-h1:border-b prose-h1:border-gray-700 prose-h1:pb-2 prose-h1:mb-4
+        className="prose prose-lg max-w-none p-6 md:p-8
+        prose-headings:text-gray-800 prose-headings:font-semibold
+        prose-h1:text-3xl prose-h1:border-b prose-h1:border-gray-300 prose-h1:pb-2 prose-h1:mb-4
         prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-3
         prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-2
-        prose-p:text-gray-300 prose-p:leading-relaxed
-        prose-a:text-teal-400 prose-a:no-underline hover:prose-a:underline
-        prose-strong:text-white
-        prose-code:text-teal-300 prose-code:bg-gray-900 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
-        prose-pre:bg-gray-900 prose-pre:border prose-pre:border-gray-700 prose-pre:rounded-lg
-        prose-ul:text-gray-300 prose-ol:text-gray-300
+        prose-p:text-gray-700 prose-p:leading-relaxed
+        prose-a:text-teal-600 prose-a:no-underline hover:prose-a:underline
+        prose-strong:text-gray-900
+        prose-code:text-teal-700 prose-code:bg-gray-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
+        prose-pre:bg-gray-800 prose-pre:border prose-pre:border-gray-300 prose-pre:rounded-lg
+        prose-ul:text-gray-700 prose-ol:text-gray-700
         prose-li:marker:text-gray-500
-        prose-blockquote:border-l-teal-500 prose-blockquote:text-gray-400 prose-blockquote:italic
+        prose-blockquote:border-l-teal-500 prose-blockquote:text-gray-600 prose-blockquote:italic
         prose-table:border-collapse
-        prose-th:bg-gray-700 prose-th:px-4 prose-th:py-2 prose-th:text-left prose-th:border prose-th:border-gray-600
-        prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-gray-700
-        prose-hr:border-gray-700
+        prose-th:bg-gray-200 prose-th:px-4 prose-th:py-2 prose-th:text-left prose-th:border prose-th:border-gray-300 prose-th:text-gray-700
+        prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-gray-300 prose-td:text-gray-700
+        prose-hr:border-gray-300
         prose-img:rounded-lg prose-img:shadow-lg
       ">
         <ReactMarkdown

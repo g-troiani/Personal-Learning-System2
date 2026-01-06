@@ -69,11 +69,11 @@ export default function KCsPanel({ sourceId }) {
   }
 
   const typeColors = {
-    factual: 'text-blue-400 bg-blue-400/10',
-    conceptual: 'text-purple-400 bg-purple-400/10',
-    procedural: 'text-green-400 bg-green-400/10',
-    metacognitive: 'text-amber-400 bg-amber-400/10',
-    other: 'text-gray-400 bg-gray-400/10'
+    factual: 'text-blue-600 bg-blue-100',
+    conceptual: 'text-purple-600 bg-purple-100',
+    procedural: 'text-green-600 bg-green-100',
+    metacognitive: 'text-amber-600 bg-amber-100',
+    other: 'text-gray-600 bg-gray-200'
   }
 
   if (loading) {
@@ -106,12 +106,12 @@ export default function KCsPanel({ sourceId }) {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto bg-gray-200">
       <div className="p-3">
         {/* Summary */}
-        <div className="mb-4 p-2 bg-gray-900/50 rounded-lg">
-          <p className="text-xs text-gray-400">
-            <span className="font-medium text-white">{kcs.length}</span> knowledge components extracted
+        <div className="mb-4 p-2 bg-white rounded-lg border border-gray-300">
+          <p className="text-xs text-gray-500">
+            <span className="font-medium text-gray-700">{kcs.length}</span> knowledge components extracted
           </p>
         </div>
 
@@ -129,19 +129,19 @@ export default function KCsPanel({ sourceId }) {
               {typeKcs.map((kc) => (
                 <div
                   key={kc.id}
-                  className="bg-gray-800/50 rounded-lg border border-gray-700 overflow-hidden"
+                  className="bg-white rounded-lg border border-gray-300 overflow-hidden"
                 >
                   <button
                     onClick={() => toggleExpand(kc.id)}
-                    className="w-full flex items-start gap-2 p-2 text-left hover:bg-gray-700/50 transition-colors"
+                    className="w-full flex items-start gap-2 p-2 text-left hover:bg-gray-100 transition-colors"
                   >
                     {expandedKc === kc.id ? (
-                      <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
+                      <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
                     ) : (
-                      <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
+                      <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-200 font-medium truncate">
+                      <p className="text-sm text-gray-700 font-medium truncate">
                         {kc.name}
                       </p>
                       {!expandedKc && (
@@ -153,13 +153,13 @@ export default function KCsPanel({ sourceId }) {
                   </button>
 
                   {expandedKc === kc.id && (
-                    <div className="px-4 pb-3 pt-1 border-t border-gray-700/50">
-                      <p className="text-sm text-gray-300 mb-2">
+                    <div className="px-4 pb-3 pt-1 border-t border-gray-200">
+                      <p className="text-sm text-gray-600 mb-2">
                         {kc.description}
                       </p>
 
                       {kc.source_excerpt && (
-                        <div className="mt-2 pl-2 border-l-2 border-gray-600">
+                        <div className="mt-2 pl-2 border-l-2 border-gray-400">
                           <p className="text-xs text-gray-500 italic">
                             "{kc.source_excerpt}"
                           </p>
@@ -171,7 +171,7 @@ export default function KCsPanel({ sourceId }) {
                           {kc.knowledge_type}
                         </span>
                         {kc.cognitive_level && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-500">
                             {kc.cognitive_level}
                           </span>
                         )}

@@ -100,18 +100,18 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
   return (
     <div className="flex flex-col h-full">
       {/* Controls */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-300">
         {/* Page Navigation */}
         <div className="flex items-center gap-2">
           <button
             onClick={previousPage}
             disabled={pageNumber <= 1}
-            className="p-1.5 rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-500 hover:text-gray-700 transition-colors"
             title="Previous page"
           >
             <ChevronLeft size={18} />
           </button>
-          <div className="flex items-center gap-1 text-sm text-gray-300">
+          <div className="flex items-center gap-1 text-sm text-gray-600">
             <input
               ref={pageInputRef}
               type="number"
@@ -120,15 +120,15 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
               defaultValue={pageNumber}
               key={pageNumber}
               onKeyDown={handlePageInput}
-              className="w-12 px-2 py-1 text-center bg-gray-700 border border-gray-600 rounded text-white text-sm focus:outline-none focus:border-teal-500"
+              className="w-12 px-2 py-1 text-center bg-white border border-gray-300 rounded text-gray-700 text-sm focus:outline-none focus:border-teal-500"
             />
-            <span className="text-gray-500">/</span>
+            <span className="text-gray-400">/</span>
             <span>{numPages || '-'}</span>
           </div>
           <button
             onClick={nextPage}
             disabled={pageNumber >= numPages}
-            className="p-1.5 rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-500 hover:text-gray-700 transition-colors"
             title="Next page"
           >
             <ChevronRight size={18} />
@@ -140,18 +140,18 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
           <button
             onClick={zoomOut}
             disabled={scale <= 0.5}
-            className="p-1.5 rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-500 hover:text-gray-700 transition-colors"
             title="Zoom out"
           >
             <ZoomOut size={18} />
           </button>
-          <span className="text-sm text-gray-400 w-14 text-center">
+          <span className="text-sm text-gray-500 w-14 text-center">
             {Math.round(scale * 100)}%
           </span>
           <button
             onClick={zoomIn}
             disabled={scale >= 3.0}
-            className="p-1.5 rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-500 hover:text-gray-700 transition-colors"
             title="Zoom in"
           >
             <ZoomIn size={18} />
@@ -162,7 +162,7 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
       {/* PDF Document */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto bg-gray-900 p-4"
+        className="flex-1 overflow-auto bg-gray-200 p-4"
       >
         {loading && (
           <div className="flex items-center justify-center h-full">

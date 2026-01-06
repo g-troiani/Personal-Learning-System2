@@ -107,14 +107,14 @@ export default function AIChatPanel({
   ]
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-gray-200">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 px-4">
             <Sparkles className="w-8 h-8 mb-3 opacity-50" />
             <p className="text-sm text-center font-medium">Ask AI about this document</p>
-            <p className="text-xs text-center mt-1 text-gray-600">
+            <p className="text-xs text-center mt-1 text-gray-400">
               Get explanations, summaries, or answers to your questions
             </p>
 
@@ -124,7 +124,7 @@ export default function AIChatPanel({
                 <button
                   key={idx}
                   onClick={() => setInput(question)}
-                  className="w-full text-left px-3 py-2 text-xs text-gray-400 hover:text-white bg-gray-800/50 hover:bg-gray-700 rounded-lg transition-colors"
+                  className="w-full text-left px-3 py-2 text-xs text-gray-500 hover:text-gray-700 bg-white hover:bg-gray-100 rounded-lg transition-colors border border-gray-300"
                 >
                   {question}
                 </button>
@@ -141,13 +141,13 @@ export default function AIChatPanel({
                 }`}
               >
                 {message.role === 'assistant' && (
-                  <div className="w-6 h-6 rounded-full bg-teal-600/20 flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-3.5 h-3.5 text-teal-400" />
+                  <div className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                    <Bot className="w-3.5 h-3.5 text-teal-600" />
                   </div>
                 )}
                 {message.role === 'error' && (
-                  <div className="w-6 h-6 rounded-full bg-red-600/20 flex items-center justify-center flex-shrink-0">
-                    <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                  <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                    <AlertCircle className="w-3.5 h-3.5 text-red-500" />
                   </div>
                 )}
                 <div
@@ -155,15 +155,15 @@ export default function AIChatPanel({
                     message.role === 'user'
                       ? 'bg-teal-600 text-white'
                       : message.role === 'error'
-                      ? 'bg-red-900/30 text-red-300 border border-red-800/50'
-                      : 'bg-gray-700 text-gray-200'
+                      ? 'bg-red-100 text-red-700 border border-red-300'
+                      : 'bg-white text-gray-700 border border-gray-300'
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.content}</p>
                 </div>
                 {message.role === 'user' && (
-                  <div className="w-6 h-6 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
-                    <User className="w-3.5 h-3.5 text-gray-300" />
+                  <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center flex-shrink-0">
+                    <User className="w-3.5 h-3.5 text-white" />
                   </div>
                 )}
               </div>
@@ -172,10 +172,10 @@ export default function AIChatPanel({
             {/* Loading indicator */}
             {isLoading && (
               <div className="flex gap-2 justify-start">
-                <div className="w-6 h-6 rounded-full bg-teal-600/20 flex items-center justify-center">
-                  <Bot className="w-3.5 h-3.5 text-teal-400" />
+                <div className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center">
+                  <Bot className="w-3.5 h-3.5 text-teal-600" />
                 </div>
-                <div className="px-3 py-2 bg-gray-700 rounded-lg">
+                <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg">
                   <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
                 </div>
               </div>
@@ -187,7 +187,7 @@ export default function AIChatPanel({
       </div>
 
       {/* Input area */}
-      <form onSubmit={handleSubmit} className="p-3 border-t border-gray-700">
+      <form onSubmit={handleSubmit} className="p-3 border-t border-gray-300">
         <div className="flex gap-2">
           <input
             ref={inputRef}
@@ -195,7 +195,7 @@ export default function AIChatPanel({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask a question..."
-            className="flex-1 px-3 py-2 text-sm bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:border-teal-500 focus:outline-none"
+            className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:border-teal-500 focus:outline-none"
             disabled={isLoading}
           />
           <button

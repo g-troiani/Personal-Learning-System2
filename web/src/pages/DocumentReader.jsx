@@ -223,19 +223,19 @@ export default function DocumentReader() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-gray-100">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
+      <div className="flex items-center justify-between p-4 border-b border-gray-300 bg-gray-50">
         <div className="flex items-center gap-3">
           <Link
             to="/sources"
-            className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-teal-400" />
-            <h1 className="text-lg font-medium text-white truncate max-w-md">
+            <FileText className="h-5 w-5 text-teal-600" />
+            <h1 className="text-lg font-medium text-gray-800 truncate max-w-md">
               {source?.title || 'Document'}
             </h1>
           </div>
@@ -245,15 +245,15 @@ export default function DocumentReader() {
           {/* Reading Progress Indicator */}
           {readingProgress.completionPercentage > 0 && (
             <div className="flex items-center gap-2 text-sm">
-              <div className="flex items-center gap-1.5 text-gray-400">
-                <CheckCircle className="h-4 w-4 text-teal-400" />
-                <span className="text-teal-400 font-medium">
+              <div className="flex items-center gap-1.5 text-gray-500">
+                <CheckCircle className="h-4 w-4 text-teal-600" />
+                <span className="text-teal-600 font-medium">
                   {readingProgress.completionPercentage}%
                 </span>
-                <span className="text-gray-500">read</span>
+                <span className="text-gray-400">read</span>
               </div>
               {/* Progress bar */}
-              <div className="w-20 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+              <div className="w-20 h-1.5 bg-gray-300 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-teal-500 transition-all duration-300"
                   style={{ width: `${readingProgress.completionPercentage}%` }}
@@ -268,7 +268,7 @@ export default function DocumentReader() {
             className={`p-2 rounded-lg transition-colors ${
               isZenMode
                 ? 'bg-teal-600 text-white'
-                : 'hover:bg-gray-700 text-gray-400 hover:text-white'
+                : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'
             }`}
             title={isZenMode ? 'Exit Zen Mode (show sidebar)' : 'Zen Mode (hide distractions)'}
           >
@@ -336,7 +336,7 @@ export default function DocumentReader() {
 
       {/* Source Info Footer (hidden in zen mode) */}
       {source && !isZenMode && (
-        <div className="px-4 py-2 border-t border-gray-700 text-xs text-gray-500 flex items-center gap-4">
+        <div className="px-4 py-2 border-t border-gray-300 bg-gray-50 text-xs text-gray-500 flex items-center gap-4">
           <span>Domain: {source.domain || 'general'}</span>
           <span>|</span>
           <span>{source.word_count?.toLocaleString() || 0} words</span>
