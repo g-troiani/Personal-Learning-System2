@@ -1,11 +1,35 @@
-# Document Reader Feature - M30-M37
+# Document Reader Feature - M30-M38
 
-**Status:** Complete (2026-01-05)
+**Status:** Complete (2026-01-06)
 **Purpose:** AlphaXiv-style document reader for reading uploads before practice
 
 ## Overview
 
-Implements in-browser document reading with: PDF/Markdown/text rendering, sidebar TOC, text selection with highlights, AI chat, notes, reading progress tracking, and zen mode. Flow: upload -> read/study -> practice.
+Implements in-browser document reading with: PDF/Markdown/DOCX/text rendering, sidebar TOC, text selection with highlights, AI chat, notes, reading progress tracking, and zen mode. Flow: upload -> read/study -> practice.
+
+## M38: Document Viewer Fidelity (2026-01-06)
+
+**Goal:** DOCX files render with full visual fidelity instead of plain text.
+
+**Implementation:**
+- `DOCXRenderer.jsx` (132 lines) - Uses docx-preview library's `renderAsync()` API
+- `docx.css` (136 lines) - Styles for headings, tables, images, lists, links, blockquotes
+- `ReaderContent.jsx` updated - Routes 'docx' content type to DOCXRenderer
+- `docx-preview@0.3.7` installed
+
+**Features Verified:**
+- ✅ Headings render with proper hierarchy and teal color
+- ✅ Tables display with borders, headers, alternating rows
+- ✅ Bold/italic text preserved
+- ✅ Bullet points and numbered lists formatted
+- ✅ Text selection works on rendered DOCX
+- ✅ Selection tooltip (Ask AI, Highlight, Copy) functions
+- ✅ Highlights persist after page refresh (saved to database)
+
+**Key Files:**
+- `web/src/components/reader/DOCXRenderer.jsx` - Main renderer with AnnotationLayer integration
+- `web/src/styles/docx.css` - DOCX-specific styling
+- `web/src/components/reader/ReaderContent.jsx` - Content type routing (line 18, 33, 125-141)
 
 ## Architecture
 

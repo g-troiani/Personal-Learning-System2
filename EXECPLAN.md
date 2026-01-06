@@ -108,9 +108,9 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M36: Reading progress - position tracking, completion percentage (2026-01-05)
 - [x] M37: Polish and performance - zen mode, memoization, deep linking (2026-01-05)
 
-**Document Viewer Fidelity (M38)** - In Progress
+**Document Viewer Fidelity (M38)** - Complete
 - [x] M38 Research: 6 parallel worktrees, docx-preview recommendation (2026-01-06)
-- [ ] M38 Implementation: DOCX high-fidelity rendering (pending) - see Milestone 38 section below
+- [x] M38 Implementation: DOCX high-fidelity rendering with docx-preview (2026-01-06)
 
 
 ## Surprises and Discoveries
@@ -221,7 +221,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through thirty-eight milestones. Milestones 1-37 are complete. Milestone 38 implements Document Viewer Fidelity for high-fidelity DOCX rendering.
+Implementation proceeds through thirty-eight milestones. All milestones (1-38) are complete. The system now supports high-fidelity DOCX rendering in the Document Reader.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -601,7 +601,7 @@ M30-M37 implemented all Document Reader components: database tables (reading_pro
 - `learn_system/app/api/server.py` - /api/sources/{id}/file-url, /sections, /content, /api/ai/chat endpoints
 
 
-### Milestone 38: Document Viewer Fidelity (ACTIVE)
+### Milestone 38: Document Viewer Fidelity (COMPLETE)
 
 At the end of this milestone, DOCX files render with full visual fidelity—headings, tables, images, colors, and formatting are preserved instead of displaying as plain text.
 
@@ -761,4 +761,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-03: M20-M23 Error handling, speed optimization (Groq, parallel processing)
 - 2026-01-04: M24-M29 Agent memory system implementation
 - 2026-01-05: M30-M37 Document Reader feature complete (AlphaXiv-style reader with zen mode, AI chat, highlights, reading progress)
-- 2026-01-06: M38 Research complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview)
+- 2026-01-06: M38 Complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview, text selection, highlights)
