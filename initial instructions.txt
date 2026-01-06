@@ -225,3 +225,34 @@ following the style of the previous prompt, modify this prompt:
 
 - essence of what you are trying to do and concept that you are trying to achieve 
 
+
+
+
+
+
+
+
+Create six git worktrees dedicated to researching RESEARCH_TARGET given the insights distilled in RESEARCH DONE. 
+Give each worktree a distinct focus so the research is not duplicated (for example: UI and UX, data model and storage, upload pipeline, practice-question 
+generation flow, and system integration details).
+In each worktree, produce a concise, implementation-ready writeup and add it to NEW FEATURES.md under a clearly labeled section for that worktree.
+After all five writeups exist, consolidate them into a single cohesive plan for RESEARCH_TARGET that matches the architecture and conventions already present in 
+the system. 
+
+  Planning Phase Decisions:
+  - Verify complex logic is correct
+  - Ensure business requirements follow good practice
+  - Establish clean service boundaries
+  - Prevent unnecessary coupling  
+
+Again: After all five writeups exist, consolidate them into a single cohesive plan for 
+RESEARCH_TARGET that matches the architecture and conventions already present in the system. Ultrathink
+
+
+TARGET FEATURE = "AlphaXiv-style document rendering for uploaded sources. Reference screenshot showing desired look: 
+'/var/folders/cf/f08kwgss30scwpxr9tm32_bw0000gn/T/TemporaryItems/NSIRD_screencaptureui_bVaX0r/Screenshot 2026-01-05 at 11.49.16 AM.png'. The objective is to display uploaded documents in a clean, 
+readable format similar to how AlphaXiv renders research papers (three-panel layout with the document as the center focus). Two key requirements: (1) Users should be able to fully read the document 
+before starting practice questions, treating it as a study phase before assessment. (2) The document should remain persistently accessible in a 'Sources' section throughout the session, allowing users to
+ refer back to the original material at any point during practice. Think of it as separating the workflow into: upload → read/study → practice, with the source always one click away for reference. Leverage the research provided in RESEARCH DONE." 
+
+ RESEARCH DONE = @ALPHAXIV RESEARCH.docx
