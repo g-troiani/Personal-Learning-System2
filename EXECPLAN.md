@@ -224,6 +224,10 @@ Recent decisions only below. See archives for full rationale.
   **Rationale:** Decoupled components across different parts of component tree, no prop drilling needed
   **Date:** 2026-01-05
 
+- **Decision:** Use upsert with onConflict for reading_progress records
+  **Rationale:** Prevents duplicate records from race conditions when debounced saves fire before initial insert completes; source_id has unique constraint
+  **Date:** 2026-01-05
+
 
 ## Outcomes and Retrospective
 
