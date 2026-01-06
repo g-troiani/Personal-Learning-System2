@@ -7,7 +7,7 @@ export default function QuickActions() {
   const actions = [
     { label: 'Study', icon: BookOpen, path: '/study' },
     { label: 'Plan', icon: Calendar, path: '/calendar' },
-    { label: 'Add Document', icon: FileText, path: '/sources' },
+    { label: 'Add Document', icon: FileText, path: '/sources?upload=true' },
     { label: 'Analytics', icon: BarChart3, path: '/analytics' },
   ]
 
