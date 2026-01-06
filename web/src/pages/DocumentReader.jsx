@@ -261,8 +261,8 @@ export default function DocumentReader() {
             onClick={toggleZenMode}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
               isZenMode
-                ? 'bg-teal-600 text-white'
-                : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'
+                ? 'bg-teal-600 hover:bg-teal-500 text-white'
+                : 'bg-teal-50 border border-teal-300 text-teal-700 hover:bg-teal-100'
             }`}
             title={isZenMode ? 'Show tools and sidebar' : 'Hide tools for distraction-free reading'}
           >
