@@ -29,12 +29,14 @@ export default function Layout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-bg-main">
+    <div className={`flex bg-bg-main ${isReaderRoute ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
       {!hideSidebar && (
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       )}
       <main
         className={`flex-1 transition-all duration-300 ${
+          isReaderRoute ? 'overflow-hidden' : ''
+        } ${
           hideSidebar
             ? 'ml-0'
             : sidebarCollapsed
