@@ -135,11 +135,11 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
   return (
     <div
       ref={containerRef}
-      className="h-full overflow-auto bg-gray-50 relative"
+      className="h-full overflow-auto bg-gray-50 relative flex justify-center"
     >
       <article
         ref={articleRef}
-        className="prose prose-lg max-w-none p-6 md:p-8
+        className="prose prose-lg max-w-4xl w-full p-6 md:p-8
         prose-headings:text-gray-800 prose-headings:font-semibold
         prose-h1:text-3xl prose-h1:border-b prose-h1:border-gray-300 prose-h1:pb-2 prose-h1:mb-4
         prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-3

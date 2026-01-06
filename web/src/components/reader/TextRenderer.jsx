@@ -94,9 +94,9 @@ const TextRenderer = memo(function TextRenderer({ fileUrl, content: directConten
   return (
     <div
       ref={containerRef}
-      className="h-full overflow-auto bg-gray-50"
+      className="h-full overflow-auto bg-gray-50 flex justify-center"
     >
-      <div className="p-4 md:p-6">
+      <div className="p-4 md:p-6 max-w-4xl w-full">
         <pre className="font-mono text-sm text-gray-700 whitespace-pre-wrap break-words leading-relaxed">
           {lines.map((line, index) => (
             <div key={index} className="flex hover:bg-gray-200/50 -mx-2 px-2 rounded">

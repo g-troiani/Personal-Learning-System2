@@ -162,10 +162,10 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
       {/* PDF Document */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto bg-gray-200 p-4"
+        className="flex-1 overflow-auto bg-gray-200 p-4 flex justify-center"
       >
         {loading && (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center h-full w-full">
             <div className="flex flex-col items-center gap-3 text-gray-400">
               <Loader2 className="h-8 w-8 animate-spin" />
               <span>Loading PDF...</span>
@@ -174,7 +174,7 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
         )}
 
         {error && (
-          <div className="flex items-center justify-center h-full text-red-400">
+          <div className="flex items-center justify-center h-full w-full text-red-400">
             {error}
           </div>
         )}
