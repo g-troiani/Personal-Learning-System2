@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Brain, FileText, Clock, AlertCircle, RefreshCw, MoreVertical, Trash2, Eye } from 'lucide-react'
+import { BookOpen, Brain, FileText, Clock, AlertCircle, RefreshCw, MoreVertical, Trash2, Eye, GraduationCap } from 'lucide-react'
 import { ProcessingBadge } from './ProcessingStatus'
 import ProcessingStatus from './ProcessingStatus'
 
@@ -123,6 +123,17 @@ const domainLabels = {
 function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
   const navigate = useNavigate()
   const emoji = getSourceEmoji(source)
+
+  // Navigation handlers
+  const handleRead = (e) => {
+    e.stopPropagation()
+    navigate(`/reader/${source.id}`)
+  }
+
+  const handlePractice = (e) => {
+    e.stopPropagation()
+    navigate(`/study?source=${source.id}`)
+  }
 
   // Check if source is currently processing
   const isProcessing = source.processing_status && !['ready', 'error'].includes(source.processing_status)
@@ -304,6 +315,24 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
                 All caught up
               </span>
             )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2 pt-3 mt-3 border-t border-bg-card-border">
+            <button
+              onClick={handleRead}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-800 border border-gray-800 hover:bg-gray-800 hover:text-white rounded-button transition-colors"
+            >
+              <BookOpen className="h-4 w-4" />
+              Read
+            </button>
+            <button
+              onClick={handlePractice}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-btn-primary hover:bg-gray-800 rounded-button transition-colors"
+            >
+              <GraduationCap className="h-4 w-4" />
+              Practice
+            </button>
           </div>
         </>
       )}
