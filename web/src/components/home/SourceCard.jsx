@@ -83,7 +83,7 @@ export default function SourceCard({ source, mastery, dueCount, overdueCount }) 
       <div className="flex gap-2 pt-2 border-t border-bg-card-border">
         <button
           onClick={handleRead}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-gray-100 rounded-button transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-800 border border-gray-800 hover:bg-gray-800 hover:text-white rounded-button transition-colors"
         >
           <BookOpen className="h-4 w-4" />
           Read
