@@ -19,7 +19,7 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Web UI work → `.claude/memory/milestones/webui_core.md`
    - Upload/processing → `.claude/memory/milestones/sources_feature.md`
    - Performance issues → `.claude/memory/milestones/speed_optimization.md`
-   - Document Reader (M30-M38) → `NEW FEATURES.md` (full specs)
+   - Document Reader (M30-M37) → `NEW FEATURES.md` (full specs)
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
 
@@ -46,7 +46,7 @@ The observable behavior works as follows. On Monday, the user runs `python -m ap
 
 The system solves five problems. First, it eliminates the "I don't know what I don't know" problem by forcing retrieval practice that reveals actual gaps. Second, it fights forgetting through spaced repetition scheduling. Third, it measures learning objectively through tracked performance rather than felt fluency. Fourth, it enables self-experimentation by recording which techniques were used for which content. Fifth, it removes cognitive overhead by telling the user exactly what to practice and when.
 
-**Document Reader Feature (M30-M38):** After these milestones, users can read uploaded documents directly in the browser before starting practice. The workflow becomes: upload → read/study → practice, with documents always one click away. Users navigate to `/reader/:sourceId` to view PDFs or Markdown with a Table of Contents in the sidebar, take notes, highlight text, and ask AI questions about the content. They can generate practice questions from highlighted text, creating a seamless learning loop.
+**Document Reader Feature (M30-M37):** After these milestones, users can read uploaded documents directly in the browser before starting practice. The workflow becomes: upload → read/study → practice, with documents always one click away. Users navigate to `/reader/:sourceId` to view PDFs or Markdown with a Table of Contents in the sidebar, take notes, highlight text, and ask AI questions about the content.
 
 
 ## Progress
@@ -94,7 +94,7 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M28: Slim EXECPLAN - reduced from 1500 to 502 lines (2026-01-04)
 - [x] M29: Update CLAUDE.md - memory access instructions added (2026-01-04)
 
-**Document Reader Feature (M30-M38)** - In Progress
+**Document Reader Feature (M30-M37)** - In Progress
 - [x] Research phase - 6 parallel agents, NEW FEATURES.md consolidated spec (2026-01-05)
 - [x] M30: Core infrastructure - database migration, Supabase Storage, /reader route (2026-01-05)
   - Added storage_path, original_filename, file_size_bytes, mime_type to content_sources
@@ -145,8 +145,7 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Shows progress indicator with percentage and progress bar in header
   - Uses upsert to prevent duplicate records
   - Restores scroll position for non-PDF, page number for PDF on return
-- [ ] M37: Highlight-to-generate - practice questions from selected text
-- [ ] M38: Polish and performance - caching, virtualization, responsive
+- [ ] M37: Polish and performance - caching, virtualization, responsive
 
 
 ## Surprises and Discoveries
@@ -228,6 +227,10 @@ Recent decisions only below. See archives for full rationale.
   **Rationale:** Prevents duplicate records from race conditions when debounced saves fire before initial insert completes; source_id has unique constraint
   **Date:** 2026-01-05
 
+- **Decision:** Remove Highlight-to-Generate milestone (formerly M37)
+  **Rationale:** Misaligned with VISION.md - manual question creation contradicts "I should not have to manually create flashcards" and reintroduces cognitive overhead. Learners are poor judges of what they need to practice; automatic KC extraction addresses this.
+  **Date:** 2026-01-05
+
 
 ## Outcomes and Retrospective
 
@@ -245,7 +248,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through thirty-eight milestones. Milestones 1-29 are complete. Milestones 30-38 implement the AlphaXiv-style Document Reader feature.
+Implementation proceeds through thirty-seven milestones. Milestones 1-29 are complete. Milestones 30-37 implement the AlphaXiv-style Document Reader feature.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -257,7 +260,7 @@ Implementation proceeds through thirty-eight milestones. Milestones 1-29 are com
 
 **Agent Memory System (Complete):** M24: Create memory directory structure. M25: Extract completed milestones to archive. M26: Extract decisions and schemas. M27: Extract reference material. M28: Slim EXECPLAN to active content only. M29: Update CLAUDE.md with memory access instructions.
 
-**Document Reader Feature (Pending):** M30: Core infrastructure (database, storage, route). M31: Sidebar TOC integration. M32: Document rendering (PDF, Markdown, text). M33: Navigation entry points. M34: Text selection and highlights. M35: Assistant panel (notes, AI chat). M36: Reading progress tracking. M37: Highlight-to-generate practice questions. M38: Polish and performance.
+**Document Reader Feature (Pending):** M30: Core infrastructure (database, storage, route). M31: Sidebar TOC integration. M32: Document rendering (PDF, Markdown, text). M33: Navigation entry points. M34: Text selection and highlights. M35: Assistant panel (notes, AI chat). M36: Reading progress tracking. M37: Polish and performance.
 
 
 ## CLI Usage Reference
@@ -588,7 +591,7 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 **Verification:** CLAUDE.md contains Memory System section with both proactive and reactive protocols. New session starting a milestone reads relevant archives before implementation.
 
 
-### Document Reader Feature Milestones 30-38 (Pending)
+### Document Reader Feature Milestones 30-37 (Pending)
 
 These milestones implement an AlphaXiv-style document reader that enables users to read uploaded documents before practice. The core flow becomes: upload → read/study → practice (source always one click away).
 
@@ -788,23 +791,7 @@ At the end of this milestone, reading position and completion percentage are tra
 **Verification:** Read half a document, navigate away, return - scroll position restored. Check reading_progress table - completion_percentage updated. See "45% read" in header.
 
 
-### Milestone 37: Highlight-to-Generate
-
-At the end of this milestone, users can generate practice questions from highlighted text.
-
-**Work:**
-
-1. Add "Generate Question" button to SelectionTooltip
-2. Create `GenerateQuestionModal.jsx` with question type selection (definition, explanation, application)
-3. Add `POST /api/items/generate-from-text` endpoint calling Groq to generate practice item
-4. Modify KC extraction prompt to populate `source_excerpt` field
-5. Link generated items to source via kc_id with source_excerpt
-6. Show success toast with option to practice immediately
-
-**Verification:** Select text, click "Generate Question", select type, submit - new practice item created. Check practice_items table - linked to source. Start practice - see the generated question with source context.
-
-
-### Milestone 38: Polish and Performance
+### Milestone 37: Polish and Performance
 
 At the end of this milestone, the reader is production-ready with caching, virtualization, and responsive layouts.
 
@@ -842,4 +829,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-02: M16-M19 Sources feature with FastAPI backend
 - 2026-01-03: M20-M23 Error handling, speed optimization (Groq, parallel processing)
 - 2026-01-04: M24-M29 Agent memory system implementation
-- 2026-01-05: M30-M38 Document Reader feature added (AlphaXiv-style, 6 research agents, consolidated spec)
+- 2026-01-05: M30-M37 Document Reader feature added (AlphaXiv-style, 6 research agents, consolidated spec)
