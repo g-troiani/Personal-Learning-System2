@@ -259,14 +259,24 @@ export default function DocumentReader() {
           {/* Zen Mode Toggle */}
           <button
             onClick={toggleZenMode}
-            className={`p-2 rounded-lg transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
               isZenMode
                 ? 'bg-teal-600 text-white'
                 : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'
             }`}
-            title={isZenMode ? 'Exit Zen Mode (show sidebar)' : 'Zen Mode (hide distractions)'}
+            title={isZenMode ? 'Show tools and sidebar' : 'Hide tools for distraction-free reading'}
           >
-            {isZenMode ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+            {isZenMode ? (
+              <>
+                <Minimize2 className="h-4 w-4" />
+                <span>Show tools</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="h-4 w-4" />
+                <span>Hide tools</span>
+              </>
+            )}
           </button>
 
           {source && !isZenMode && (
