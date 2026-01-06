@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { Loader2 } from 'lucide-react'
+import PDFHighlightLayer from './PDFHighlightLayer'
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
@@ -18,8 +19,17 @@ import 'react-pdf/dist/Page/TextLayer.css'
  * @param {Function} onPageChange - Callback when page changes (page, totalPages)
  * @param {Function} onScroll - Callback for scroll tracking (scrollTop, clientHeight, scrollHeight)
  * @param {number} initialPage - Page number to scroll to initially (default: 1)
+ * @param {Array} highlights - Highlight annotations to display
+ * @param {Function} onDeleteHighlight - Callback when highlight is deleted
  */
-const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, onScroll, initialPage = 1 }) {
+const PDFRenderer = memo(function PDFRenderer({
+  fileUrl,
+  onPageChange,
+  onScroll,
+  initialPage = 1,
+  highlights = [],
+  onDeleteHighlight
+}) {
   const [numPages, setNumPages] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -109,25 +119,38 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, onScroll,
           loading={null}
           className="flex flex-col items-center gap-4"
         >
-          {numPages && Array.from({ length: numPages }, (_, index) => (
-            <div
-              key={`page_${index + 1}`}
-              ref={(el) => { pageRefs.current[index + 1] = el }}
-              className="relative"
-            >
-              <Page
-                pageNumber={index + 1}
-                width={800}
-                renderTextLayer={true}
-                renderAnnotationLayer={true}
-                className="shadow-lg bg-white"
-              />
-              {/* Page number indicator */}
-              <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
-                {index + 1} / {numPages}
+          {numPages && Array.from({ length: numPages }, (_, index) => {
+            const pageNum = index + 1
+            const pageHighlights = highlights.filter(h =>
+              h.page_number === pageNum || h.pdf_rects?.some(r => r.page === pageNum)
+            )
+            return (
+              <div
+                key={`page_${pageNum}`}
+                ref={(el) => { pageRefs.current[pageNum] = el }}
+                className="relative"
+                data-page-number={pageNum}
+              >
+                <Page
+                  pageNumber={pageNum}
+                  width={800}
+                  renderTextLayer={true}
+                  renderAnnotationLayer={true}
+                  className="shadow-lg bg-white"
+                />
+                {/* Highlight overlay layer */}
+                <PDFHighlightLayer
+                  pageNumber={pageNum}
+                  highlights={pageHighlights}
+                  onDeleteHighlight={onDeleteHighlight}
+                />
+                {/* Page number indicator */}
+                <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+                  {pageNum} / {numPages}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </Document>
       </div>
     </div>

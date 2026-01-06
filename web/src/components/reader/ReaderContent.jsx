@@ -107,6 +107,8 @@ const ReaderContent = memo(function ReaderContent({
             onPageChange={onPageChange}
             onScroll={onScroll}
             initialPage={initialPage}
+            highlights={highlights}
+            onDeleteHighlight={onDeleteHighlight}
           />
         )
 

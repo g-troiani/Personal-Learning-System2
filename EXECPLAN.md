@@ -20,7 +20,8 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Upload/processing → `.claude/memory/milestones/sources_feature.md`
    - Performance issues → `.claude/memory/milestones/speed_optimization.md`
    - Document Reader (M30-M37) → See completed milestones in Progress section
-   - Document Viewer Fidelity (M38) → `NEW FEATURES.md` (full implementation plan)
+   - Document Viewer Fidelity (M38) → Complete
+   - PDF Highlighting (M39) → `NEW FEATURES.md` (full implementation plan)
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
 
@@ -50,6 +51,8 @@ The system solves five problems. First, it eliminates the "I don't know what I d
 **Document Reader Feature (M30-M37):** After these milestones, users can read uploaded documents directly in the browser before starting practice. The workflow becomes: upload → read/study → practice, with documents always one click away. Users navigate to `/reader/:sourceId` to view PDFs or Markdown with a Table of Contents in the sidebar, take notes, highlight text, and ask AI questions about the content.
 
 **Document Viewer Fidelity (M38):** This milestone fixes a critical gap where DOCX files render as plain text, losing all formatting. After M38, uploaded DOCX files display with full visual fidelity—headings, tables, images, colors, and formatting preserved—using the `docx-preview` library for client-side rendering.
+
+**PDF Highlighting (M39):** This milestone implements PDF-specific highlighting. Currently, highlights save to the database but don't render in PDFs because the prop isn't passed and the positioning system is incompatible. After M39, users can highlight PDF text and see those highlights persist across sessions using page-based percentage coordinates.
 
 
 ## Progress
@@ -112,6 +115,16 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M38 Research: 6 parallel worktrees, docx-preview recommendation (2026-01-06)
 - [x] M38 Implementation: DOCX high-fidelity rendering with docx-preview (2026-01-06)
 
+**PDF Highlighting (M39)** - Complete
+- [x] M39 Research: 6 parallel worktrees, validated architecture (2026-01-06)
+- [x] M39 Implementation: PDF page-based highlighting with PDFHighlightLayer (2026-01-06)
+  - Phase 0: Wired up highlights prop to PDFRenderer in ReaderContent.jsx
+  - Phase 1: Database migration added position_type and pdf_rects columns
+  - Phase 2: Updated useTextSelection for PDF-aware page-based selection
+  - Phase 3: Updated PDFRenderer with data-page-number attributes
+  - Phase 4: Created PDFHighlightLayer component for overlay rendering
+  - Phase 5: Updated useAnnotations to handle PDF position type and sorting
+
 
 ## Surprises and Discoveries
 
@@ -129,6 +142,7 @@ Key lessons learned during implementation:
 - Always use polling fallback alongside Realtime subscriptions
 - Python library v2.27.0+ required for newer key formats
 - **M30 Migration:** The `migrations/m30_document_reader.sql` must be fully applied for annotations to persist.
+- **M39 PDF Positioning:** PDF highlights use percentage-based coordinates (x%, y%, width%, height%) relative to page dimensions to survive zoom/scale changes. Character offsets from Markdown/Text are incompatible with PDF's multi-page structure.
 
 **Python 3.9 Compatibility:**
 - Use `Optional[X]` instead of `X | None`, `List[Dict]` instead of `list[dict]`
@@ -204,6 +218,10 @@ Recent decisions only below. See archives for full rationale.
   **Rationale:** (1) No server infrastructure changes required - works with Netlify + Supabase architecture. (2) 1-2 day implementation vs 3-5 days for server PDF. (3) Native HTML output enables text selection and existing AnnotationLayer. (4) ~1.7MB bundle addition acceptable for document viewer. (5) 168 projects use it in production. Server-side LibreOffice option remains as fallback if fidelity insufficient.
   **Date:** 2026-01-06
 
+- **Decision:** Use page-based percentage coordinates for PDF highlights instead of character offsets
+  **Rationale:** (1) Character offsets are unstable for PDFs - text layer ordering can change between PDF.js versions. (2) Each PDF page is an isolated DOM subtree, making cumulative offsets impossible. (3) Percentage-based coordinates survive zoom/scale changes. (4) Existing AnnotationLayer with TreeWalker is incompatible with PDF's absolute-positioned text layer.
+  **Date:** 2026-01-06
+
 
 ## Outcomes and Retrospective
 
@@ -221,7 +239,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through thirty-eight milestones. All milestones (1-38) are complete. The system now supports high-fidelity DOCX rendering in the Document Reader.
+Implementation proceeds through thirty-nine milestones. M1-M38 are complete. M39 (PDF Highlighting) is pending implementation.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -235,7 +253,9 @@ Implementation proceeds through thirty-eight milestones. All milestones (1-38) a
 
 **Document Reader Feature (Complete):** M30: Core infrastructure (database, storage, route). M31: Sidebar TOC integration. M32: Document rendering (PDF, Markdown, text). M33: Navigation entry points. M34: Text selection and highlights. M35: Assistant panel (notes, AI chat). M36: Reading progress tracking. M37: Polish and performance.
 
-**Document Viewer Fidelity (Pending):** M38: DOCX high-fidelity rendering with docx-preview (client-side). See `NEW FEATURES.md` for full implementation plan.
+**Document Viewer Fidelity (Complete):** M38: DOCX high-fidelity rendering with docx-preview (client-side).
+
+**PDF Highlighting (Pending):** M39: Page-based PDF highlighting with percentage coordinates. See `NEW FEATURES.md` for full implementation plan.
 
 
 ## CLI Usage Reference
@@ -738,6 +758,47 @@ If docx-preview fidelity is insufficient for specific documents, consider implem
 - Using existing PDFRenderer for display
 
 
+### Milestone 39: PDF Highlighting (PENDING)
+
+At the end of this milestone, users can highlight text in PDFs and see those highlights persist across sessions.
+
+**The Problem:**
+
+PDF highlighting is not implemented. The UI exists (SelectionTooltip, useTextSelection, useAnnotations), highlights save to database, but:
+1. `ReaderContent.jsx` does NOT pass `highlights` prop to `PDFRenderer`
+2. `PDFRenderer.jsx` has NO highlight rendering logic
+3. Offset-based positioning is incompatible with PDF's multi-page structure
+
+**The Solution:**
+
+Implement page-based highlighting with percentage coordinates. Create `PDFHighlightLayer` component that renders absolute-positioned overlays per page.
+
+**Full specs:** `NEW FEATURES.md` (root directory) contains complete implementation plan with 6 phases, code examples, schema migration, and testing checklist.
+
+**Work:**
+
+1. Wire up existing props (5 min) - Pass highlights to PDFRenderer in ReaderContent.jsx
+2. Database schema (10 min) - Add `position_type`, `pdf_rects` columns to annotations
+3. PDF selection capture (2 hrs) - Detect PDF pages, capture pageNumber and percentage-based pdfRect
+4. PDFRenderer updates (30 min) - Accept highlights prop, add data-page-number attributes
+5. PDFHighlightLayer (2 hrs) - Create per-page highlight overlay component
+6. useAnnotations update (1 hr) - Handle PDF position type in createHighlight
+
+**Verification:**
+
+1. Select text on page 1 of a PDF
+2. Click Highlight in tooltip
+3. Yellow highlight appears at correct position
+4. Refresh page - highlight persists
+5. Navigate to different page, return - highlight still visible
+6. Click highlight to delete - highlight removed
+
+**Known Limitations:**
+
+- No cross-page selection (react-pdf limitation)
+- No rotation support (deferred)
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -762,3 +823,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-04: M24-M29 Agent memory system implementation
 - 2026-01-05: M30-M37 Document Reader feature complete (AlphaXiv-style reader with zen mode, AI chat, highlights, reading progress)
 - 2026-01-06: M38 Complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview, text selection, highlights)
+- 2026-01-06: M39 Research Complete - PDF Highlighting (6 worktrees, page-based architecture validated)

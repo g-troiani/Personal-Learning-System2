@@ -1,478 +1,403 @@
-# Document Viewer Fidelity Improvement
+# PDF Highlighting Implementation Plan
 
-**Consolidated Implementation Plan**
+**Consolidated Research from 6 Worktrees**
 **Date:** 2026-01-06
-**Target:** Render uploaded documents with full visual fidelity (AlphaXiv-style)
+**Target:** Implement working PDF highlighting with proper architecture
 
 ---
 
 ## Executive Summary
 
-The current document viewer renders DOCX files as plain text, losing all formatting (headings, tables, images, colors, fonts). This plan consolidates research from 6 parallel worktrees to deliver a production-ready solution.
+**Critical Finding:** PDF highlighting is **NOT IMPLEMENTED** in the current codebase.
 
-**The Problem:**
-- DOCX files → extracted as plain text via `python-docx` → displayed with line numbers
-- Users see: "Chapter 1" instead of "**Chapter 1**" with proper heading styling
-- Lost: headings, bold/italic, colors, tables, images, lists, alignment
+The UI components exist (SelectionTooltip, useTextSelection, useAnnotations), and highlights are correctly saved to the database. However:
+1. `ReaderContent.jsx` does **NOT pass** `highlights` prop to `PDFRenderer`
+2. `PDFRenderer.jsx` has **NO highlight rendering logic**
+3. The offset-based positioning used for Markdown/DOCX is **incompatible** with PDF's multi-page structure
 
-**The Solution:**
-- **Primary:** Client-side DOCX rendering with `docx-preview` library
-- **Alternative:** Server-side DOCX→PDF conversion with LibreOffice (higher fidelity, more complex)
+**Implementation Verdict Across All Worktrees:**
 
-**Implementation Timeline:** 4-6 days for core functionality
-
----
-
-## Research Summary (6 Worktrees)
-
-| Worktree | Key Finding |
-|----------|-------------|
-| **UI/UX** | docx-preview recommended; most AlphaXiv patterns already implemented |
-| **Data Model** | Need `document_versions` table + dual annotation schema (offset + page_rect) |
-| **Upload Pipeline** | LibreOffice + unoserver for server-side PDF conversion (alternative approach) |
-| **Rendering Engine** | docx-preview best for client-side; mammoth.js insufficient fidelity |
-| **Format Handling** | DOCX highest priority; PDF virtualization for large docs; add math to Markdown |
-| **Integration** | KC extraction unaffected; annotations need dual-schema; backward compatible |
+| Worktree | Component | Verdict |
+|----------|-----------|---------|
+| UI/UX | SelectionTooltip, colors | VALID (minor fixes) |
+| Data Model | Annotations schema | NEEDS CHANGES for PDF |
+| Text Selection | useTextSelection hook | VALID, critical PDF prop bug |
+| Annotation Rendering | AnnotationLayer | VALID for HTML, N/A for PDF |
+| PDF-Specific | react-pdf integration | NEEDS NEW IMPLEMENTATION |
+| System Integration | AI, progress, learning | VALID, highlights not wired |
 
 ---
 
-## Architecture Decision
+## Research Summary
 
-### Recommended: Client-Side docx-preview
+### 1. UI/UX Research (highlight-worktrees/ui-ux)
 
-**Why:**
-1. No server infrastructure changes required
-2. 1-2 day implementation vs 3-5 days for server PDF
-3. Native HTML output enables text selection and existing AnnotationLayer
-4. 168 projects use it in production
-5. ~1.7MB bundle addition (acceptable for document viewer)
+**Status:** VALID with minor improvements needed
 
-**Trade-offs:**
-- No page breaks (continuous scroll vs paginated PDF)
-- Font substitution if system fonts differ from document fonts
-- Complex tables may render imperfectly
+**What Works:**
+- One-click highlight matches Kindle UX pattern
+- Smooth animations with CSS keyframes
+- Click-outside handling via class detection
+- Copy feedback with confirmation state
+- Real-time Supabase sync
 
-### Alternative: Server-Side PDF Conversion
+**Issues Found:**
+| Issue | Severity | Fix |
+|-------|----------|-----|
+| PDF scroll container mismatch | HIGH | Use container scroll, not window.scrollY |
+| No vertical boundary check | MEDIUM | Flip tooltip below if near top |
+| Unused color picker | LOW | Implement or remove dead code |
+| No touch/mobile handling | LOW | Add touchend listener |
 
-Use if client-side fidelity is insufficient:
+### 2. Data Model Research (highlight-worktrees/data-model)
 
-```
-Upload DOCX → LibreOffice headless → PDF → Supabase Storage → PDFRenderer
-```
+**Status:** NEEDS CHANGES for PDF
 
-**When to consider:**
-- Academic papers requiring page break fidelity
-- Complex documents with precise layouts
-- Already running LibreOffice in infrastructure
+**Current Schema Works For:** Markdown, DOCX, Text (offset-based)
 
----
+**Problem for PDFs:**
+- PDF text layer offsets are unstable across PDF.js versions
+- Multi-column layouts extract text in unexpected order
+- Each page resets offset to 0 (not cumulative)
 
-## Implementation Plan
-
-### Phase 1: DOCX Client-Side Rendering (Priority: P0)
-
-**Time:** 1-2 days | **Impact:** High | **Risk:** Low
-
-#### 1.1 Install Dependencies
-
-```bash
-cd web && npm install docx-preview
-# JSZip is a peer dependency, installed automatically
+**Required Schema Extension:**
+```sql
+ALTER TABLE annotations ADD COLUMN IF NOT EXISTS position_type TEXT DEFAULT 'offset';
+ALTER TABLE annotations ADD COLUMN IF NOT EXISTS pdf_rect JSONB;
+-- pdf_rect: {"page": 1, "x": %, "y": %, "width": %, "height": %}
 ```
 
-#### 1.2 Create DOCXRenderer Component
+### 3. Text Selection Research (highlight-worktrees/text-selection)
 
-**File:** `web/src/components/reader/DOCXRenderer.jsx`
+**Status:** VALID algorithm, CRITICAL BUG in prop passing
 
+**Offset Calculation:** Correct for text-based documents
+
+**CRITICAL BUG Found:**
 ```jsx
-import { useState, useEffect, useRef, memo } from 'react'
-import { renderAsync } from 'docx-preview'
-import { Loader2 } from 'lucide-react'
-
-const DOCXRenderer = memo(function DOCXRenderer({
-  fileUrl,
-  highlights = [],
-  onDeleteHighlight
-}) {
-  const containerRef = useRef(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    if (!fileUrl) {
-      setError('No document URL provided')
-      setLoading(false)
-      return
-    }
-
-    async function render() {
-      setLoading(true)
-      setError(null)
-
-      try {
-        const response = await fetch(fileUrl)
-        if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`)
-
-        const arrayBuffer = await response.arrayBuffer()
-
-        await renderAsync(arrayBuffer, containerRef.current, {
-          inWrapper: true,
-          ignoreWidth: false,
-          ignoreHeight: false,
-          ignoreFonts: false,
-          breakPages: false,
-          useBase64URL: true,
-          className: 'docx-wrapper'
-        })
-
-        setLoading(false)
-      } catch (err) {
-        console.error('DOCX render error:', err)
-        setError('Failed to render document')
-        setLoading(false)
-      }
-    }
-
-    render()
-  }, [fileUrl])
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="flex flex-col items-center gap-3 text-gray-400">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span>Rendering document...</span>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full text-red-400">
-        {error}
-      </div>
-    )
-  }
-
+// ReaderContent.jsx - PDF case DOES NOT pass highlights
+case 'pdf':
   return (
-    <div className="h-full overflow-auto bg-white">
-      <div
-        ref={containerRef}
-        className="docx-container mx-auto max-w-4xl p-8"
-      />
-    </div>
+    <PDFRenderer
+      fileUrl={fileUrl}
+      onPageChange={onPageChange}
+      // MISSING: highlights={highlights}
+      // MISSING: onDeleteHighlight={onDeleteHighlight}
+    />
   )
-})
-
-export default DOCXRenderer
 ```
 
-#### 1.3 Add DOCX Styles
+**Cross-Page Selection:** Not supported by react-pdf (each page is isolated DOM)
 
-**File:** `web/src/styles/docx.css`
+### 4. Annotation Rendering Research (highlight-worktrees/rendering)
 
-```css
-/* Scope docx-preview styles */
-.docx-container {
-  font-family: 'Calibri', 'Arial', sans-serif;
-}
+**Status:** VALID for HTML, requires new component for PDF
 
-.docx-container .docx-wrapper {
-  background: white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  padding: 2rem;
-  border-radius: 4px;
-}
+**TreeWalker Approach:** Works for Markdown/DOCX because content is native HTML text nodes.
 
-/* Ensure tables are visible */
-.docx-container table {
-  border-collapse: collapse;
-  width: 100%;
-}
+**Why It Fails for PDF:**
+1. Text layer uses absolute positioning with PDF coordinates
+2. Character offsets per page, not continuous
+3. Canvas renders actual text; text layer is invisible overlay
 
-.docx-container td, .docx-container th {
-  border: 1px solid #ddd;
-  padding: 8px;
-}
+**Solution:** Create `PDFAnnotationLayer` with page-based rectangle rendering
 
-/* Images responsive */
-.docx-container img {
-  max-width: 100%;
-  height: auto;
-}
+### 5. PDF-Specific Research (highlight-worktrees/pdf-specific)
+
+**Status:** NEEDS NEW IMPLEMENTATION
+
+**react-pdf Capabilities:**
+- `renderTextLayer={true}` enables native browser selection
+- Selection accessible via `window.getSelection()`
+- NO built-in highlight persistence
+- NO cross-page selection
+
+**Known react-pdf Issues:**
+- [#101](https://github.com/wojtekmaj/react-pdf/issues/101): Text selection jumps (div ordering)
+- [#279](https://github.com/wojtekmaj/react-pdf/issues/279): No highlight example
+
+**Required Architecture:**
+```
+┌─────────────────────────────────────────┐
+│ PDF Page Container                       │
+│ ├── Canvas Layer (PDF rendering)        │
+│ ├── Text Layer (invisible, for select)  │
+│ └── Highlight Layer (NEW - absolute)    │← Implement this
+└─────────────────────────────────────────┘
 ```
 
-#### 1.4 Update ReaderContent.jsx
+### 6. System Integration Research (highlight-worktrees/integration)
+
+**Status:** VALID, but PDF highlights not wired
+
+**Working:**
+- "Ask AI" with selected text
+- Reading progress tracking
+- Annotation storage
+- Real-time subscriptions
+- Markdown/DOCX/Text highlighting
+
+**Not Working:**
+- PDF highlight display (prop not passed)
+- PDF highlight creation (no page context captured)
+
+---
+
+## Consolidated Implementation Plan
+
+### Phase 0: Wire Up Existing Props (P0 - 5 minutes)
 
 **File:** `web/src/components/reader/ReaderContent.jsx`
 
 ```diff
-+ import DOCXRenderer from './DOCXRenderer'
-
-function getContentType(mimeType, title) {
-  if (title) {
-    const ext = title.toLowerCase().split('.').pop()
-    if (ext === 'pdf') return 'pdf'
-    if (ext === 'md' || ext === 'markdown') return 'markdown'
-    if (ext === 'txt') return 'text'
--   if (ext === 'docx' || ext === 'doc') return 'text'
-+   if (ext === 'docx' || ext === 'doc') return 'docx'
-  }
-  // ... rest unchanged
-}
-
-// In renderContent() switch:
-+ case 'docx':
-+   if (!fileUrl) {
-+     return (
-+       <FallbackView
-+         message="Document file not available"
-+         hint="The original file may have been uploaded before file storage was enabled."
-+       />
-+     )
-+   }
-+   return (
-+     <DOCXRenderer
-+       fileUrl={fileUrl}
-+       highlights={highlights}
-+       onDeleteHighlight={onDeleteHighlight}
-+     />
-+   )
+case 'pdf':
+  return (
+    <PDFRenderer
+      fileUrl={fileUrl}
+      onPageChange={onPageChange}
+      onScroll={onScroll}
+      initialPage={initialPage}
++     highlights={highlights}
++     onDeleteHighlight={onDeleteHighlight}
+    />
+  )
 ```
 
-#### 1.5 Verification
-
-- [ ] Upload a DOCX file with headings, tables, images
-- [ ] Navigate to `/reader/:sourceId`
-- [ ] Verify headings are styled correctly
-- [ ] Verify tables are rendered with borders
-- [ ] Verify images are displayed
-- [ ] Verify text selection works
+This alone won't make PDF highlighting work (PDFRenderer doesn't render them), but it's the necessary first step.
 
 ---
 
-### Phase 2: Annotation System Updates (Priority: P1)
+### Phase 1: Database Schema (P0 - 10 minutes)
 
-**Time:** 2-3 days | **Impact:** Medium | **Risk:** Medium
-
-#### 2.1 Database Schema Changes
-
-**File:** `migrations/m38_document_versions.sql`
+**File:** `migrations/m39_pdf_annotations.sql`
 
 ```sql
--- M38: Document Viewer Fidelity - Schema Updates
--- Run in Supabase SQL Editor
+-- M39: PDF Annotation Support
+-- Add page-based positioning for PDF highlights
 
--- 1. Create document_versions table for converted formats
-CREATE TABLE IF NOT EXISTS document_versions (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
-    version_type TEXT NOT NULL,  -- 'html', 'thumbnail', 'pdf'
-    format TEXT NOT NULL,        -- MIME type
-    storage_path TEXT,           -- Path in Supabase Storage (NULL if inline)
-    inline_content TEXT,         -- For small content stored in DB
-    file_size_bytes BIGINT,
-    converter_name TEXT,         -- 'docx-preview', 'mammoth', 'libreoffice'
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(source_id, version_type)
-);
+-- 1. Add position type discriminator
+ALTER TABLE annotations
+ADD COLUMN IF NOT EXISTS position_type TEXT DEFAULT 'offset'
+CHECK (position_type IN ('offset', 'page_rect'));
 
-CREATE INDEX IF NOT EXISTS idx_document_versions_source ON document_versions(source_id);
+-- 2. Add PDF page-based coordinates
+-- Format: [{"page": 1, "x": 10, "y": 20, "width": 30, "height": 5}]
+ALTER TABLE annotations
+ADD COLUMN IF NOT EXISTS pdf_rects JSONB;
 
--- 2. Extend annotations for multi-format positioning
-ALTER TABLE annotations ADD COLUMN IF NOT EXISTS position_type TEXT DEFAULT 'offset';
-ALTER TABLE annotations ADD COLUMN IF NOT EXISTS pdf_rect JSONB;
-ALTER TABLE annotations ADD COLUMN IF NOT EXISTS html_xpath TEXT;
-
--- 3. Extend content_sources for conversion tracking
-ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS has_html_version BOOLEAN DEFAULT FALSE;
-ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS page_count INTEGER;
-
--- 4. Migrate existing annotations
+-- 3. Migrate existing annotations
 UPDATE annotations
 SET position_type = 'offset'
 WHERE position_type IS NULL;
 
--- 5. Create thumbnails bucket (public for fast loading)
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-  'thumbnails',
-  'thumbnails',
-  true,
-  1048576,
-  ARRAY['image/png', 'image/jpeg', 'image/webp']
-) ON CONFLICT (id) DO NOTHING;
-
--- 6. Enable realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE document_versions;
+-- 4. Index for filtering
+CREATE INDEX IF NOT EXISTS idx_annotations_position_type
+ON annotations(source_id, position_type);
 ```
 
-#### 2.2 Update useAnnotations Hook
+---
 
-Support dual positioning (offset for text, page_rect for PDF):
+### Phase 2: PDF Selection Capture (P0 - 2 hours)
+
+**File:** `web/src/hooks/useTextSelection.js`
+
+Add PDF-aware selection that captures page context:
 
 ```javascript
-// In useAnnotations.js - createAnnotation function
-function createAnnotation(selection, contentType) {
-  const annotation = {
+const getSelectionInfo = useCallback(() => {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed) return null
+
+  const text = selection.toString().trim()
+  if (text.length < 3) return null
+
+  const range = selection.getRangeAt(0)
+  const rect = range.getBoundingClientRect()
+
+  // Detect if selection is within a PDF page
+  const pageElement = range.startContainer.parentElement?.closest('[data-page-number]')
+
+  if (pageElement) {
+    // PDF selection - use page-based positioning
+    const pageNumber = parseInt(pageElement.dataset.pageNumber, 10)
+    const pageRect = pageElement.getBoundingClientRect()
+
+    return {
+      text,
+      isPDF: true,
+      pageNumber,
+      pdfRect: {
+        page: pageNumber,
+        x: ((rect.left - pageRect.left) / pageRect.width) * 100,
+        y: ((rect.top - pageRect.top) / pageRect.height) * 100,
+        width: (rect.width / pageRect.width) * 100,
+        height: (rect.height / pageRect.height) * 100
+      },
+      rect: {
+        tooltipX: rect.left + (rect.width / 2),
+        tooltipY: rect.top,
+        width: rect.width,
+        height: rect.height
+      }
+    }
+  }
+
+  // Non-PDF selection - use existing offset logic
+  // ... existing offset calculation ...
+}, [containerRef])
+```
+
+---
+
+### Phase 3: PDFRenderer Props & Page Data Attributes (P0 - 30 minutes)
+
+**File:** `web/src/components/reader/PDFRenderer.jsx`
+
+1. Accept highlights prop
+2. Add data-page-number to each page container
+3. Pass to PDFAnnotationLayer
+
+```diff
+const PDFRenderer = memo(function PDFRenderer({
+  fileUrl,
+  onPageChange,
+  onScroll,
+  initialPage = 1,
++ highlights = [],
++ onDeleteHighlight
+}) {
+```
+
+```diff
+<div
+  key={`page_${index + 1}`}
+  ref={(el) => { pageRefs.current[index + 1] = el }}
+  className="relative"
++ data-page-number={index + 1}
+>
+  <Page pageNumber={index + 1} ... />
++ <PDFHighlightLayer
++   pageNumber={index + 1}
++   highlights={highlights.filter(h => h.page_number === index + 1)}
++   onDeleteHighlight={onDeleteHighlight}
++ />
+</div>
+```
+
+---
+
+### Phase 4: PDFHighlightLayer Component (P1 - 2 hours)
+
+**File:** `web/src/components/reader/PDFHighlightLayer.jsx`
+
+```jsx
+import { memo, useState } from 'react'
+import { Trash2 } from 'lucide-react'
+
+const PDFHighlightLayer = memo(function PDFHighlightLayer({
+  pageNumber,
+  highlights,
+  onDeleteHighlight
+}) {
+  const [hoveredId, setHoveredId] = useState(null)
+
+  if (!highlights || highlights.length === 0) return null
+
+  return (
+    <div className="absolute inset-0 pointer-events-none">
+      {highlights.map(highlight => {
+        const rects = highlight.pdf_rects || []
+
+        return rects
+          .filter(r => r.page === pageNumber)
+          .map((rect, i) => (
+            <div
+              key={`${highlight.id}-${i}`}
+              className="absolute pointer-events-auto cursor-pointer transition-all hover:brightness-90"
+              style={{
+                left: `${rect.x}%`,
+                top: `${rect.y}%`,
+                width: `${rect.width}%`,
+                height: `${rect.height}%`,
+                backgroundColor: highlight.color || '#FFEB3B',
+                opacity: 0.4,
+                borderRadius: '2px'
+              }}
+              onMouseEnter={() => setHoveredId(highlight.id)}
+              onMouseLeave={() => setHoveredId(null)}
+              onClick={() => onDeleteHighlight?.(highlight.id)}
+            >
+              {hoveredId === highlight.id && (
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
+                  <Trash2 className="w-3 h-3" /> Delete
+                </div>
+              )}
+            </div>
+          ))
+      })}
+    </div>
+  )
+})
+
+export default PDFHighlightLayer
+```
+
+---
+
+### Phase 5: Update useAnnotations for PDF (P1 - 1 hour)
+
+**File:** `web/src/hooks/useAnnotations.js`
+
+Modify `createHighlight` to handle PDF selections:
+
+```javascript
+const createHighlight = async (selection, color = '#FFEB3B') => {
+  const newAnnotation = {
+    id: `temp_${Date.now()}`,
     source_id: sourceId,
     annotation_type: 'highlight',
     selected_text: selection.text.substring(0, 500),
-    start_offset: selection.startOffset,
-    end_offset: selection.endOffset,
-    position_type: 'offset', // Default
+    color,
+    created_at: new Date().toISOString()
   }
 
-  // For PDF, add page-based coordinates
-  if (contentType === 'pdf' && selection.pageRect) {
-    annotation.position_type = 'page_rect'
-    annotation.page_number = selection.pageNumber
-    annotation.pdf_rect = selection.pageRect
+  if (selection.isPDF) {
+    // PDF-specific positioning
+    newAnnotation.position_type = 'page_rect'
+    newAnnotation.page_number = selection.pageNumber
+    newAnnotation.pdf_rects = [selection.pdfRect]
+  } else {
+    // Offset-based positioning (existing logic)
+    newAnnotation.position_type = 'offset'
+    newAnnotation.start_offset = selection.startOffset
+    newAnnotation.end_offset = selection.endOffset
   }
 
-  return annotation
+  // ... rest of optimistic update logic
 }
 ```
 
 ---
 
-### Phase 3: UI Polish (Priority: P2)
+### Phase 6: Minor UI Fixes (P2 - 1 hour)
 
-**Time:** 1-2 days | **Impact:** Medium | **Risk:** Low
+**File:** `web/src/components/reader/SelectionTooltip.jsx`
 
-#### 3.1 Unified Document Toolbar
-
-Extract toolbar from PDFRenderer into shared component:
-
-```jsx
-// web/src/components/reader/DocumentToolbar.jsx
-export default function DocumentToolbar({
-  title,
-  hasZoom,
-  hasPages,
-  currentPage,
-  totalPages,
-  zoom,
-  onZoomChange,
-  onPageChange,
-  onZenModeToggle,
-  zenMode
-}) {
-  return (
-    <div className="flex items-center justify-between px-4 py-2 border-b bg-white">
-      <div className="flex items-center gap-2">
-        <h1 className="text-lg font-medium truncate max-w-md">{title}</h1>
-      </div>
-
-      <div className="flex items-center gap-4">
-        {hasZoom && (
-          <div className="flex items-center gap-2">
-            <button onClick={() => onZoomChange(zoom - 0.25)}>-</button>
-            <span>{Math.round(zoom * 100)}%</span>
-            <button onClick={() => onZoomChange(zoom + 0.25)}>+</button>
-          </div>
-        )}
-
-        {hasPages && (
-          <div className="flex items-center gap-2">
-            <button onClick={() => onPageChange(currentPage - 1)}>←</button>
-            <span>{currentPage} / {totalPages}</span>
-            <button onClick={() => onPageChange(currentPage + 1)}>→</button>
-          </div>
-        )}
-
-        <button onClick={onZenModeToggle}>
-          {zenMode ? 'Exit Zen' : 'Zen Mode'}
-        </button>
-      </div>
-    </div>
-  )
+1. Add vertical boundary check:
+```javascript
+let top = selection.rect.tooltipY - tooltipRect.height - 8
+if (top < 10) {
+  top = selection.rect.tooltipY + selection.rect.height + 8
 }
 ```
 
-#### 3.2 View Mode Toggle
+2. Either implement color picker or remove dead code
 
-Add ability to switch between rendered view and text view:
+**File:** `web/src/hooks/useTextSelection.js`
 
-```jsx
-// In DocumentReader.jsx
-const [viewMode, setViewMode] = useState('rendered') // 'rendered' | 'text'
-
-{viewMode === 'rendered' ? (
-  <DOCXRenderer fileUrl={fileUrl} />
-) : (
-  <TextRenderer content={extractedContent} />
-)}
-```
-
----
-
-### Phase 4: Server-Side PDF Conversion (Optional, P3)
-
-**Time:** 3-5 days | **Impact:** High | **Risk:** High
-
-Only implement if client-side docx-preview fidelity is insufficient.
-
-#### 4.1 Install LibreOffice + unoserver
-
-```dockerfile
-# Add to Dockerfile
-RUN apt-get update && apt-get install -y \
-    libreoffice \
-    fonts-liberation \
-    fonts-dejavu \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install unoserver
-```
-
-#### 4.2 Converter Module
-
-**File:** `learn_system/app/ingestion/converter.py`
-
-```python
-"""Document conversion utilities using LibreOffice."""
-
-import subprocess
-import tempfile
-from pathlib import Path
-from typing import Optional
-
-class ConversionError(Exception):
-    pass
-
-def convert_docx_to_pdf(docx_path: str, output_dir: Optional[str] = None) -> str:
-    """Convert DOCX to PDF using LibreOffice headless."""
-    input_path = Path(docx_path)
-    output_dir = output_dir or input_path.parent
-    output_path = Path(output_dir) / f"{input_path.stem}.pdf"
-
-    try:
-        subprocess.run([
-            'soffice', '--headless', '--convert-to', 'pdf',
-            '--outdir', str(output_dir), str(input_path)
-        ], check=True, timeout=60)
-
-        return str(output_path)
-    except subprocess.CalledProcessError as e:
-        raise ConversionError(f"LibreOffice conversion failed: {e}")
-    except subprocess.TimeoutExpired:
-        raise ConversionError("Conversion timed out")
-```
-
-#### 4.3 Modify Upload Pipeline
-
-```python
-# In sources.py upload endpoint
-if ext == '.docx':
-    try:
-        pdf_path = convert_docx_to_pdf(temp_path)
-        storage_path_pdf = upload_to_storage(source_id, pdf_content, f"{source_id}.pdf")
-        # Update DB with storage_path_pdf
-    except ConversionError as e:
-        # Continue without PDF - reader will use docx-preview
-        logger.warning(f"DOCX conversion failed: {e}")
+1. Increase debounce for mobile:
+```javascript
+const SELECTION_DEBOUNCE = /Mobile|Android/i.test(navigator.userAgent) ? 100 : 10
 ```
 
 ---
@@ -483,97 +408,79 @@ if ext == '.docx':
 
 | File | Purpose |
 |------|---------|
-| `web/src/components/reader/DOCXRenderer.jsx` | Client-side DOCX rendering |
-| `web/src/styles/docx.css` | DOCX-specific styles |
-| `migrations/m38_document_versions.sql` | Schema updates |
-| `learn_system/app/ingestion/converter.py` | Server-side conversion (optional) |
+| `migrations/m39_pdf_annotations.sql` | Schema for PDF positioning |
+| `web/src/components/reader/PDFHighlightLayer.jsx` | Per-page highlight overlay |
 
 ### Modified Files
 
 | File | Change |
 |------|--------|
-| `web/src/components/reader/ReaderContent.jsx` | Add 'docx' content type routing |
-| `web/src/hooks/useAnnotations.js` | Support dual position types |
-| `web/package.json` | Add docx-preview dependency |
+| `web/src/components/reader/ReaderContent.jsx` | Pass highlights to PDFRenderer |
+| `web/src/components/reader/PDFRenderer.jsx` | Accept highlights, add page data attributes |
+| `web/src/hooks/useTextSelection.js` | PDF-aware selection capture |
+| `web/src/hooks/useAnnotations.js` | Handle PDF position type |
+| `web/src/components/reader/SelectionTooltip.jsx` | Boundary fixes |
 
 ---
 
-## Success Criteria
+## Effort Estimates
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| DOCX heading visibility | 0% | 100% |
-| DOCX formatting preservation | ~10% | ~85% |
-| DOCX table rendering | Text only | Full structure |
-| DOCX image display | None | Embedded images visible |
-| Bundle size increase | - | < 2MB |
-
----
-
-## Risks and Mitigations
-
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| docx-preview fidelity insufficient | Low | High | Fall back to server PDF conversion |
-| Large DOCX performance | Medium | Medium | Add loading skeleton, chunked rendering |
-| Annotation system breaks | Low | High | Keep offset-based as fallback |
-| Font substitution issues | Medium | Low | Document known font issues |
+| Phase | Task | Effort |
+|-------|------|--------|
+| Phase 0 | Wire up props | 5 min |
+| Phase 1 | Database schema | 10 min |
+| Phase 2 | PDF selection capture | 2 hours |
+| Phase 3 | PDFRenderer updates | 30 min |
+| Phase 4 | PDFHighlightLayer | 2 hours |
+| Phase 5 | useAnnotations update | 1 hour |
+| Phase 6 | UI fixes | 1 hour |
+| **Total** | | **~7 hours** |
 
 ---
 
 ## Testing Checklist
 
-### Phase 1 Verification
-- [ ] DOCX with headings (H1, H2, H3) renders correctly
-- [ ] DOCX with bold, italic, underline visible
-- [ ] DOCX tables render with borders
-- [ ] DOCX images display inline
-- [ ] DOCX bullet/numbered lists formatted
-- [ ] Text selection works in rendered DOCX
-- [ ] Existing PDF rendering unchanged
-- [ ] Existing Markdown rendering unchanged
-- [ ] Existing Text rendering unchanged
+### PDF Highlighting
+- [ ] Select text on page 1 of PDF
+- [ ] Tooltip appears above selection
+- [ ] Click Highlight creates yellow highlight
+- [ ] Highlight persists after page refresh
+- [ ] Highlight appears at correct position
+- [ ] Clicking highlight shows delete option
+- [ ] Delete removes highlight from page and DB
+- [ ] Multi-line selection within page works
+- [ ] Different pages have separate highlights
 
-### Phase 2 Verification
-- [ ] Existing text/markdown highlights still work
-- [ ] New DOCX highlights save to database
-- [ ] Highlights persist after page refresh
-- [ ] "Ask AI" works from DOCX selection
-- [ ] Copy works from DOCX selection
+### Existing Functionality Preserved
+- [ ] Markdown highlighting still works
+- [ ] DOCX highlighting still works
+- [ ] Text highlighting still works
+- [ ] "Ask AI" still works
+- [ ] "Copy" still works
+- [ ] Reading progress still tracks
 
-### Phase 3 Verification
-- [ ] Unified toolbar shows on all document types
-- [ ] View mode toggle switches between rendered/text
-- [ ] Responsive layout works at all breakpoints
+### Edge Cases
+- [ ] Zoom in/out preserves highlight positions
+- [ ] Very long selections (full paragraph) work
+- [ ] Highlights near page edges display correctly
+- [ ] Mobile selection works (50ms+ debounce)
+
+---
+
+## Known Limitations (Accepted)
+
+1. **No cross-page selection** - react-pdf limitation, each page is isolated
+2. **No rotation support** - Deferred for future milestone
+3. **Text layer ordering** - May cause selection jumps (react-pdf issue #101)
 
 ---
 
 ## Research Worktree References
 
-Full research documents available in:
-
-- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-ui-ux/DOCUMENT_VIEWER_FIDELITY_UX_RESEARCH.md`
-- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-data-model/NEW FEATURES.md`
-- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-upload-pipeline/NEW FEATURES.md`
-- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-rendering-engine/NEW FEATURES.md`
-- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-format-handling/NEW FEATURES.md`
-- `/Users/gianmariatroiani/Downloads/Gian Vision/code/research-integration/NEW FEATURES.md`
-
----
-
-## Appendix: Alternative Approaches Evaluated
-
-### Mammoth.js (Rejected)
-- Produces semantic HTML but loses visual formatting
-- Font sizes, colors, alignment not preserved
-- Suitable for content extraction, not display
-
-### react-doc-viewer (Evaluated)
-- Generic document viewer
-- Less control over DOCX rendering
-- Heavier bundle
-
-### Apryse/PSPDFKit (Commercial)
-- Excellent fidelity
-- Requires commercial license
-- Overkill for this use case
+Full research documents in:
+- `/highlight-worktrees/ui-ux/NEW FEATURES.md`
+- `/highlight-worktrees/data-model/NEW FEATURES.md`
+- `/highlight-worktrees/text-selection/NEW FEATURES.md`
+- `/highlight-worktrees/rendering/NEW FEATURES.md`
+- `/highlight-worktrees/pdf-specific/NEW FEATURES.md`
+- `/highlight-worktrees/integration/NEW FEATURES.md`
