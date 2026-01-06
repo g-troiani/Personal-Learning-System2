@@ -15,10 +15,11 @@ import 'react-pdf/dist/Page/TextLayer.css'
  *
  * @param {string} fileUrl - Signed URL to the PDF file
  * @param {Function} onPageChange - Callback when page changes (page, totalPages)
+ * @param {number} initialPage - Page number to restore (default: 1)
  */
-export default function PDFRenderer({ fileUrl, onPageChange }) {
+export default function PDFRenderer({ fileUrl, onPageChange, initialPage = 1 }) {
   const [numPages, setNumPages] = useState(null)
-  const [pageNumber, setPageNumber] = useState(1)
+  const [pageNumber, setPageNumber] = useState(initialPage)
   const [scale, setScale] = useState(1.0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -30,10 +31,13 @@ export default function PDFRenderer({ fileUrl, onPageChange }) {
     setNumPages(numPages)
     setLoading(false)
     setError(null)
+    // Restore to initial page (clamped to valid range)
+    const restoredPage = Math.min(initialPage, numPages)
+    setPageNumber(restoredPage)
     if (onPageChange) {
-      onPageChange(1, numPages)
+      onPageChange(restoredPage, numPages)
     }
-  }, [onPageChange])
+  }, [onPageChange, initialPage])
 
   // Handle document load error
   const onDocumentLoadError = useCallback((error) => {

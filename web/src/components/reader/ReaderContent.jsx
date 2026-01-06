@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect, useRef } from 'react'
 import { FileText, AlertCircle, ExternalLink } from 'lucide-react'
 import PDFRenderer from './PDFRenderer'
 import MarkdownRenderer from './MarkdownRenderer'
@@ -43,18 +43,50 @@ function getContentType(mimeType, title) {
  * @param {string} extractedContent - Text content extracted during ingestion
  * @param {Array} sections - TOC sections for navigation
  * @param {Function} onPageChange - Callback for PDF page changes
+ * @param {Array} highlights - Highlight annotations to display
+ * @param {Function} onDeleteHighlight - Callback when highlight is deleted
+ * @param {number} initialScrollPosition - Scroll position to restore
+ * @param {number} initialPage - Page number to restore (for PDFs)
+ * @param {Function} onScroll - Callback for scroll tracking
  */
 export default function ReaderContent({
   source,
   fileUrl,
   extractedContent,
   sections = [],
-  onPageChange
+  onPageChange,
+  highlights = [],
+  onDeleteHighlight,
+  initialScrollPosition = 0,
+  initialPage = 1,
+  onScroll
 }) {
-  // Determine content type
+  const scrollContainerRef = useRef(null)
+  const hasRestoredPosition = useRef(false)
+
+  // Determine content type FIRST (other hooks depend on this)
   const contentType = useMemo(() => {
     return getContentType(source?.mime_type, source?.title)
   }, [source?.mime_type, source?.title])
+
+  // Restore scroll position on mount (only once)
+  useEffect(() => {
+    if (
+      initialScrollPosition > 0 &&
+      !hasRestoredPosition.current &&
+      scrollContainerRef.current &&
+      contentType !== 'pdf' // PDF handles its own page restoration
+    ) {
+      // Small delay to ensure content is rendered
+      const timer = setTimeout(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = initialScrollPosition
+          hasRestoredPosition.current = true
+        }
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [initialScrollPosition, contentType])
 
   // Render appropriate renderer based on content type
   const renderContent = () => {
@@ -72,6 +104,7 @@ export default function ReaderContent({
           <PDFRenderer
             fileUrl={fileUrl}
             onPageChange={onPageChange}
+            initialPage={initialPage}
           />
         )
 
@@ -82,6 +115,8 @@ export default function ReaderContent({
             content={extractedContent}
             fileUrl={fileUrl}
             sections={sections}
+            highlights={highlights}
+            onDeleteHighlight={onDeleteHighlight}
           />
         )
 
@@ -91,6 +126,8 @@ export default function ReaderContent({
           <TextRenderer
             content={extractedContent}
             fileUrl={fileUrl}
+            highlights={highlights}
+            onDeleteHighlight={onDeleteHighlight}
           />
         )
 
@@ -115,8 +152,22 @@ export default function ReaderContent({
     }
   }
 
+  // For PDF, render directly (has its own scroll handling)
+  if (contentType === 'pdf') {
+    return (
+      <div className="h-full flex flex-col">
+        {renderContent()}
+      </div>
+    )
+  }
+
+  // For non-PDF content, wrap in scrollable container with tracking
   return (
-    <div className="h-full flex flex-col">
+    <div
+      ref={scrollContainerRef}
+      className="h-full overflow-y-auto"
+      onScroll={onScroll}
+    >
       {renderContent()}
     </div>
   )

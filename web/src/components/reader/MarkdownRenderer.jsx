@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { Loader2 } from 'lucide-react'
+import AnnotationLayer from './AnnotationLayer'
 
 // Import highlight.js styles
 import 'highlight.js/styles/github-dark.css'
@@ -14,8 +15,16 @@ import 'highlight.js/styles/github-dark.css'
  * @param {string} fileUrl - URL to fetch markdown content from (optional)
  * @param {string} content - Direct markdown content (preferred over fileUrl)
  * @param {Array} sections - TOC sections for scroll-to-section support
+ * @param {Array} highlights - Highlight annotations to display
+ * @param {Function} onDeleteHighlight - Callback when highlight is deleted
  */
-export default function MarkdownRenderer({ fileUrl, content: directContent, sections = [] }) {
+export default function MarkdownRenderer({
+  fileUrl,
+  content: directContent,
+  sections = [],
+  highlights = [],
+  onDeleteHighlight
+}) {
   const [content, setContent] = useState(directContent || '')
   const [loading, setLoading] = useState(!directContent)
   const [error, setError] = useState(null)
@@ -116,12 +125,17 @@ export default function MarkdownRenderer({ fileUrl, content: directContent, sect
     )
   }
 
+  // Create a ref for the article element (for AnnotationLayer)
+  const articleRef = useRef(null)
+
   return (
     <div
       ref={containerRef}
-      className="h-full overflow-auto bg-gray-800 rounded-lg"
+      className="h-full overflow-auto bg-gray-800 rounded-lg relative"
     >
-      <article className="prose prose-invert prose-lg max-w-none p-6 md:p-8
+      <article
+        ref={articleRef}
+        className="prose prose-invert prose-lg max-w-none p-6 md:p-8
         prose-headings:text-white prose-headings:font-semibold
         prose-h1:text-3xl prose-h1:border-b prose-h1:border-gray-700 prose-h1:pb-2 prose-h1:mb-4
         prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-3
@@ -147,6 +161,13 @@ export default function MarkdownRenderer({ fileUrl, content: directContent, sect
           {content}
         </ReactMarkdown>
       </article>
+
+      {/* Annotation layer for highlights */}
+      <AnnotationLayer
+        highlights={highlights}
+        containerRef={articleRef}
+        onDeleteHighlight={onDeleteHighlight}
+      />
     </div>
   )
 }

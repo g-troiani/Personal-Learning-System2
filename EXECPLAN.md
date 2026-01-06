@@ -123,9 +123,28 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Added "Read" button to `SourceDetailPanel.jsx` footer (alongside Study and Delete)
   - Updated Sidebar recent sources to link to `/reader/:id` instead of sources page
   - Added navigate redirect in `Sources.jsx` handleProcessingComplete after upload
-- [ ] M34: Text selection and highlights - SelectionTooltip, annotations
-- [ ] M35: Assistant panel - notes, AI chat tabs
-- [ ] M36: Reading progress - position tracking, completion percentage
+- [x] M34: Text selection and highlights - SelectionTooltip, annotations (2026-01-05)
+  - Created `useTextSelection.js` hook with character offset calculation
+  - Created `SelectionTooltip.jsx` with Ask AI, Highlight, Generate, Copy buttons
+  - Created `useAnnotations.js` hook with Supabase CRUD and optimistic updates
+  - Created `AnnotationLayer.jsx` rendering highlights via DOM text node wrapping
+  - Updated `DocumentReader.jsx` to integrate selection and highlights
+  - **VERIFIED:** Highlights persist to database and display after page refresh
+  - Fixed: Required legacy JWT-format anon key in web/.env (not sb_publishable_ format)
+- [x] M35: Assistant panel - notes, AI chat tabs (2026-01-05)
+  - Created `AssistantPanel.jsx` with Notes, AI, and KCs tabs
+  - Created `NotesList.jsx` and `NoteEditor.jsx` for note management
+  - Created `AIChatPanel.jsx` with message input and chat history
+  - Created `KCsPanel.jsx` displaying extracted knowledge components
+  - Added `POST /api/ai/chat` endpoint with Groq/Claude fallback
+  - Wired "Ask AI" from SelectionTooltip to pre-fill chat with selected text
+- [x] M36: Reading progress - position tracking, completion percentage (2026-01-05)
+  - Created `useReadingProgress.js` hook with debounced sync (500ms)
+  - Tracks scroll_position, current_page, total_pages, last_read_at
+  - Calculates completion percentage locally (from page or scroll position)
+  - Shows progress indicator with percentage and progress bar in header
+  - Uses upsert to prevent duplicate records
+  - Restores scroll position for non-PDF, page number for PDF on return
 - [ ] M37: Highlight-to-generate - practice questions from selected text
 - [ ] M38: Polish and performance - caching, virtualization, responsive
 
@@ -140,10 +159,12 @@ Key lessons learned during implementation:
 - API server must run on port 8001 to match frontend: `uvicorn app.api.server:app --port 8001`
 
 **Supabase:**
-- Use `sb_publishable_` keys in browser (secret keys are blocked)
+- **CRITICAL:** Supabase JS client requires legacy JWT-format anon key (starts with `eyJhbG...`), NOT the new `sb_publishable_` format keys
+- To get legacy key: Supabase Dashboard → Settings → API Keys → "Legacy anon, service_role API keys" tab
 - Realtime requires: `ALTER PUBLICATION supabase_realtime ADD TABLE public.content_sources;`
 - Always use polling fallback alongside Realtime subscriptions
 - Python library v2.27.0+ required for newer key formats
+- **M30 Migration:** The `migrations/m30_document_reader.sql` must be fully applied for annotations to persist.
 
 **Python 3.9 Compatibility:**
 - Use `Optional[X]` instead of `X | None`, `List[Dict]` instead of `list[dict]`

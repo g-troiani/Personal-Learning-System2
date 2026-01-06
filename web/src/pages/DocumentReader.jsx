@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { FileText, ArrowLeft, Loader2, AlertCircle, BookOpen } from 'lucide-react'
+import { FileText, ArrowLeft, Loader2, AlertCircle, BookOpen, CheckCircle } from 'lucide-react'
 import ReaderContent from '../components/reader/ReaderContent'
+import SelectionTooltip from '../components/reader/SelectionTooltip'
+import AssistantPanel from '../components/reader/AssistantPanel'
+import { useTextSelection } from '../hooks/useTextSelection'
+import { useAnnotations } from '../hooks/useAnnotations'
+import { useReadingProgress } from '../hooks/useReadingProgress'
 
 // API base URL from environment or default to localhost:8001
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
@@ -9,6 +14,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 export default function DocumentReader() {
   const { sourceId } = useParams()
   const navigate = useNavigate()
+  const contentContainerRef = useRef(null)
 
   const [source, setSource] = useState(null)
   const [fileUrl, setFileUrl] = useState(null)
@@ -19,11 +25,93 @@ export default function DocumentReader() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(null)
 
+  // Text selection and annotations hooks
+  const { selection, clearSelection } = useTextSelection(contentContainerRef)
+  const {
+    highlights,
+    notes,
+    createHighlight,
+    createNote,
+    deleteAnnotation
+  } = useAnnotations(sourceId)
+
+  // AI chat state
+  const [aiInitialMessage, setAiInitialMessage] = useState(null)
+
+  // Reading progress tracking
+  const {
+    progress: readingProgress,
+    updateScrollPosition,
+    updatePage,
+    forceSave
+  } = useReadingProgress(sourceId, { totalPages })
+
   // Handle page change from PDF renderer
   const handlePageChange = (page, total) => {
     setCurrentPage(page)
     setTotalPages(total)
+    updatePage(page, total)
   }
+
+  // Handle scroll tracking for non-PDF content
+  const handleScroll = useCallback((event) => {
+    const container = event.target
+    if (container) {
+      updateScrollPosition(
+        container.scrollTop,
+        container.clientHeight,
+        container.scrollHeight
+      )
+    }
+  }, [updateScrollPosition])
+
+  // Save progress before leaving
+  useEffect(() => {
+    return () => {
+      forceSave()
+    }
+  }, [forceSave])
+
+  // Handle highlight creation
+  const handleHighlight = useCallback(async (sel, color) => {
+    if (sel) {
+      await createHighlight(sel, color)
+      clearSelection()
+    }
+  }, [createHighlight, clearSelection])
+
+  // Handle "Ask AI" action - sends selected text to AI chat
+  const handleAskAI = useCallback((text) => {
+    setAiInitialMessage(text)
+    clearSelection()
+  }, [clearSelection])
+
+  // Handle "Generate Question" action (placeholder for M37)
+  const handleGenerate = useCallback((text) => {
+    console.log('Generate question from:', text)
+    // Will be implemented in M37
+    alert(`"Generate Question" feature coming soon.\n\nSelected text: "${text.substring(0, 100)}..."`)
+  }, [])
+
+  // Handle highlight deletion
+  const handleDeleteHighlight = useCallback(async (annotationId) => {
+    await deleteAnnotation(annotationId)
+  }, [deleteAnnotation])
+
+  // Handle note creation
+  const handleCreateNote = useCallback(async (noteText) => {
+    await createNote(null, noteText) // null selection for standalone note
+  }, [createNote])
+
+  // Handle note deletion
+  const handleDeleteNote = useCallback(async (annotationId) => {
+    await deleteAnnotation(annotationId)
+  }, [deleteAnnotation])
+
+  // Clear AI initial message after it's been used
+  const handleClearAiMessage = useCallback(() => {
+    setAiInitialMessage(null)
+  }, [])
 
   // Fetch source details and file URL
   useEffect(() => {
@@ -127,7 +215,27 @@ export default function DocumentReader() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Reading Progress Indicator */}
+          {readingProgress.completionPercentage > 0 && (
+            <div className="flex items-center gap-2 text-sm">
+              <div className="flex items-center gap-1.5 text-gray-400">
+                <CheckCircle className="h-4 w-4 text-teal-400" />
+                <span className="text-teal-400 font-medium">
+                  {readingProgress.completionPercentage}%
+                </span>
+                <span className="text-gray-500">read</span>
+              </div>
+              {/* Progress bar */}
+              <div className="w-20 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-teal-500 transition-all duration-300"
+                  style={{ width: `${readingProgress.completionPercentage}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {source && (
             <Link
               to={`/study/${sourceId}`}
@@ -143,22 +251,45 @@ export default function DocumentReader() {
       {/* Document Viewer Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Main Document Area */}
-        <div className="flex-1 overflow-hidden">
+        <div
+          ref={contentContainerRef}
+          className="flex-1 overflow-hidden relative"
+          onScroll={handleScroll}
+        >
           <ReaderContent
             source={source}
             fileUrl={fileUrl}
             extractedContent={extractedContent}
             sections={sections}
             onPageChange={handlePageChange}
+            highlights={highlights}
+            onDeleteHighlight={handleDeleteHighlight}
+            initialScrollPosition={readingProgress.scrollPosition}
+            initialPage={readingProgress.currentPage}
+            onScroll={handleScroll}
+          />
+
+          {/* Selection Tooltip - appears when text is selected */}
+          <SelectionTooltip
+            selection={selection}
+            onAskAI={handleAskAI}
+            onHighlight={handleHighlight}
+            onGenerate={handleGenerate}
+            onClose={clearSelection}
           />
         </div>
 
-        {/* Right Panel - Assistant/Notes (placeholder for M35) */}
-        <div className="w-80 border-l border-gray-700 bg-gray-800/50 p-4 hidden lg:block">
-          <h2 className="text-sm font-medium text-gray-400 mb-3">Assistant</h2>
-          <div className="text-sm text-gray-500 text-center py-8">
-            AI assistant and notes coming soon...
-          </div>
+        {/* Right Panel - Assistant/Notes */}
+        <div className="hidden lg:block">
+          <AssistantPanel
+            sourceId={sourceId}
+            source={source}
+            notes={notes}
+            onCreateNote={handleCreateNote}
+            onDeleteNote={handleDeleteNote}
+            initialMessage={aiInitialMessage}
+            onClearInitialMessage={handleClearAiMessage}
+          />
         </div>
       </div>
 

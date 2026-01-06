@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import health, sources
+from .routes import health, sources, ai
 
 
 def create_app() -> FastAPI:
@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
     # Include routers
     app.include_router(health.router, prefix="/api", tags=["health"])
     app.include_router(sources.router, prefix="/api/sources", tags=["sources"])
+    app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 
     return app
 
