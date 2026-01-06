@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Mic, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 
 export default function AnswerInput({ onSubmit, onSkip, disabled }) {
   const [answer, setAnswer] = useState('')
@@ -29,15 +29,7 @@ export default function AnswerInput({ onSubmit, onSkip, disabled }) {
             disabled={disabled}
             className="w-full px-4 py-3 pr-24 bg-bg-card border border-bg-card-border rounded-card text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent-progress focus:border-transparent resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
           />
-          <div className="absolute right-3 bottom-3 flex gap-2">
-            <button
-              type="button"
-              disabled={disabled}
-              className="p-2 text-text-muted hover:text-text-primary transition-colors disabled:opacity-50"
-              title="Voice input (coming soon)"
-            >
-              <Mic className="w-5 h-5" />
-            </button>
+          <div className="absolute right-3 bottom-3">
             <button
               type="submit"
               disabled={disabled || !answer.trim()}

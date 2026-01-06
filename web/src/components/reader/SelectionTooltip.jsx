@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { MessageSquare, Highlighter, Copy, Sparkles, Check } from 'lucide-react'
+import { MessageSquare, Highlighter, Copy, Check } from 'lucide-react'
 
 /**
  * SelectionTooltip - Floating toolbar that appears when text is selected
@@ -8,14 +8,12 @@ import { MessageSquare, Highlighter, Copy, Sparkles, Check } from 'lucide-react'
  * - selection: Selection object from useTextSelection hook
  * - onAskAI: (selectedText) => void - Called when "Ask AI" is clicked
  * - onHighlight: (selection, color) => void - Called when "Highlight" is clicked
- * - onGenerate: (selectedText) => void - Called when "Generate Question" is clicked
  * - onClose: () => void - Called when tooltip should close
  */
 export default function SelectionTooltip({
   selection,
   onAskAI,
   onHighlight,
-  onGenerate,
   onClose
 }) {
   const [copied, setCopied] = useState(false)
@@ -81,11 +79,6 @@ export default function SelectionTooltip({
     onClose?.()
   }
 
-  const handleGenerate = () => {
-    onGenerate?.(selection?.text)
-    onClose?.()
-  }
-
   if (!selection) return null
 
   return (
@@ -117,18 +110,6 @@ export default function SelectionTooltip({
       >
         <Highlighter className="w-4 h-4 text-yellow-400" />
         <span>Highlight</span>
-      </button>
-
-      <div className="w-px h-5 bg-gray-700" />
-
-      {/* Generate Question */}
-      <button
-        onClick={handleGenerate}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-white hover:bg-gray-700 rounded transition-colors"
-        title="Generate practice question from this text"
-      >
-        <Sparkles className="w-4 h-4" />
-        <span>Generate</span>
       </button>
 
       <div className="w-px h-5 bg-gray-700" />

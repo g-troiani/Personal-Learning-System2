@@ -112,12 +112,6 @@ export default function DocumentReader() {
     clearSelection()
   }, [clearSelection])
 
-  // Handle "Generate Question" action (placeholder for M37)
-  const handleGenerate = useCallback((text) => {
-    console.log('Generate question from:', text)
-    // Will be implemented in M37
-    alert(`"Generate Question" feature coming soon.\n\nSelected text: "${text.substring(0, 100)}..."`)
-  }, [])
 
   // Handle highlight deletion
   const handleDeleteHighlight = useCallback(async (annotationId) => {
@@ -313,7 +307,6 @@ export default function DocumentReader() {
             selection={selection}
             onAskAI={handleAskAI}
             onHighlight={handleHighlight}
-            onGenerate={handleGenerate}
             onClose={clearSelection}
           />
         </div>
