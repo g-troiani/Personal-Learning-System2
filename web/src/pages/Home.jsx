@@ -7,7 +7,7 @@ import QuickActions from '../components/home/QuickActions'
 import SourceCard from '../components/home/SourceCard'
 
 export default function Home() {
-  const { sources, getDueCounts, getMasteryBySource } = useSupabase()
+  const { sources, fetchSources, getDueCounts, getMasteryBySource } = useSupabase()
   const [searchQuery, setSearchQuery] = useState('')
   const [dueCounts, setDueCounts] = useState(null)
   const [masteryBySource, setMasteryBySource] = useState([])
@@ -16,6 +16,8 @@ export default function Home() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
+      // Refresh sources to ensure we have latest data (handles deletions from other pages)
+      await fetchSources()
       const [dueData, masteryData] = await Promise.all([
         getDueCounts(),
         getMasteryBySource()
@@ -25,7 +27,7 @@ export default function Home() {
       setLoading(false)
     }
     fetchData()
-  }, [getDueCounts, getMasteryBySource])
+  }, [fetchSources, getDueCounts, getMasteryBySource])
 
   // Create a map of source id to mastery and due counts
   const sourceDataMap = {}
