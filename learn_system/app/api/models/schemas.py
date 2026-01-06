@@ -50,6 +50,11 @@ class ProcessingStatusResponse(BaseModel):
     item_count: Optional[int] = Field(default=None, description="Number of practice items generated")
     started_at: Optional[datetime] = Field(default=None, description="Processing start time")
     completed_at: Optional[datetime] = Field(default=None, description="Processing completion time")
+    # Additional fields for document reader
+    title: Optional[str] = Field(default=None, description="Document title")
+    domain: Optional[str] = Field(default=None, description="Knowledge domain")
+    word_count: Optional[int] = Field(default=None, description="Word count")
+    mime_type: Optional[str] = Field(default=None, description="MIME type of original file")
 
 
 class SourceResponse(BaseModel):

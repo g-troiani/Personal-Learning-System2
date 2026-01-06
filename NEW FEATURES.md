@@ -1,329 +1,774 @@
-# Speed Optimization Implementation Plan
+# AlphaXiv-Style Document Reader
 
-**Status:** Research Complete | Ready for Implementation
-**Last Updated:** 2026-01-03
-**Target:** Reduce processing time from 60-165s to 15-40s (~3-4x speedup)
+**Consolidated Implementation Plan**
+**Date:** 2026-01-05
+**Target:** Document rendering with integrated TOC and AI assistant
 
 ---
 
 ## Executive Summary
 
-The document processing pipeline has sequential bottlenecks, primarily in LLM API calls. Three optimizations provide the biggest gains:
+This plan integrates an AlphaXiv-style document reader into the Personal Learning System. The reader enables users to:
+1. Upload documents and **read them fully** before practice
+2. Access documents persistently via Sources (one click away)
+3. Take notes, highlight text, and ask AI questions while reading
+4. Generate practice questions from highlighted text
 
-| Optimization | Impact | Effort |
-|--------------|--------|--------|
-| Parallel item generation | 50-70% time reduction | Medium |
-| Faster model for items | 30-50% LLM latency reduction | Low |
-| Batch DB inserts | 10-15% time reduction | Low |
-
----
-
-## 1. Parallel Practice Item Generation
-
-**File:** `learn_system/app/practice/generator.py`
-**Problem:** 15 KCs × 5 sec/each = 75 seconds (sequential)
-**Solution:** ThreadPoolExecutor with 5 workers = 15 seconds (parallel)
-
-### Implementation
-
-```python
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import os
-
-MAX_LLM_WORKERS = int(os.getenv('MAX_LLM_WORKERS', '5'))
-
-def _process_single_kc(kc: dict) -> tuple[str, int, str | None]:
-    """Process single KC. Returns (kc_id, item_count, error_or_none)."""
-    try:
-        existing = get_items_for_kc(kc['id'])
-        if existing:
-            return (kc['id'], len(existing), None)
-        items = generate_items_for_kc(kc)
-        if items:
-            store_generated_items(kc['id'], items)
-        return (kc['id'], len(items), None)
-    except Exception as e:
-        return (kc['id'], 0, str(e))
-
-def generate_all_items(source_id: str, progress_callback=None) -> int:
-    """Generate items for all KCs using parallel LLM calls."""
-    kcs = get_kcs_for_source(source_id)
-    if not kcs:
-        return 0
-
-    total_items = 0
-    completed = 0
-    errors = []
-
-    with ThreadPoolExecutor(max_workers=MAX_LLM_WORKERS) as executor:
-        future_to_kc = {executor.submit(_process_single_kc, kc): kc for kc in kcs}
-
-        for future in as_completed(future_to_kc):
-            completed += 1
-            kc_id, count, error = future.result()
-            total_items += count
-            if error:
-                errors.append(error)
-            if progress_callback:
-                progress_callback(f"Completed {completed}/{len(kcs)} KCs")
-
-    return total_items
-```
-
-**Why ThreadPoolExecutor over asyncio:**
-- Existing code is synchronous
-- Anthropic SDK sync client already in use
-- LLM calls are I/O-bound, GIL doesn't block during network waits
+**Core Flow:** Upload → Read/Study → Practice (source always accessible)
 
 ---
 
-## 2. Faster Model for Item Generation
+## Architecture Overview
 
-**Files:** `learn_system/app/config.py`, `learn_system/app/practice/generator.py`
+### Two-Panel Layout (Adapted to Existing UI)
 
-### Model Comparison
+The document reader reuses the **existing Sidebar** and adds a conditional **Table of Contents** section that only appears when viewing a document. The right panel contains the AI Assistant.
 
-| Metric | Claude 3.5 Haiku | Qwen3 32B (Groq) |
-|--------|------------------|------------------|
-| Input | $1.00/M | $0.29/M |
-| Output | $5.00/M | $0.59/M |
-| Speed | 4-5x Sonnet | 662 TPS |
-| Context | 200K | 131K |
-
-### Why Qwen3 32B on Groq
-
-1. **Template-following tasks** — Item generation is "low reasoning needed." Qwen3 32B handles structured output well.
-2. **Speed** — 662 TPS on Groq's LPU infrastructure (3-5x faster than alternatives).
-3. **Cost** — 70% cheaper on input, 88% cheaper on output compared to Haiku.
-
-### Rationale
-
-| Task | Reasoning Needed | Model | Provider |
-|------|------------------|-------|----------|
-| KC Extraction | High (concept identification, classification) | claude-sonnet-4 | Anthropic |
-| Item Generation | Low (template-following) | qwen-qwq-32b | Groq |
-
-### Implementation
-
-**config.py:**
-```python
-# Anthropic for complex reasoning tasks
-ANTHROPIC_MODEL_REASONING: str = "claude-sonnet-4-20250514"
-
-# Groq for fast structured generation
-GROQ_MODEL_FAST: str = "qwen-qwq-32b"
-GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ← Back   📖 Document Title   [PDF|Blog]   [Zen Mode]   [Start Practice]│
+├──────────────┬──────────────────────────────────────────────────────────┤
+│              │                                                          │
+│  SIDEBAR     │           DOCUMENT + ASSISTANT                           │
+│  (existing)  │           (flexible layout)                              │
+│              │  ┌─────────────────────────────┬────────────────────┐    │
+│  Home        │  │                             │                    │    │
+│  Calendar    │  │  Document Content           │  ASSISTANT PANEL   │    │
+│  Due Review  │  │  - PDF (react-pdf)          │  (320px, toggle)   │    │
+│  Sources     │  │  - Markdown                 │                    │    │
+│  Progress    │  │  - Plain text               │  [Notes|AI|KCs]    │    │
+│  Analytics   │  │                             │                    │    │
+│              │  │  [Text selection → tooltip] │  AI Assistant      │    │
+│  Recent      │  │  - Ask AI                   │  ────────────      │    │
+│  📚 Source 1 │  │  - Highlight                │  "Explain this     │    │
+│  🧠 Source 2 │  │  - Copy                     │   concept..."      │    │
+│              │  │                             │                    │    │
+│  ▼ CONTENTS  │  │                             │  [Chat Input]      │    │
+│  (teal/cyan) │  └─────────────────────────────┴────────────────────┘    │
+│  • Chapter 1 │                                                          │
+│    - 1.1     ├──────────────────────────────────────────────────────────┤
+│    - 1.2     │  Progress: 45% read │ 12 concepts │ 28% mastery          │
+│  • Chapter 2 │                                                          │
+└──────────────┴──────────────────────────────────────────────────────────┘
 ```
 
-**generator.py — Add Groq client:**
-```python
-from groq import Groq
+### Sidebar Behavior by Route
 
-def get_groq_client():
-    return Groq(api_key=GROQ_API_KEY)
+| Route | Sidebar Shows |
+|-------|---------------|
+| `/` `/calendar` `/review` `/sources` `/progress` `/analytics` | Nav + Recent |
+| `/reader/:sourceId` | Nav + Recent + **TABLE OF CONTENTS** (accent color) |
+| `/study` | Sidebar hidden (existing fullscreen behavior) |
 
-def generate_items_for_kc(kc: dict) -> list[dict]:
-    client = get_groq_client()
-    response = client.chat.completions.create(
-        model=GROQ_MODEL_FAST,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=2048
-    )
-    # Parse response...
+### Route Structure
+
+```
+/                       → Home (existing)
+/sources                → Sources list (existing)
+/study                  → Practice session (existing)
+/reader/:sourceId       → Document Reader (NEW)
+/reader/:sourceId/section/:sectionId   → Deep link to section
 ```
 
-**Dependencies:**
+### Component Tree
+
+```
+App
+├── BrowserRouter
+│   ├── Route (/) [Layout]                    # Existing
+│   │   └── Outlet → Home, Sources, etc.
+│   │
+│   └── Route (/reader/:sourceId) [Layout]    # Reuses existing Layout
+│       └── DocumentReaderPage
+│           ├── ReaderHeader (title, tabs, controls)
+│           ├── ReaderContent (document area)
+│           │   ├── PDFRenderer | MarkdownRenderer | TextRenderer
+│           │   ├── SelectionTooltip
+│           │   └── AnnotationLayer
+│           └── AssistantPanel (right, collapsible)
+│               ├── TabBar (Notes | AI | KCs)
+│               ├── NotesList / NoteEditor
+│               └── AIChatPanel
+
+Sidebar (modified)
+├── Nav items (existing)
+├── Recent sources (existing)
+└── TableOfContents (NEW - conditional)
+    └── Only renders when route matches /reader/:sourceId
+    └── Fetches sections for current sourceId
+    └── Accent color (teal/cyan) to differentiate
+    └── Collapsible with chevron toggle
+```
+
+---
+
+## Database Schema
+
+### New Tables
+
+```sql
+-- Run in Supabase SQL Editor
+
+-- 1. Extend content_sources for file storage
+ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS storage_path TEXT;
+ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS original_filename TEXT;
+ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT;
+ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS mime_type TEXT;
+
+-- 2. Reading progress tracking
+CREATE TABLE IF NOT EXISTS reading_progress (
+    id TEXT PRIMARY KEY DEFAULT ('rp_' || substr(md5(random()::text), 1, 12)),
+    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
+    last_page INTEGER,
+    last_scroll_position REAL,  -- 0.0-1.0 percentage
+    total_pages INTEGER,
+    pages_viewed TEXT,          -- JSON array: [1, 2, 5, 6, ...]
+    completion_percentage REAL DEFAULT 0.0,
+    first_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    total_reading_time_seconds INTEGER DEFAULT 0,
+    UNIQUE(source_id)
+);
+
+CREATE INDEX idx_reading_progress_source ON reading_progress(source_id);
+
+-- 3. Annotations (highlights, notes, bookmarks)
+CREATE TABLE IF NOT EXISTS annotations (
+    id TEXT PRIMARY KEY DEFAULT ('ann_' || substr(md5(random()::text), 1, 12)),
+    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
+    annotation_type TEXT NOT NULL DEFAULT 'highlight',  -- highlight, note, bookmark
+    start_offset INTEGER NOT NULL,
+    end_offset INTEGER NOT NULL,
+    anchor_text TEXT,           -- The highlighted text (for validation)
+    page_number INTEGER,        -- For PDFs
+    note_text TEXT,             -- User's note (null for pure highlights)
+    color TEXT DEFAULT '#FFEB3B',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    linked_kc_id TEXT REFERENCES knowledge_components(id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_annotations_source ON annotations(source_id);
+CREATE INDEX idx_annotations_type ON annotations(annotation_type);
+CREATE INDEX idx_annotations_page ON annotations(page_number);
+
+-- 4. Document sections (for TOC)
+CREATE TABLE IF NOT EXISTS document_sections (
+    id TEXT PRIMARY KEY DEFAULT ('sec_' || substr(md5(random()::text), 1, 12)),
+    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    level INTEGER NOT NULL DEFAULT 1,  -- 1=h1, 2=h2, etc.
+    start_line INTEGER NOT NULL,
+    end_line INTEGER,
+    parent_section_id TEXT REFERENCES document_sections(id),
+    sequence_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_sections_source ON document_sections(source_id);
+
+-- 5. AI chat history (optional, for context persistence)
+CREATE TABLE IF NOT EXISTS ai_chat_history (
+    id TEXT PRIMARY KEY DEFAULT ('chat_' || substr(md5(random()::text), 1, 12)),
+    source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,  -- 'user' or 'assistant'
+    message TEXT NOT NULL,
+    citations TEXT,      -- JSON array of citation objects
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_chat_source ON ai_chat_history(source_id);
+
+-- 6. Enable realtime for new tables
+ALTER PUBLICATION supabase_realtime ADD TABLE reading_progress;
+ALTER PUBLICATION supabase_realtime ADD TABLE annotations;
+
+-- 7. Helper function for reading time
+CREATE OR REPLACE FUNCTION increment_reading_time(p_source_id TEXT, p_delta INTEGER)
+RETURNS INTEGER AS $$
+DECLARE
+    new_total INTEGER;
+BEGIN
+    UPDATE reading_progress
+    SET total_reading_time_seconds = total_reading_time_seconds + p_delta
+    WHERE source_id = p_source_id
+    RETURNING total_reading_time_seconds INTO new_total;
+    RETURN COALESCE(new_total, p_delta);
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Supabase Storage Bucket
+
+```sql
+-- Create storage bucket for documents
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'documents',
+  'documents',
+  false,
+  52428800,  -- 50MB limit
+  ARRAY['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/markdown', 'text/plain']
+);
+
+-- Storage policy
+CREATE POLICY "Allow all operations on documents bucket"
+ON storage.objects FOR ALL
+USING (bucket_id = 'documents')
+WITH CHECK (bucket_id = 'documents');
+```
+
+---
+
+## API Endpoints
+
+### New FastAPI Routes
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| **File Access** | | |
+| GET | `/api/sources/{id}/file-url` | Get signed URL for document |
+| GET | `/api/sources/{id}/content` | Get rendered HTML content |
+| GET | `/api/sources/{id}/sections` | Get document TOC |
+| **Reading Progress** | | |
+| GET | `/api/sources/{id}/progress` | Get reading progress |
+| PUT | `/api/sources/{id}/progress` | Update reading progress |
+| **Annotations** | | |
+| GET | `/api/sources/{id}/annotations` | List all annotations |
+| POST | `/api/sources/{id}/annotations` | Create annotation |
+| PUT | `/api/annotations/{id}` | Update annotation |
+| DELETE | `/api/annotations/{id}` | Delete annotation |
+| **AI Assistant** | | |
+| POST | `/api/ai/chat` | Send chat message |
+| GET | `/api/sources/{id}/chat-history` | Get chat history |
+| **Practice Generation** | | |
+| POST | `/api/items/generate-from-text` | Generate question from highlight |
+
+### Pydantic Models
+
+```python
+# app/api/models/reader_schemas.py
+
+class ReadingProgressUpdate(BaseModel):
+    last_page: Optional[int] = None
+    last_scroll_position: Optional[float] = None
+    pages_viewed: Optional[List[int]] = None
+    reading_time_delta: Optional[int] = None
+
+class AnnotationCreate(BaseModel):
+    annotation_type: str  # highlight, note, bookmark
+    start_offset: int
+    end_offset: int
+    anchor_text: Optional[str] = None
+    page_number: Optional[int] = None
+    note_text: Optional[str] = None
+    color: Optional[str] = "#FFEB3B"
+    linked_kc_id: Optional[str] = None
+
+class AIChatRequest(BaseModel):
+    source_id: str
+    message: str
+    context: Optional[str] = None  # Current selection for grounding
+
+class GenerateFromTextRequest(BaseModel):
+    source_id: str
+    selected_text: str
+    question_type: str = "explanation"  # definition, explanation, application
+```
+
+---
+
+## User Flow & Navigation
+
+### Entry Points to Document Reader
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           HOW USERS GET TO /reader/:sourceId                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. SOURCES PAGE (/sources)                                                  │
+│     └── SourceCard component                                                 │
+│         └── "Read" button → navigate(`/reader/${source.id}`)                │
+│                                                                              │
+│  2. SOURCE DETAIL PANEL (slide-in on /sources)                              │
+│     └── "Read Document" button → navigate(`/reader/${source.id}`)           │
+│                                                                              │
+│  3. HOME PAGE (/)                                                            │
+│     └── SourceCard in "Continue Learning" section                           │
+│         └── "Read" action → navigate(`/reader/${source.id}`)                │
+│                                                                              │
+│  4. SIDEBAR - RECENT SOURCES                                                 │
+│     └── Click recent source → navigate(`/reader/${source.id}`)              │
+│         (change from current /sources/${id} behavior)                        │
+│                                                                              │
+│  5. POST-UPLOAD REDIRECT                                                     │
+│     └── After successful upload → navigate(`/reader/${newSourceId}`)        │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Exit Points from Document Reader
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           HOW USERS LEAVE /reader/:sourceId                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  1. SIDEBAR NAVIGATION                                                       │
+│     └── Click any nav item (Home, Sources, etc.)                            │
+│         └── TOC section disappears, normal sidebar view                     │
+│                                                                              │
+│  2. "START PRACTICE" BUTTON (in ReaderHeader)                               │
+│     └── navigate(`/study?source=${sourceId}`)                               │
+│         └── Practice session scoped to this document                        │
+│                                                                              │
+│  3. BACK BUTTON (in ReaderHeader)                                           │
+│     └── navigate(-1) or navigate('/sources')                                │
+│                                                                              │
+│  4. TOC CLICK → SECTION (stays in reader, scrolls document)                 │
+│     └── NOT an exit, but important interaction                              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Sidebar State Detection
+
+```javascript
+// In Sidebar.jsx - detect if we're in reader view
+import { useLocation, useParams } from 'react-router-dom'
+
+function Sidebar() {
+  const location = useLocation()
+  const isReaderView = location.pathname.startsWith('/reader/')
+
+  // Extract sourceId from path if in reader view
+  const sourceIdMatch = location.pathname.match(/\/reader\/([^/]+)/)
+  const readerSourceId = sourceIdMatch ? sourceIdMatch[1] : null
+
+  return (
+    <aside>
+      {/* ... existing nav items ... */}
+      {/* ... existing Recent section ... */}
+
+      {/* NEW: Table of Contents - only in reader view */}
+      {isReaderView && readerSourceId && (
+        <TableOfContentsSection
+          sourceId={readerSourceId}
+          collapsed={collapsed}
+        />
+      )}
+    </aside>
+  )
+}
+```
+
+---
+
+## React Components
+
+### New Files Structure
+
+```
+web/src/
+├── pages/
+│   └── DocumentReader.jsx           # Main reader page
+├── components/
+│   ├── layout/
+│   │   └── Sidebar.jsx              # MODIFY - add conditional TOC
+│   └── reader/
+│       ├── ReaderHeader.jsx         # Title, tabs, zen toggle, practice btn
+│       ├── ReaderContent.jsx        # Document area container
+│       ├── PDFRenderer.jsx          # react-pdf wrapper
+│       ├── MarkdownRenderer.jsx     # react-markdown wrapper
+│       ├── TextRenderer.jsx         # Plain text display
+│       ├── SelectionTooltip.jsx     # Ask AI / Highlight / Copy
+│       ├── AnnotationLayer.jsx      # Highlights overlay
+│       ├── TableOfContentsSection.jsx  # NEW - sidebar TOC component
+│       ├── AssistantPanel.jsx       # Right panel container
+│       ├── NotesList.jsx            # User notes list
+│       ├── NoteEditor.jsx           # Note create/edit form
+│       ├── AIChatPanel.jsx          # AI chat interface
+│       └── GenerateQuestionModal.jsx # Highlight-to-generate
+├── hooks/
+│   ├── useDocumentLoader.js         # Document fetching + signed URLs
+│   ├── useDocumentSections.js       # Fetch TOC sections for sidebar
+│   ├── useReadingProgress.js        # Progress tracking
+│   ├── useAnnotations.js            # Annotations CRUD
+│   ├── useDocumentCache.js          # IndexedDB caching
+│   ├── useTextSelection.js          # Selection detection
+│   └── useDeepLink.js               # URL deep linking
+├── contexts/
+│   └── DocumentViewerContext.jsx    # Reader state management
+└── services/
+    ├── readerApi.js                 # Document content API
+    ├── notesApi.js                  # Notes CRUD
+    └── aiChatApi.js                 # AI chat API
+```
+
+### TableOfContentsSection Component (Sidebar Integration)
+
+This component is rendered **inside the existing Sidebar** when `isReaderView` is true.
+
+```jsx
+// web/src/components/reader/TableOfContentsSection.jsx
+
+import { useState, useEffect } from 'react'
+import { ChevronDown, ChevronRight, List } from 'lucide-react'
+import { useDocumentSections } from '../../hooks/useDocumentSections'
+
+export default function TableOfContentsSection({ sourceId, collapsed: sidebarCollapsed }) {
+  const [expanded, setExpanded] = useState(true)
+  const { sections, loading } = useDocumentSections(sourceId)
+
+  // Don't render if sidebar is collapsed
+  if (sidebarCollapsed) return null
+
+  return (
+    <div className="mt-6 border-t border-bg-card-border pt-4">
+      {/* Header - accent color (teal/cyan) */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 px-3 w-full text-left group"
+      >
+        {expanded ? (
+          <ChevronDown size={14} className="text-accent-progress" />
+        ) : (
+          <ChevronRight size={14} className="text-accent-progress" />
+        )}
+        <List size={16} className="text-accent-progress" />
+        <span className="text-xs font-medium text-accent-progress uppercase tracking-wider">
+          Contents
+        </span>
+      </button>
+
+      {/* TOC Items */}
+      {expanded && !loading && (
+        <ul className="mt-2 space-y-0.5 max-h-64 overflow-y-auto">
+          {sections.map(section => (
+            <li key={section.id}>
+              <button
+                onClick={() => scrollToSection(section.id)}
+                className={`
+                  w-full text-left px-3 py-1.5 text-sm rounded-md
+                  text-text-secondary hover:text-accent-progress hover:bg-btn-secondary/50
+                  transition-colors truncate
+                  ${section.level === 1 ? 'font-medium' : 'pl-6 text-xs'}
+                `}
+                title={section.title}
+              >
+                {section.title}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {expanded && loading && (
+        <div className="px-3 py-2 text-xs text-text-muted">Loading...</div>
+      )}
+    </div>
+  )
+}
+
+// Scroll handler - communicates with DocumentReader via context or custom event
+function scrollToSection(sectionId) {
+  // Option 1: Custom event
+  window.dispatchEvent(new CustomEvent('scroll-to-section', { detail: { sectionId } }))
+
+  // Option 2: Update URL (deep link)
+  // window.history.pushState(null, '', `/reader/${sourceId}/section/${sectionId}`)
+}
+```
+
+**Styling Notes:**
+- Header uses `text-accent-progress` (teal/cyan) to differentiate from nav items
+- Max height with overflow for long TOCs
+- Indentation for nested headings (h2, h3)
+- Hover state matches accent color
+
+### Key Component Props
+
+```typescript
+// Type definitions
+
+interface ReaderHeaderProps {
+  source: Source
+  viewMode: 'pdf' | 'blog'
+  onViewModeChange: (mode: 'pdf' | 'blog') => void
+  zenMode: boolean
+  onToggleZen: () => void
+}
+
+interface ReaderContentProps {
+  source: Source
+  viewMode: 'pdf' | 'blog'
+  onTextSelect: (selection: TextSelection | null) => void
+}
+
+interface TextSelection {
+  text: string
+  startOffset: number
+  endOffset: number
+  pageNumber?: number
+  position: { top: number, left: number, width: number, height: number }
+}
+
+interface AssistantPanelProps {
+  sourceId: string
+  selection?: TextSelection | null
+  onGenerateQuestion: (text: string) => void
+}
+```
+
+---
+
+## Dependencies
+
+### npm Packages (Frontend)
+
 ```bash
-pip install groq
+cd web && npm install \
+  react-pdf \
+  pdfjs-dist \
+  react-markdown \
+  remark-gfm \
+  rehype-highlight \
+  highlight.js \
+  @tanstack/react-virtual \
+  idb
 ```
 
-**Expected Impact:** 3-8s → <1s per item generation call
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `react-pdf` | ^9.0.0 | PDF rendering with text layer |
+| `pdfjs-dist` | ^4.0.0 | PDF.js core (peer dep) |
+| `react-markdown` | ^9.0.0 | Markdown rendering |
+| `remark-gfm` | ^4.0.0 | GitHub Flavored Markdown |
+| `rehype-highlight` | ^7.0.0 | Syntax highlighting |
+| `highlight.js` | ^11.0.0 | Highlighting engine |
+| `@tanstack/react-virtual` | ^3.0.0 | PDF page virtualization |
+| `idb` | ^8.0.0 | IndexedDB wrapper for caching |
 
-**Fallback:** If Groq quality is insufficient, Llama 3.1 8B ($0.05/$0.08, 840 TPS) is worth testing.
+### pip Packages (Backend)
+
+```bash
+pip install mammoth
+```
+
+| Package | Purpose |
+|---------|---------|
+| `mammoth` | DOCX to HTML conversion |
 
 ---
 
-## 3. Batch Database Inserts
+## Tailwind Config Additions
 
-**File:** `learn_system/app/database/queries.py`
-**Problem:** 75+ individual HTTP calls to Supabase
-**Solution:** 3 batch calls (KCs, states, items)
+```javascript
+// tailwind.config.js
+module.exports = {
+  theme: {
+    extend: {
+      spacing: {
+        'sidebar': '240px',
+        'sidebar-collapsed': '64px',
+        'assistant': '320px',
+        'assistant-min': '280px',
+        'assistant-max': '480px',
+      },
+      screens: {
+        'reader': '1280px',  // Three-column minimum
+      }
+    }
+  }
+}
+```
 
-### Implementation
+---
+
+## Responsive Breakpoints
+
+| Breakpoint | Layout | Behavior |
+|------------|--------|----------|
+| >= 1280px | Full layout | Sidebar (with TOC) + Document + Assistant panel |
+| 1024-1279px | Compact | Sidebar collapsed + Document + Assistant panel |
+| 768-1023px | Tablet | No sidebar, Document + Assistant as drawer |
+| < 768px | Mobile | Full-width document, Assistant as bottom sheet, TOC hidden |
+
+**Note:** The TOC section in the sidebar follows the sidebar's collapse state. When sidebar is collapsed, TOC is hidden. On mobile, users access document sections via a floating TOC button or in-document navigation.
+
+---
+
+## Implementation Phases
+
+### Phase 1: Core Infrastructure (M-R1)
+**Goal:** Database ready, file storage working, basic reader route
+
+- [ ] Run database migration (new tables + columns)
+- [ ] Create Supabase Storage bucket "documents"
+- [ ] Modify upload endpoint to store files in Storage
+- [ ] Add `/api/sources/{id}/file-url` endpoint
+- [ ] Add `/api/sources/{id}/sections` endpoint (for TOC)
+- [ ] Add `/reader/:sourceId` route to App.jsx (uses existing Layout)
+- [ ] Create basic `DocumentReader.jsx` page shell
+
+### Phase 2: Sidebar TOC Integration (M-R2)
+**Goal:** Table of Contents appears in sidebar when viewing documents
+
+- [ ] Create `TableOfContentsSection.jsx` component
+- [ ] Create `useDocumentSections.js` hook
+- [ ] Modify `Sidebar.jsx` to detect `/reader/:sourceId` route
+- [ ] Conditionally render TOC section with accent color (teal)
+- [ ] Implement collapse/expand toggle
+- [ ] Wire TOC clicks to scroll document via custom event
+
+### Phase 3: Document Rendering (M-R3)
+**Goal:** PDF and text documents render correctly
+
+- [ ] Install PDF dependencies (react-pdf, pdfjs-dist)
+- [ ] Create `PDFRenderer.jsx` with text layer
+- [ ] Create `MarkdownRenderer.jsx` with syntax highlighting
+- [ ] Create `TextRenderer.jsx` for plain text
+- [ ] Create `ReaderHeader.jsx` with view mode tabs + Start Practice button
+- [ ] Implement PDF page navigation and zoom controls
+- [ ] Listen for `scroll-to-section` events from TOC
+
+### Phase 4: Navigation Entry Points (M-R4)
+**Goal:** Users can access reader from multiple locations
+
+- [ ] Add "Read" button to SourceCard component
+- [ ] Add "Read Document" button to SourceDetailPanel
+- [ ] Update Sidebar recent sources to link to `/reader/:id`
+- [ ] Modify upload flow to redirect to `/reader/:id` after success
+- [ ] Add "Start Practice" button → `/study?source=${id}`
+
+### Phase 5: Text Selection & Highlights (M-R5)
+**Goal:** Users can select text, create highlights
+
+- [ ] Create `SelectionTooltip.jsx` component
+- [ ] Implement `useTextSelection.js` hook
+- [ ] Create `useAnnotations.js` hook with Supabase sync
+- [ ] Add annotations API endpoints
+- [ ] Create `AnnotationLayer.jsx` for rendering highlights
+- [ ] Implement optimistic updates for annotations
+
+### Phase 6: Assistant Panel (M-R6)
+**Goal:** Right-side panel for notes and AI chat
+
+- [ ] Create `AssistantPanel.jsx` with tabs (Notes | AI | KCs)
+- [ ] Create `NotesList.jsx` and `NoteEditor.jsx`
+- [ ] Add notes API endpoints
+- [ ] Create `AIChatPanel.jsx` component
+- [ ] Add `/api/ai/chat` endpoint with Claude integration
+- [ ] Add "Ask AI" action to selection tooltip
+
+### Phase 7: Reading Progress (M-R7)
+**Goal:** Track and persist reading position
+
+- [ ] Create `useReadingProgress.js` hook
+- [ ] Add progress API endpoints
+- [ ] Implement debounced sync to database
+- [ ] Restore position on document reopen
+- [ ] Show completion percentage in ReaderHeader
+
+### Phase 8: Highlight-to-Generate (M-R8)
+**Goal:** Generate practice questions from selected text
+
+- [ ] Create `GenerateQuestionModal.jsx`
+- [ ] Add `/api/items/generate-from-text` endpoint
+- [ ] Modify KC extraction to populate source_excerpt
+- [ ] Link generated items to source location
+- [ ] Add "Generate Question" action to SelectionTooltip
+
+### Phase 9: Polish & Performance (M-R9)
+**Goal:** Production-ready experience
+
+- [ ] Implement IndexedDB caching for offline support
+- [ ] Add PDF page virtualization for large documents
+- [ ] Create Zen mode (hide assistant panel)
+- [ ] Add responsive mobile layouts
+- [ ] Performance optimization (lazy loading, memoization)
+- [ ] Deep linking with URL updates on section scroll
+
+---
+
+## Upload Flow Changes
+
+### Current Flow
+```
+Upload → Extract text → Store in content column → Delete file
+```
+
+### New Flow
+```
+Upload → Store file in Supabase Storage → Extract text → Store path in storage_path
+                                                       ↓
+                                        Redirect to /reader/:sourceId
+```
+
+### Modified Upload Endpoint
 
 ```python
-def insert_kcs_batch(kcs_data: list[dict]) -> list[str]:
-    """Batch insert KCs and their states."""
-    if not kcs_data:
-        return []
+@router.post("/upload")
+async def upload_source(file: UploadFile, background_tasks: BackgroundTasks):
+    # 1. Create pending source to get ID
+    source_id = create_pending_source(file.filename)
 
-    client = get_client()
-    kc_ids = []
-    kc_records = []
-    state_records = []
+    # 2. Upload to Supabase Storage
+    storage_path = await upload_to_storage(source_id, file.filename, content)
 
-    for kc in kcs_data:
-        kc_id = generate_id('kc')
-        kc_ids.append(kc_id)
-        kc_records.append({
-            'id': kc_id,
-            'source_id': kc['source_id'],
-            'name': kc['name'],
-            'description': kc['description'],
-            'knowledge_type': kc['knowledge_type'],
-            'cognitive_level': kc['cognitive_level'],
-            'intrinsic_complexity': kc['intrinsic_complexity'],
-            'domain': kc['domain'],
-            'source_excerpt': kc.get('source_excerpt'),
-            'metadata': kc.get('metadata', {})
-        })
-        state_records.append({
-            'kc_id': kc_id,
-            'mastery_level': 0.0,
-            'exposure_count': 0,
-            'current_interval_days': 1.0,
-            'easiness_factor': 2.5
-        })
+    # 3. Update source with storage path
+    update_source_storage_path(source_id, storage_path)
 
-    client.table('knowledge_components').insert(kc_records).execute()
-    client.table('kc_state').insert(state_records).execute()
-    return kc_ids
+    # 4. Start background processing
+    background_tasks.add_task(process_document, source_id, temp_path)
 
-def insert_practice_items_batch(items: list[dict]) -> list[str]:
-    """Batch insert practice items."""
-    if not items:
-        return []
-
-    client = get_client()
-    records = []
-    item_ids = []
-
-    for item in items:
-        item_id = generate_id('item')
-        item_ids.append(item_id)
-        records.append({'id': item_id, **item})
-
-    client.table('practice_items').insert(records).execute()
-    return item_ids
-```
-
-**Impact:** 75 HTTP calls → 3 HTTP calls (96% reduction)
-
----
-
-## 4. Progress Tracking for Parallel Execution
-
-**File:** `learn_system/app/api/services/processing.py`
-
-### Thread-Safe Counter
-
-```python
-from threading import Lock
-
-class ProgressTracker:
-    def __init__(self, total: int):
-        self.total = total
-        self._completed = 0
-        self._lock = Lock()
-
-    def increment(self) -> tuple[int, int]:
-        with self._lock:
-            self._completed += 1
-            return (self._completed, self.total)
-```
-
-### Throttled Updates (reduce DB calls)
-
-```python
-import time
-
-class ThrottledUpdater:
-    def __init__(self, update_fn, min_interval: float = 0.5):
-        self.update_fn = update_fn
-        self.min_interval = min_interval
-        self._last_update = 0
-        self._lock = Lock()
-
-    def update(self, *args, **kwargs):
-        with self._lock:
-            now = time.time()
-            if now - self._last_update >= self.min_interval:
-                self.update_fn(*args, **kwargs)
-                self._last_update = now
+    # 5. Return immediately - user can start reading
+    return {"source_id": source_id, "status": "pending"}
 ```
 
 ---
 
-## 5. Error Resilience
+## Key Design Decisions
 
-### Retry with Backoff
-
-```python
-from anthropic import RateLimitError, APIConnectionError, APITimeoutError
-import time
-
-RETRYABLE = (RateLimitError, APIConnectionError, APITimeoutError)
-
-def call_with_retry(fn, *args, max_retries=3, **kwargs):
-    for attempt in range(max_retries + 1):
-        try:
-            return fn(*args, **kwargs)
-        except RETRYABLE as e:
-            if attempt == max_retries:
-                raise
-            time.sleep(2 ** attempt)  # 1s, 2s, 4s
-```
-
-### Graceful Degradation
-
-The parallel implementation above already collects errors without stopping:
-- Successful KCs are stored
-- Failed KCs are logged
-- Returns total items created (partial success is valid)
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| File storage | Supabase Storage | CDN, signed URLs, separate from DB |
+| PDF rendering | react-pdf | Lightweight, text layer support |
+| Layout | Existing Sidebar + Document area | Reuses existing UI, no redundant panels |
+| TOC location | Inside Sidebar (conditional) | Appears only on `/reader/:id`, consistent nav |
+| TOC styling | Accent color (teal) | Differentiates from nav items, draws attention |
+| State management | Context + hooks | Local state, no Redux needed |
+| Annotation anchoring | Text offsets | Survives zoom, reflow, edits |
+| Caching | IndexedDB | Offline support, large files |
+| Route structure | `/reader/:sourceId` | Clean URLs, uses existing Layout wrapper |
+| TOC→Document communication | Custom events | Decoupled, works across component tree |
 
 ---
 
-## Implementation Order
+## Success Criteria
 
-1. **Phase 1 (Low effort, immediate gains):**
-   - Add Groq client and `GROQ_MODEL_FAST` config
-   - Switch item generation to Qwen3 32B on Groq
-   - Add batch insert functions
-
-2. **Phase 2 (Medium effort, major gains):**
-   - Refactor `generate_all_items` to use ThreadPoolExecutor
-   - Add `ProgressTracker` and `ThrottledUpdater`
-   - Wire progress callback
-
-3. **Phase 3 (Optional polish):**
-   - Add retry wrapper to LLM calls
-   - Add circuit breaker for API overload
-   - Checkpoint file for resumable processing
+1. **Upload → Read:** User can read uploaded document within 2 seconds
+2. **Source Accessibility:** Document is one click away from any practice question
+3. **Text Selection:** Users can highlight and ask AI about any text
+4. **Progress Persistence:** Reading position restored on return
+5. **Mobile Support:** Full functionality on tablet, graceful degradation on mobile
+6. **Performance:** Large PDFs (100+ pages) load progressively without freezing
 
 ---
 
-## Expected Results
+## Cross-References
 
-| Metric | Before | After |
-|--------|--------|-------|
-| Item generation (15 KCs) | 45-120s | 9-24s |
-| DB operations | 5-8s | 0.5s |
-| Total processing | 60-165s | 15-40s |
-| Speedup | — | **3-4x** |
+- **Memory Files:**
+  - `milestones/sources_feature.md` - Current upload implementation
+  - `schemas/database.md` - Existing schema
+  - `schemas/api.md` - Existing API patterns
+  - `schemas/components.md` - React component structure
 
----
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `app/config.py` | Add `GROQ_MODEL_FAST`, `GROQ_API_KEY` |
-| `app/practice/generator.py` | Add Groq client, parallel execution |
-| `app/database/queries.py` | Add batch insert functions |
-| `app/api/services/processing.py` | Thread-safe progress tracking |
-| `app/ingestion/kc_extractor.py` | Use batch KC insert |
-| `requirements.txt` | Add `groq` dependency |
-
----
-
-*This plan is ready for implementation. Each section is independent and can be implemented incrementally.*
+- **Research Worktrees:**
+  - `research-ui-layout` - Three-panel layout details
+  - `research-document-rendering` - PDF/Markdown rendering
+  - `research-data-model` - State management, caching
+  - `research-upload-pipeline` - Storage integration
+  - `research-practice-flow` - Question generation
+  - `research-integration` - Navigation, deep linking

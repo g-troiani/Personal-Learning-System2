@@ -244,7 +244,7 @@ def get_source_status(source_id: str) -> Optional[Dict[str, Any]]:
         result = client.table("content_sources").select(
             "id, title, domain, content_type, word_count, ingested_at, status, "
             "processing_status, processing_progress, processing_step, error_message, "
-            "processing_started_at, processing_completed_at"
+            "processing_started_at, processing_completed_at, mime_type"
         ).eq("id", source_id).execute()
 
         if result.data and len(result.data) > 0:

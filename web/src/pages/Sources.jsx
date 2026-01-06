@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useSources } from '../hooks/useSources'
 import SourcesHeader from '../components/sources/SourcesHeader'
 import SourcesToolbar from '../components/sources/SourcesToolbar'
@@ -13,6 +14,8 @@ import { Loader2, CheckCircle } from 'lucide-react'
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
 
 export default function Sources() {
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const {
     sources,
     allSources,
@@ -32,6 +35,16 @@ export default function Sources() {
 
   // Upload zone visibility state
   const [showUploadZone, setShowUploadZone] = useState(false)
+
+  // Check for upload=true URL parameter on mount
+  useEffect(() => {
+    if (searchParams.get('upload') === 'true') {
+      setShowUploadZone(true)
+      // Remove the param from URL to avoid reopening on refresh
+      searchParams.delete('upload')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
   const [uploadSuccess, setUploadSuccess] = useState(null)
   const [processingSourceId, setProcessingSourceId] = useState(null)
 
@@ -71,7 +84,10 @@ export default function Sources() {
 
     // Refresh sources list to get final data
     refresh()
-  }, [refresh])
+
+    // Navigate to reader to view the processed document
+    navigate(`/reader/${sourceId}`)
+  }, [refresh, navigate])
 
   // Retry a failed source
   const handleRetry = useCallback(async (sourceId) => {

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is the **Personal Adaptive Learning System**—a localhost CLI tool that automates the logistics of learning using cognitive science principles (spaced repetition, retrieval practice, interleaving).
 
-**Current Status:** Planning/Design phase. No source code exists yet; the repository contains vision and specification documents.
+**Current Status:** Fully implemented through M23 (CLI + Web UI + FastAPI backend). M24-M29 implemented the tiered memory system to manage EXECPLAN complexity.
 
 ## ExecPlans
 
@@ -38,7 +38,91 @@ When writing complex features or significant refactors, use an ExecPlan (as desc
 
 All specifications and design decisions are documented in:
 - `VISION.md` — Core requirements, design philosophy, success criteria
-- Reference materials (to be added): Research synthesis, variable taxonomy, system specification
+- `EXECPLAN.md` — Active milestones, known issues, progress tracking
+- `.claude/memory/` — External memory (archived milestones, decisions, schemas, reference)
+
+
+## Memory System
+
+This project uses a tiered memory system to manage complexity.
+
+### Core Memory (Always Loaded)
+- `EXECPLAN.md`: Active state, current milestones, known issues
+- `CLAUDE.md`: This file - instructions, conventions, memory access
+
+### External Memory (Read on Demand)
+Stored in `.claude/memory/`:
+
+| File | Contains | Read When |
+|------|----------|-----------|
+| `INDEX.md` | Summary of all memory files | Starting new topic |
+| `milestones/cli_foundation.md` | M1-M8 details | Debugging CLI |
+| `milestones/webui_core.md` | M9-M15 details | Modifying UI |
+| `milestones/sources_feature.md` | M16-M20 details | Upload issues |
+| `milestones/speed_optimization.md` | M21-M23 details | Performance |
+| `decisions/architecture.md` | Structural choices | Proposing changes |
+| `decisions/technology.md` | Stack choices | Evaluating alternatives |
+| `decisions/patterns.md` | Implementation patterns | Adding features |
+| `schemas/database.md` | Supabase schema | Database work |
+| `schemas/api.md` | FastAPI specs | API modifications |
+| `schemas/components.md` | React components | UI work |
+| `reference/research.md` | Learning science | Justifying features |
+| `reference/context.md` | Glossary, structure | Onboarding |
+| `reference/retrospective.md` | What worked, lessons | Planning |
+
+### Starting New Work Protocol
+
+Before implementing a new milestone, PROACTIVELY read relevant memory:
+
+1. **Always read first:**
+   - `.claude/memory/INDEX.md` - orient to available memory
+   - `decisions/architecture.md` - check architectural constraints
+   - `decisions/technology.md` - verify stack choices still apply
+
+2. **Read based on work type:**
+   - CLI work → `milestones/cli_foundation.md`
+   - Web UI work → `milestones/webui_core.md`
+   - Upload/processing → `milestones/sources_feature.md`
+   - Performance → `milestones/speed_optimization.md`
+   - Database changes → `schemas/database.md`
+   - API changes → `schemas/api.md`
+   - New features → `reference/research.md` (learning science basis)
+
+3. **Check for patterns:**
+   - Similar past milestones for implementation patterns
+   - Related decisions for constraints and trade-offs
+   - Known issues that may affect new work
+
+4. **ALWAYS spawn 3 scout subagents before implementing:**
+
+   **This is mandatory for EVERY milestone.** Spawn 3 parallel subagents to search archived memory before writing any code. Failing to understand the memory system will break the repo.
+
+   | Agent | Focus | Searches | Returns |
+   |-------|-------|----------|---------|
+   | **Decisions Scout** | Constraints & trade-offs | `decisions/*.md` | Relevant constraints, past rationale |
+   | **Patterns Scout** | Implementation precedents | `milestones/*.md` | Similar past work, patterns, gotchas |
+   | **Schema Scout** | Data structures & APIs | `schemas/*.md`, `reference/*.md` | Affected tables, endpoints, types |
+
+   **Do NOT skip this step.** The scouts ensure you understand existing patterns before making changes.
+
+### Reactive Retrieval Triggers
+
+Also read external memory when:
+1. User asks about completed features
+2. You encounter unexpected behavior
+3. You're unsure about prior decisions
+4. Debugging requires implementation context
+
+### Memory Update Protocol
+
+After completing work:
+1. Archive detailed notes to appropriate memory file
+2. Update EXECPLAN.md Progress (keep concise - link to archive)
+3. Update INDEX.md if new file created
+4. Add new decisions to decisions/*.md with rationale
+
+**Writing style for memory:** Be concise. Sacrifice grammar for brevity but explain the system thoroughly and preserve full meaning. Use tables, bullet points, code snippets over prose. Link to source files with line numbers. Future sessions need context, not narrative.
+
 
 ## Technology Stack
 

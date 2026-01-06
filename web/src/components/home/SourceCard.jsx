@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { BookOpen, GraduationCap } from 'lucide-react'
 
 // Source emoji mapping based on domain or custom assignment
 const getSourceEmoji = (source) => {
@@ -26,15 +27,18 @@ export default function SourceCard({ source, mastery, dueCount, overdueCount }) 
     ? source.title.substring(0, 30) + '...'
     : source.title
 
-  const handleClick = () => {
+  const handleRead = (e) => {
+    e.stopPropagation()
+    navigate(`/reader/${source.id}`)
+  }
+
+  const handlePractice = (e) => {
+    e.stopPropagation()
     navigate(`/study?source=${source.id}`)
   }
 
   return (
-    <div
-      onClick={handleClick}
-      className="bg-bg-card border border-bg-card-border rounded-card p-5 cursor-pointer hover:shadow-md transition-shadow"
-    >
+    <div className="bg-bg-card border border-bg-card-border rounded-card p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start gap-3 mb-4">
         <span className="text-3xl">{emoji}</span>
         <div className="flex-1 min-w-0">
@@ -57,7 +61,7 @@ export default function SourceCard({ source, mastery, dueCount, overdueCount }) 
         </div>
       </div>
 
-      <div className="flex gap-4 text-sm">
+      <div className="flex gap-4 text-sm mb-4">
         {overdueCount > 0 && (
           <span className="text-accent-overdue font-medium">
             {overdueCount} overdue
@@ -73,6 +77,24 @@ export default function SourceCard({ source, mastery, dueCount, overdueCount }) 
             All caught up
           </span>
         )}
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-2 pt-2 border-t border-bg-card-border">
+        <button
+          onClick={handleRead}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-800 border border-gray-800 hover:bg-gray-800 hover:text-white rounded-button transition-colors"
+        >
+          <BookOpen className="h-4 w-4" />
+          Read
+        </button>
+        <button
+          onClick={handlePractice}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-btn-primary hover:bg-gray-800 rounded-button transition-colors"
+        >
+          <GraduationCap className="h-4 w-4" />
+          Practice
+        </button>
       </div>
     </div>
   )
