@@ -105,6 +105,7 @@ const ReaderContent = memo(function ReaderContent({
           <PDFRenderer
             fileUrl={fileUrl}
             onPageChange={onPageChange}
+            onScroll={onScroll}
             initialPage={initialPage}
           />
         )

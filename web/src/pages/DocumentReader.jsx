@@ -217,83 +217,61 @@ export default function DocumentReader() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-100">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-300 bg-gray-50">
-        <div className="flex items-center gap-3">
-          <Link
-            to="/sources"
-            className="p-2 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-teal-600" />
-            <h1 className="text-lg font-medium text-gray-800 truncate max-w-md">
-              {source?.title || 'Document'}
-            </h1>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Reading Progress Indicator */}
-          {readingProgress.completionPercentage > 0 && (
-            <div className="flex items-center gap-2 text-sm">
-              <div className="flex items-center gap-1.5 text-gray-500">
-                <CheckCircle className="h-4 w-4 text-teal-600" />
-                <span className="text-teal-600 font-medium">
-                  {readingProgress.completionPercentage}%
-                </span>
-                <span className="text-gray-400">read</span>
-              </div>
-              {/* Progress bar */}
-              <div className="w-20 h-1.5 bg-gray-300 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-teal-500 transition-all duration-300"
-                  style={{ width: `${readingProgress.completionPercentage}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Zen Mode Toggle */}
-          <button
-            onClick={toggleZenMode}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-              isZenMode
-                ? 'bg-teal-600 hover:bg-teal-500 text-white'
-                : 'bg-teal-50 border border-teal-300 text-teal-700 hover:bg-teal-100'
-            }`}
-            title={isZenMode ? 'Show tools and sidebar' : 'Hide tools for distraction-free reading'}
-          >
-            {isZenMode ? (
-              <>
-                <Minimize2 className="h-4 w-4" />
-                <span>Show tools</span>
-              </>
-            ) : (
-              <>
-                <Maximize2 className="h-4 w-4" />
-                <span>Hide tools</span>
-              </>
-            )}
-          </button>
-
-          {source && !isZenMode && (
+    <div className="h-full flex bg-gray-100">
+      {/* Left section - main content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header - left part */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-300 bg-gray-50">
+          <div className="flex items-center gap-3 flex-1">
             <Link
-              to={`/study/${sourceId}`}
-              className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm transition-colors"
+              to="/sources"
+              className="p-2 rounded-lg hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition-colors"
             >
-              <BookOpen className="h-4 w-4" />
-              Practice
+              <ArrowLeft className="h-5 w-5" />
             </Link>
+            <div className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-teal-600" />
+              <h1 className="text-lg font-medium text-gray-800 truncate max-w-md">
+                {source?.title || 'Document'}
+              </h1>
+            </div>
+            {/* Spacer */}
+            <div className="w-96" />
+            {/* Reading Progress Indicator */}
+            {readingProgress.completionPercentage > 0 && (
+              <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-1.5 text-gray-500">
+                  <CheckCircle className="h-4 w-4 text-teal-600" />
+                  <span className="text-teal-600 font-medium">
+                    {readingProgress.completionPercentage}%
+                  </span>
+                  <span className="text-gray-400">read</span>
+                </div>
+                {/* Progress bar */}
+                <div className="w-20 h-1.5 bg-gray-300 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-teal-500 transition-all duration-300"
+                    style={{ width: `${readingProgress.completionPercentage}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Show tools button - only visible in zen mode */}
+          {isZenMode && (
+            <button
+              onClick={toggleZenMode}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors bg-teal-600 hover:bg-teal-500 text-white"
+              title="Show tools and sidebar"
+            >
+              <Minimize2 className="h-4 w-4" />
+              <span>Show tools</span>
+            </button>
           )}
         </div>
-      </div>
 
-      {/* Document Viewer Area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Main Document Area */}
+        {/* Document Viewer */}
         <div
           ref={contentContainerRef}
           className="flex-1 overflow-hidden relative"
@@ -321,9 +299,44 @@ export default function DocumentReader() {
           />
         </div>
 
-        {/* Right Panel - Assistant/Notes (hidden in zen mode) */}
-        {!isZenMode && (
-          <div className="hidden lg:block">
+        {/* Source Info Footer (hidden in zen mode) */}
+        {source && !isZenMode && (
+          <div className="px-4 py-2 border-t border-gray-300 bg-gray-50 text-xs text-gray-500 flex items-center gap-4">
+            <span>Domain: {source.domain || 'general'}</span>
+            <span>|</span>
+            <span>{source.word_count?.toLocaleString() || 0} words</span>
+            <span>|</span>
+            <span>{source.kc_count || 0} knowledge components</span>
+            <span>|</span>
+            <span>{source.item_count || 0} practice items</span>
+          </div>
+        )}
+      </div>
+
+      {/* Right panel column - full height with border-l (hidden in zen mode) */}
+      {!isZenMode && (
+        <div className="hidden lg:flex flex-col border-l border-gray-300">
+          {/* Header - right part */}
+          <div className="p-4 border-b border-gray-300 bg-gray-50 flex items-center gap-3">
+            <button
+              onClick={toggleZenMode}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors bg-teal-50 border border-teal-300 text-teal-700 hover:bg-teal-100"
+              title="Hide tools for distraction-free reading"
+            >
+              <Maximize2 className="h-4 w-4" />
+              <span>Hide tools</span>
+            </button>
+            <Link
+              to={`/study/${sourceId}`}
+              className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm transition-colors"
+            >
+              <BookOpen className="h-4 w-4" />
+              Practice
+            </Link>
+          </div>
+
+          {/* Assistant Panel */}
+          <div className="flex-1 overflow-hidden">
             <AssistantPanel
               sourceId={sourceId}
               source={source}
@@ -334,19 +347,6 @@ export default function DocumentReader() {
               onClearInitialMessage={handleClearAiMessage}
             />
           </div>
-        )}
-      </div>
-
-      {/* Source Info Footer (hidden in zen mode) */}
-      {source && !isZenMode && (
-        <div className="px-4 py-2 border-t border-gray-300 bg-gray-50 text-xs text-gray-500 flex items-center gap-4">
-          <span>Domain: {source.domain || 'general'}</span>
-          <span>|</span>
-          <span>{source.word_count?.toLocaleString() || 0} words</span>
-          <span>|</span>
-          <span>{source.kc_count || 0} knowledge components</span>
-          <span>|</span>
-          <span>{source.item_count || 0} practice items</span>
         </div>
       )}
     </div>

@@ -16,9 +16,10 @@ import 'react-pdf/dist/Page/TextLayer.css'
  *
  * @param {string} fileUrl - Signed URL to the PDF file
  * @param {Function} onPageChange - Callback when page changes (page, totalPages)
+ * @param {Function} onScroll - Callback for scroll tracking (scrollTop, clientHeight, scrollHeight)
  * @param {number} initialPage - Page number to scroll to initially (default: 1)
  */
-const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPage = 1 }) {
+const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, onScroll, initialPage = 1 }) {
   const [numPages, setNumPages] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -41,6 +42,20 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
     setError('Failed to load PDF document')
     setLoading(false)
   }, [])
+
+  // Handle scroll for progress tracking
+  const handleScroll = useCallback((e) => {
+    if (onScroll) {
+      const container = e.target
+      onScroll({
+        target: {
+          scrollTop: container.scrollTop,
+          clientHeight: container.clientHeight,
+          scrollHeight: container.scrollHeight
+        }
+      })
+    }
+  }, [onScroll])
 
   // Scroll to initial page after document loads (only if not page 1)
   useEffect(() => {
@@ -66,6 +81,7 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
     <div
       className="h-full overflow-auto bg-gray-200"
       ref={containerRef}
+      onScroll={handleScroll}
     >
       {/* Loading overlay */}
       {loading && (
