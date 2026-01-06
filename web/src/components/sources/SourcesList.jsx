@@ -190,8 +190,9 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
         : 'border-bg-card-border cursor-pointer hover:shadow-md hover:border-accent-new/30'
   }`
 
-  // Disable menu during processing/pending states (unless failed due to timeout)
-  const menuDisabled = (isProcessing || isPending) && !hasFailed
+  // Disable menu only during active processing (not pending or failed)
+  // Allow deletion of pending/stuck uploads
+  const menuDisabled = isProcessing && !isPending && !hasFailed
 
   return (
     <div onClick={handleClick} className={cardClasses}>
@@ -265,15 +266,15 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
       {/* Only show stats and progress if processing is complete */}
       {!isProcessing && !isPending && !hasError && (
         <>
-          {/* Stats row */}
-          <div className="flex gap-4 mb-4 text-sm text-text-secondary">
-            <div className="flex items-center gap-1" title="Knowledge Components">
+          {/* Stats */}
+          <div className="flex flex-col gap-1.5 mb-4 text-sm text-text-secondary">
+            <div className="flex items-center gap-2">
               <Brain className="w-4 h-4" />
-              <span>{source.kcCount || 0}</span>
+              <span>{source.kcCount || 0} Knowledge Components</span>
             </div>
-            <div className="flex items-center gap-1" title="Practice Items">
+            <div className="flex items-center gap-2">
               <FileText className="w-4 h-4" />
-              <span>{source.itemCount || 0}</span>
+              <span>{source.itemCount || 0} Practice Items</span>
             </div>
           </div>
 
