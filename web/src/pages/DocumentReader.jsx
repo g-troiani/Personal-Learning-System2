@@ -8,9 +8,7 @@ import { useTextSelection } from '../hooks/useTextSelection'
 import { useAnnotations } from '../hooks/useAnnotations'
 import { useReadingProgress } from '../hooks/useReadingProgress'
 import { useZenMode } from '../contexts/ZenModeContext'
-
-// API base URL from environment or default to localhost:8001
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
+import { getSourceStatus, getFileUrl, getPdfUrl, getSections, getContent } from '../lib/api'
 
 export default function DocumentReader() {
   const { sourceId } = useParams()
@@ -143,31 +141,25 @@ export default function DocumentReader() {
       setError(null)
 
       try {
-        // Fetch source status/details
-        const statusRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/status`)
-        if (!statusRes.ok) {
-          throw new Error('Source not found')
-        }
-        const statusData = await statusRes.json()
+        // Fetch source status/details (uses authenticated api.js)
+        const statusData = await getSourceStatus(sourceId)
         setSource(statusData)
 
         // Fetch extracted content for non-PDF files (Markdown, text)
         try {
-          const contentRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/content`)
-          if (contentRes.ok) {
-            const contentData = await contentRes.json()
-            setExtractedContent(contentData.content)
-          }
+          const contentData = await getContent(sourceId)
+          setExtractedContent(contentData.content)
         } catch (e) {
           // Content endpoint may not exist, that's ok - we'll use file URL
           console.log('Content endpoint not available, using file URL')
         }
 
         // Fetch signed URL for the file
-        const fileRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/file-url`)
-        if (fileRes.ok) {
-          const fileData = await fileRes.json()
+        try {
+          const fileData = await getFileUrl(sourceId)
           setFileUrl(fileData.url)
+        } catch (e) {
+          console.log('File URL not available')
         }
 
         // For PPTX sources, also fetch the converted PDF URL
@@ -175,11 +167,8 @@ export default function DocumentReader() {
         const ext = title.toLowerCase().split('.').pop()
         if (ext === 'pptx' || ext === 'ppt') {
           try {
-            const pdfRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/pdf-url`)
-            if (pdfRes.ok) {
-              const pdfData = await pdfRes.json()
-              setConvertedPdfUrl(pdfData.url)
-            }
+            const pdfData = await getPdfUrl(sourceId)
+            setConvertedPdfUrl(pdfData.url)
           } catch (e) {
             // PDF conversion may not be available, continue without it
             console.log('Converted PDF not available for PPTX source')
@@ -187,10 +176,11 @@ export default function DocumentReader() {
         }
 
         // Fetch sections (TOC)
-        const sectionsRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/sections`)
-        if (sectionsRes.ok) {
-          const sectionsData = await sectionsRes.json()
+        try {
+          const sectionsData = await getSections(sourceId)
           setSections(sectionsData.sections || [])
+        } catch (e) {
+          console.log('Sections not available')
         }
 
       } catch (err) {

@@ -45,10 +45,13 @@ def get_supabase_url() -> str:
 
 
 def get_supabase_key() -> str:
-    """Returns Supabase API key."""
-    key = os.getenv('SUPABASE_KEY', SUPABASE_KEY)
-    if not key:
-        raise ValueError("SUPABASE_KEY environment variable is not set")
+    """Returns Supabase API key (service role for backend to bypass RLS)."""
+    # Priority: service role JWT > service role key > anon key
+    key = os.getenv('SUPABASE_SERVICE_ROLE_JWT') or \
+          os.getenv('SUPABASE_SERVICE_ROLE_KEY') or \
+          os.getenv('SUPABASE_KEY', '')
+    if not key or key.startswith('PASTE_'):
+        raise ValueError("SUPABASE_SERVICE_ROLE_KEY environment variable is not set")
     return key
 
 

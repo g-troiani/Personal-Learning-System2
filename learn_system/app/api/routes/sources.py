@@ -71,16 +71,27 @@ def validate_file(file: UploadFile) -> Optional[str]:
     return None
 
 
-async def process_document_background(source_id: str, file_path: str, domain: str):
-    """Background task to process the uploaded document."""
-    pipeline = ProcessingPipeline(source_id)
-    pipeline.process_file(file_path, domain)
+def process_document_background(source_id: str, file_path: str, domain: str):
+    """Background task to process the uploaded document.
 
-    # Clean up temp file
+    Note: This is a synchronous function (not async) so FastAPI runs it
+    in a thread pool, which is appropriate for blocking I/O operations.
+    """
     try:
-        os.remove(file_path)
-    except Exception:
-        pass
+        print(f"[Background] Starting processing for {source_id}")
+        pipeline = ProcessingPipeline(source_id)
+        result = pipeline.process_file(file_path, domain)
+        print(f"[Background] Completed processing for {source_id}: {result}")
+    except Exception as e:
+        print(f"[Background] ERROR processing {source_id}: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Clean up temp file
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
 
 
 def upload_to_storage(source_id: str, content: bytes, filename: str) -> str:

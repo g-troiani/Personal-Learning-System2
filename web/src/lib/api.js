@@ -5,7 +5,7 @@
 
 import { supabase } from './supabase'
 
-const API_BASE = 'http://localhost:8001/api'
+const API_BASE = 'http://localhost:8000/api'
 
 /**
  * Get the current access token for API requests.
