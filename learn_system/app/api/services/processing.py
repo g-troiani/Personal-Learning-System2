@@ -14,6 +14,7 @@ from ...database.queries import generate_id
 from ...ingestion.extractors import extract_text, get_file_metadata
 from ...ingestion.kc_extractor import extract_and_store_kcs
 from ...practice.generator import generate_all_items
+from ...services.conversion import convert_and_store_pptx, get_slide_count, is_libreoffice_available
 
 
 class ProgressTracker:
@@ -139,13 +140,36 @@ class ProcessingPipeline:
             # Calculate statistics
             word_count = len(content.split())
 
-            # Update source with extracted content
-            self.client.table("content_sources").update({
+            # Build update data
+            update_data = {
                 "content": content,
                 "content_type": content_type,
                 "word_count": word_count,
                 "metadata": metadata
-            }).eq("id", self.source_id).execute()
+            }
+
+            # For PPTX files, get slide count and attempt PDF conversion
+            if content_type == 'pptx':
+                slide_count = get_slide_count(file_path)
+                update_data["slide_count"] = slide_count
+
+                # Attempt PDF conversion for viewing
+                self.update_status("extracting_text", 30, "Converting presentation to PDF...")
+                success, storage_path, error = convert_and_store_pptx(self.source_id, file_path)
+
+                if success:
+                    update_data["converted_pdf_path"] = storage_path
+                    self.update_status("extracting_text", 35, f"Converted {slide_count} slides to PDF")
+                elif error == "CONVERSION_NOT_AVAILABLE":
+                    # LibreOffice not installed - continue without PDF conversion
+                    # Users can still study with extracted text content
+                    print(f"Warning: PDF conversion skipped for {self.source_id} (LibreOffice not available)")
+                else:
+                    # Other conversion error - log but continue
+                    print(f"Warning: PDF conversion failed for {self.source_id}: {error}")
+
+            # Update source with extracted content
+            self.client.table("content_sources").update(update_data).eq("id", self.source_id).execute()
 
             # Step 2: Extract knowledge components
             self.update_status("extracting_kcs", 35, "Analyzing content for knowledge components...")

@@ -53,7 +53,7 @@ class ContentResponse(BaseModel):
 router = APIRouter()
 
 # Supported file types
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt", ".pptx", ".ppt"}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 
@@ -377,6 +377,51 @@ async def get_file_url(source_id: str, expires_in: int = 3600):
             expires_in=expires_in
         )
         return FileUrlResponse(url=signed_url["signedURL"], expires_in=expires_in)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate signed URL: {str(e)}")
+
+
+class ConvertedPdfUrlResponse(BaseModel):
+    url: str
+    expires_in: int = 3600
+
+
+@router.get("/{source_id}/pdf-url", response_model=ConvertedPdfUrlResponse)
+async def get_converted_pdf_url(source_id: str, expires_in: int = 3600):
+    """
+    Get a signed URL for the converted PDF (for PPTX sources).
+
+    Args:
+        source_id: The source ID
+        expires_in: URL expiry time in seconds (default: 3600)
+
+    Returns:
+        ConvertedPdfUrlResponse with signed URL
+    """
+    client = get_client()
+
+    result = client.table("content_sources").select(
+        "converted_pdf_path, content_type"
+    ).eq("id", source_id).execute()
+
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail=f"Source not found: {source_id}")
+
+    source = result.data[0]
+    converted_pdf_path = source.get("converted_pdf_path")
+
+    if not converted_pdf_path:
+        raise HTTPException(
+            status_code=404,
+            detail="No converted PDF available. The presentation may not have been converted yet."
+        )
+
+    try:
+        signed_url = client.storage.from_("documents").create_signed_url(
+            path=converted_pdf_path,
+            expires_in=expires_in
+        )
+        return ConvertedPdfUrlResponse(url=signed_url["signedURL"], expires_in=expires_in)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate signed URL: {str(e)}")
 

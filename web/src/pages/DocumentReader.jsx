@@ -24,6 +24,7 @@ export default function DocumentReader() {
 
   const [source, setSource] = useState(null)
   const [fileUrl, setFileUrl] = useState(null)
+  const [convertedPdfUrl, setConvertedPdfUrl] = useState(null)
   const [extractedContent, setExtractedContent] = useState(null)
   const [sections, setSections] = useState([])
   const [loading, setLoading] = useState(true)
@@ -169,6 +170,22 @@ export default function DocumentReader() {
           setFileUrl(fileData.url)
         }
 
+        // For PPTX sources, also fetch the converted PDF URL
+        const title = statusData?.title || ''
+        const ext = title.toLowerCase().split('.').pop()
+        if (ext === 'pptx' || ext === 'ppt') {
+          try {
+            const pdfRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/pdf-url`)
+            if (pdfRes.ok) {
+              const pdfData = await pdfRes.json()
+              setConvertedPdfUrl(pdfData.url)
+            }
+          } catch (e) {
+            // PDF conversion may not be available, continue without it
+            console.log('Converted PDF not available for PPTX source')
+          }
+        }
+
         // Fetch sections (TOC)
         const sectionsRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/sections`)
         if (sectionsRes.ok) {
@@ -280,6 +297,7 @@ export default function DocumentReader() {
           <ReaderContent
             source={source}
             fileUrl={fileUrl}
+            convertedPdfUrl={convertedPdfUrl}
             extractedContent={extractedContent}
             sections={sections}
             onPageChange={handlePageChange}

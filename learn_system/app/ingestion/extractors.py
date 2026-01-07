@@ -87,6 +87,69 @@ def extract_text_file(file_path: str) -> str:
         return f.read()
 
 
+def extract_pptx(file_path: str) -> str:
+    """
+    Extracts text content from a PowerPoint PPTX file.
+
+    Extracts text from:
+    - Slide titles
+    - Text boxes and shapes
+    - Tables
+    - Speaker notes
+
+    Args:
+        file_path: Path to the PPTX file
+
+    Returns:
+        Extracted text content as a single string with slide separators
+    """
+    from pptx import Presentation
+
+    prs = Presentation(file_path)
+    text_parts = []
+
+    for slide_num, slide in enumerate(prs.slides, 1):
+        slide_text = [f"=== Slide {slide_num} ==="]
+
+        # Extract title if present
+        if slide.shapes.title and slide.shapes.title.has_text_frame:
+            title = slide.shapes.title.text.strip()
+            if title:
+                slide_text.append(f"Title: {title}")
+
+        # Extract body text from all shapes
+        for shape in slide.shapes:
+            # Skip the title shape (already extracted)
+            if shape == slide.shapes.title:
+                continue
+
+            # Extract text from text frames
+            if shape.has_text_frame:
+                for para in shape.text_frame.paragraphs:
+                    para_text = para.text.strip()
+                    if para_text:
+                        slide_text.append(para_text)
+
+            # Extract text from tables
+            if shape.has_table:
+                for row in shape.table.rows:
+                    row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                    if row_text:
+                        slide_text.append(" | ".join(row_text))
+
+        # Extract speaker notes
+        if slide.has_notes_slide:
+            notes_frame = slide.notes_slide.notes_text_frame
+            if notes_frame:
+                notes_text = notes_frame.text.strip()
+                if notes_text:
+                    slide_text.append(f"[Speaker Notes]: {notes_text}")
+
+        text_parts.append("\n".join(slide_text))
+
+    return "\n\n".join(text_parts)
+
+
 def extract_text(file_path: str) -> Tuple[str, str]:
     """
     Dispatches to appropriate extractor based on file extension.
@@ -111,6 +174,8 @@ def extract_text(file_path: str) -> Tuple[str, str]:
         '.markdown': (extract_markdown, 'markdown'),
         '.txt': (extract_text_file, 'text'),
         '.text': (extract_text_file, 'text'),
+        '.pptx': (extract_pptx, 'pptx'),
+        '.ppt': (extract_pptx, 'pptx'),  # Try pptx extractor for .ppt
     }
 
     if extension not in extractors:

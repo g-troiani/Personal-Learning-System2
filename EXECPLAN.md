@@ -21,7 +21,8 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Performance issues → `.claude/memory/milestones/speed_optimization.md`
    - Document Reader (M30-M37) → See completed milestones in Progress section
    - Document Viewer Fidelity (M38) → Complete
-   - PDF Highlighting (M39) → `NEW FEATURES.md` (full implementation plan)
+   - PDF Highlighting (M39) → Complete
+   - PPTX Support (M40) → `NEW FEATURES.md` (full implementation plan)
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
 
@@ -53,6 +54,8 @@ The system solves five problems. First, it eliminates the "I don't know what I d
 **Document Viewer Fidelity (M38):** This milestone fixes a critical gap where DOCX files render as plain text, losing all formatting. After M38, uploaded DOCX files display with full visual fidelity—headings, tables, images, colors, and formatting preserved—using the `docx-preview` library for client-side rendering.
 
 **PDF Highlighting (M39):** This milestone implements PDF-specific highlighting. Currently, highlights save to the database but don't render in PDFs because the prop isn't passed and the positioning system is incompatible. After M39, users can highlight PDF text and see those highlights persist across sessions using page-based percentage coordinates.
+
+**PowerPoint Support (M40):** This milestone adds PowerPoint (.pptx) document support. After M40, users can upload PowerPoint presentations and view them in the document reader with full visual fidelity. The system extracts text using python-pptx for KC generation, converts PPTX to PDF using LibreOffice + unoserver for display, and reuses the existing PDFRenderer for viewing. Highlights work on the converted PDF.
 
 
 ## Progress
@@ -124,6 +127,14 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Phase 3: Updated PDFRenderer with data-page-number attributes
   - Phase 4: Created PDFHighlightLayer component for overlay rendering
   - Phase 5: Updated useAnnotations to handle PDF position type and sorting
+
+**PowerPoint Support (M40)** - Complete
+- [x] M40 Research: 6 parallel worktrees, consolidated spec in NEW FEATURES.md (2026-01-06)
+- [x] M40 Phase 1: Backend text extraction with python-pptx (2026-01-06)
+- [x] M40 Phase 2: PPTX→PDF conversion with LibreOffice (local, no Docker required) (2026-01-06)
+- [x] M40 Phase 3: Database schema (slide_count, converted_pdf_path columns) (2026-01-06)
+- [x] M40 Phase 4: Frontend content type detection and routing (2026-01-06)
+- [x] M40 Phase 5: API endpoint for converted PDF URL (2026-01-06)
 
 
 ## Surprises and Discoveries
@@ -222,6 +233,14 @@ Recent decisions only below. See archives for full rationale.
   **Rationale:** (1) Character offsets are unstable for PDFs - text layer ordering can change between PDF.js versions. (2) Each PDF page is an isolated DOM subtree, making cumulative offsets impossible. (3) Percentage-based coordinates survive zoom/scale changes. (4) Existing AnnotationLayer with TreeWalker is incompatible with PDF's absolute-positioned text layer.
   **Date:** 2026-01-06
 
+- **Decision:** Use LibreOffice + unoserver for PPTX rendering instead of client-side pptx2html
+  **Rationale:** (1) pptx2html is abandoned (8 years, no updates) with unpatched XSS vulnerability - DO NOT USE. (2) LibreOffice produces high-fidelity PDF output. (3) Reuses existing PDFRenderer, no new frontend bundle. (4) Existing PDF highlighting works on converted output. (5) PPTXjs is fallback option if Docker unavailable.
+  **Date:** 2026-01-06
+
+- **Decision:** Extract PPTX text with python-pptx for KC generation
+  **Rationale:** (1) Pure Python, no native dependencies. (2) Extracts text from shapes, tables, and speaker notes. (3) Speaker notes are valuable learning material often missed. (4) SmartArt limitation accepted (python-pptx doesn't support it).
+  **Date:** 2026-01-06
+
 
 ## Outcomes and Retrospective
 
@@ -239,7 +258,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through thirty-nine milestones. All milestones (M1-M39) are complete.
+Implementation proceeds through forty milestones. M1-M40 are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -255,7 +274,9 @@ Implementation proceeds through thirty-nine milestones. All milestones (M1-M39) 
 
 **Document Viewer Fidelity (Complete):** M38: DOCX high-fidelity rendering with docx-preview (client-side).
 
-**PDF Highlighting (Pending):** M39: Page-based PDF highlighting with percentage coordinates. See `NEW FEATURES.md` for full implementation plan.
+**PDF Highlighting (Complete):** M39: Page-based PDF highlighting with percentage coordinates.
+
+**PowerPoint Support (Complete):** M40: PPTX document support with LibreOffice conversion. Upload PowerPoint presentations, view as PDF, highlight text, generate KCs from slides.
 
 
 ## CLI Usage Reference
@@ -799,6 +820,108 @@ Implement page-based highlighting with percentage coordinates. Create `PDFHighli
 - No rotation support (deferred)
 
 
+### Milestone 40: PowerPoint Support (COMPLETE)
+
+At the end of this milestone, users can upload PowerPoint (.pptx) presentations and view them in the document reader with full visual fidelity. The system extracts text for KC generation, converts PPTX to PDF for display, and highlighting works on the converted PDF.
+
+**The Problem:**
+
+Currently, the system only supports PDF, DOCX, Markdown, and plain text documents. PowerPoint presentations are a common format for educational content but cannot be uploaded or viewed.
+
+**The Solution:**
+
+Use a server-side conversion approach:
+1. **Text extraction:** python-pptx extracts text from slides, tables, and speaker notes for KC generation
+2. **PDF conversion:** LibreOffice + unoserver converts PPTX to PDF for viewing
+3. **Display:** Existing PDFRenderer displays the converted PDF
+4. **Highlighting:** Existing PDF highlighting works on converted output
+
+**CRITICAL WARNING:** Do NOT use pptx2html library. It is abandoned (8 years), has an unpatched XSS vulnerability, and lacks essential features.
+
+**Full specs:** `NEW FEATURES.md` (root directory) contains complete implementation plan with code examples, architecture diagram, and testing checklist.
+
+**Dependencies:**
+
+    # Backend
+    pip install python-pptx>=1.0.0
+
+    # Docker (for unoserver)
+    docker pull libreofficedocker/libreoffice-unoserver:3.19
+
+**Work:**
+
+Phase 1: Backend text extraction
+1. Add `python-pptx>=1.0.0` to `requirements.txt`
+2. Create `extract_pptx()` function in `extractors.py` that extracts:
+   - Slide titles
+   - Body text from all shapes
+   - Table content
+   - Speaker notes
+3. Add `.pptx`, `.ppt` to `ALLOWED_EXTENSIONS` in `sources.py`
+4. Update extractor dispatch table
+
+Phase 2: PPTX→PDF conversion
+1. Add unoserver container to `docker-compose.yml`:
+
+       services:
+         libreoffice:
+           image: libreofficedocker/libreoffice-unoserver:3.19
+           ports:
+             - "2004:2004"
+           restart: unless-stopped
+
+2. Create `learn_system/app/services/conversion.py` with `convert_pptx_to_pdf()` function
+3. Update processing pipeline to convert PPTX after text extraction
+4. Store converted PDF in Supabase Storage alongside original PPTX
+
+Phase 3: Database schema
+1. Create `migrations/m40_pptx_support.sql`:
+
+       ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS slide_count INTEGER;
+       ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS converted_pdf_path TEXT;
+       CREATE INDEX IF NOT EXISTS idx_content_sources_content_type ON content_sources(content_type);
+
+2. Apply migration in Supabase SQL Editor
+
+Phase 4: Frontend content type detection
+1. Update `getContentType()` in `ReaderContent.jsx`:
+   - Add: `if (ext === 'pptx' || ext === 'ppt') return 'pptx'`
+   - Add MIME type check for presentation types
+2. Add PPTX case in `renderContent()` switch to use PDFRenderer with converted PDF URL
+
+Phase 5: API endpoint for converted PDF
+1. Add `/api/sources/{id}/pdf-url` endpoint in `sources.py`
+2. Return signed URL for converted PDF (stored in `converted_pdf_path`)
+3. Handle case where conversion is not complete (return 404)
+
+**Verification:**
+
+1. Upload a PPTX file with multiple slides, tables, and speaker notes
+2. Observe processing status shows extraction and conversion steps
+3. Navigate to `/reader/:sourceId`
+4. Observe:
+   - Presentation displays as PDF with all slides
+   - Slide navigation works (using existing PDF pagination)
+   - Text selection works
+   - Highlights persist across sessions
+5. Check that KCs were extracted from slide content
+6. Practice items reference presentation content correctly
+
+**Known Limitations:**
+
+- Animations/transitions lost (slides become static in PDF)
+- SmartArt text may not extract (python-pptx limitation)
+- Conversion latency 2-5 seconds per presentation
+- Legacy .ppt files may require LibreOffice conversion fallback
+
+**Fallback (if Docker unavailable):**
+
+If unoserver Docker is not available in the deployment environment:
+1. Use local LibreOffice installation: `brew install libreoffice` (macOS) or `apt install libreoffice` (Linux)
+2. Use `convert_pptx_to_pdf_local()` function with `soffice --headless --convert-to pdf`
+3. Consider PPTXjs for client-side rendering as alternative (adds ~500KB to bundle)
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -824,3 +947,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-05: M30-M37 Document Reader feature complete (AlphaXiv-style reader with zen mode, AI chat, highlights, reading progress)
 - 2026-01-06: M38 Complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview, text selection, highlights)
 - 2026-01-06: M39 Complete - PDF Highlighting (page-based percentage coordinates, PDFHighlightLayer component)
+- 2026-01-06: M40 Complete - PowerPoint Support (PPTX with LibreOffice conversion, python-pptx text extraction, converted PDF viewing)

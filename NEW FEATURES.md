@@ -1,403 +1,293 @@
-# PDF Highlighting Implementation Plan
+# PowerPoint (PPTX) Rendering Implementation Plan
 
 **Consolidated Research from 6 Worktrees**
 **Date:** 2026-01-06
-**Target:** Implement working PDF highlighting with proper architecture
+**Target:** Add PowerPoint document rendering capability to the Personal Learning System
 
 ---
 
 ## Executive Summary
 
-**Critical Finding:** PDF highlighting is **NOT IMPLEMENTED** in the current codebase.
+**CRITICAL FINDING: Do NOT use pptx2html**
 
-The UI components exist (SelectionTooltip, useTextSelection, useAnnotations), and highlights are correctly saved to the database. However:
-1. `ReaderContent.jsx` does **NOT pass** `highlights` prop to `PDFRenderer`
-2. `PDFRenderer.jsx` has **NO highlight rendering logic**
-3. The offset-based positioning used for Markdown/DOCX is **incompatible** with PDF's multi-page structure
+The pptx2html library has been **abandoned for 8 years**, has an **unpatched XSS vulnerability**, and lacks essential features. The recommended approach is **server-side PPTX→PDF conversion using LibreOffice + unoserver**, then leveraging the existing PDFRenderer for display.
 
-**Implementation Verdict Across All Worktrees:**
+### Recommendation Matrix
 
-| Worktree | Component | Verdict |
-|----------|-----------|---------|
-| UI/UX | SelectionTooltip, colors | VALID (minor fixes) |
-| Data Model | Annotations schema | NEEDS CHANGES for PDF |
-| Text Selection | useTextSelection hook | VALID, critical PDF prop bug |
-| Annotation Rendering | AnnotationLayer | VALID for HTML, N/A for PDF |
-| PDF-Specific | react-pdf integration | NEEDS NEW IMPLEMENTATION |
-| System Integration | AI, progress, learning | VALID, highlights not wired |
+| Approach | Verdict | Reason |
+|----------|---------|--------|
+| **pptx2html** | ❌ DO NOT USE | Abandoned, XSS vulnerability, poor feature support |
+| **PPTXjs** | ⚠️ Fallback | Better than pptx2html, but jQuery dependency, open issues |
+| **LibreOffice + unoserver** | ✅ RECOMMENDED | High fidelity, reuses existing PDFRenderer, free |
+| **Commercial (Nutrient, Apryse)** | ❌ Overkill | Expensive, unnecessary for learning system |
+
+### Feature Parity After Implementation
+
+| Feature | PDF | DOCX | Markdown | Text | PPTX (Proposed) |
+|---------|-----|------|----------|------|-----------------|
+| Upload | ✅ | ✅ | ✅ | ✅ | **✅** |
+| View in reader | ✅ | ✅ | ✅ | ✅ | **✅** (as PDF) |
+| Reading progress | ✅ page | ✅ scroll | ✅ scroll | ✅ scroll | **✅ slide/page** |
+| Text highlighting | ✅ | ✅ | ✅ | ✅ | **✅** (on converted PDF) |
+| AI chat | ✅ | ✅ | ✅ | ✅ | **✅** |
+| KC extraction | ✅ | ✅ | ✅ | ✅ | **✅** |
+| Practice items | ✅ | ✅ | ✅ | ✅ | **✅** |
 
 ---
 
-## Research Summary
+## Research Summary by Worktree
 
-### 1. UI/UX Research (highlight-worktrees/ui-ux)
+| Worktree | Focus | Key Finding |
+|----------|-------|-------------|
+| **1. Library Analysis** | pptx2html evaluation | Abandoned 8 years, XSS vulnerability, DO NOT USE |
+| **2. Alternatives** | Other rendering options | LibreOffice + unoserver recommended |
+| **3. UI/UX** | Slide display patterns | Continuous scroll view matches existing PDF behavior |
+| **4. Data Model** | Storage strategy | Store original PPTX, add `slide_count` column |
+| **5. Upload Pipeline** | Backend processing | python-pptx for text extraction, LibreOffice for PDF conversion |
+| **6. System Integration** | Full integration analysis | Minimal changes needed, follows established patterns |
 
-**Status:** VALID with minor improvements needed
+---
 
-**What Works:**
-- One-click highlight matches Kindle UX pattern
-- Smooth animations with CSS keyframes
-- Click-outside handling via class detection
-- Copy feedback with confirmation state
-- Real-time Supabase sync
+## Consolidated Architecture
 
-**Issues Found:**
-| Issue | Severity | Fix |
-|-------|----------|-----|
-| PDF scroll container mismatch | HIGH | Use container scroll, not window.scrollY |
-| No vertical boundary check | MEDIUM | Flip tooltip below if near top |
-| Unused color picker | LOW | Implement or remove dead code |
-| No touch/mobile handling | LOW | Add touchend listener |
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  UPLOAD FLOW                                                                  │
+│                                                                               │
+│  Browser ──> FastAPI ──> Supabase Storage (original .pptx)                  │
+│                    │                                                          │
+│                    └──> Background Task                                       │
+│                           ├─> python-pptx: Extract text, slide titles       │
+│                           ├─> unoserver: Convert PPTX → PDF                  │
+│                           ├─> Supabase Storage: Store converted PDF          │
+│                           └─> LLM: Generate KCs + Practice Items             │
+│                                                                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  VIEWING FLOW                                                                 │
+│                                                                               │
+│  Reader Page ──> ReaderContent.jsx                                          │
+│                    │                                                          │
+│                    └─> contentType === 'pptx'                                │
+│                           └─> Fetch converted PDF URL                        │
+│                                └─> PDFRenderer (existing!)                   │
+│                                     ├─> Continuous scroll view               │
+│                                     ├─> Text selection                       │
+│                                     └─> Highlighting (works on PDF)          │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-### 2. Data Model Research (highlight-worktrees/data-model)
+---
 
-**Status:** NEEDS CHANGES for PDF
+## Implementation Plan
 
-**Current Schema Works For:** Markdown, DOCX, Text (offset-based)
+### Phase 1: Backend - Text Extraction (Priority: P0)
 
-**Problem for PDFs:**
-- PDF text layer offsets are unstable across PDF.js versions
-- Multi-column layouts extract text in unexpected order
-- Each page resets offset to 0 (not cumulative)
+**Goal:** Extract text from PPTX for KC generation
 
-**Required Schema Extension:**
+**Files:**
+
+| File | Change |
+|------|--------|
+| `requirements.txt` | Add `python-pptx>=1.0.0` |
+| `learn_system/app/ingestion/extractors.py` | Add `extract_pptx()` function |
+| `learn_system/app/api/routes/sources.py` | Add `.pptx`, `.ppt` to `ALLOWED_EXTENSIONS` |
+
+**Implementation:**
+
+```python
+# extractors.py
+from pptx import Presentation
+
+def extract_pptx(file_path: str) -> str:
+    """Extract text from PPTX including shapes, tables, speaker notes."""
+    prs = Presentation(file_path)
+    text_parts = []
+
+    for slide_num, slide in enumerate(prs.slides, 1):
+        slide_text = [f"=== Slide {slide_num} ==="]
+
+        # Extract title
+        if slide.shapes.title and slide.shapes.title.has_text_frame:
+            title = slide.shapes.title.text.strip()
+            if title:
+                slide_text.append(f"Title: {title}")
+
+        # Extract body text + tables
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                for para in shape.text_frame.paragraphs:
+                    if para.text.strip():
+                        slide_text.append(para.text.strip())
+            if shape.has_table:
+                for row in shape.table.rows:
+                    row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                    if row_text:
+                        slide_text.append(" | ".join(row_text))
+
+        # Speaker notes
+        if slide.has_notes_slide:
+            notes = slide.notes_slide.notes_text_frame.text.strip()
+            if notes:
+                slide_text.append(f"[Speaker Notes]: {notes}")
+
+        text_parts.append("\n".join(slide_text))
+
+    return "\n\n".join(text_parts)
+
+# Update dispatch table
+extractors = {
+    # ... existing ...
+    '.pptx': (extract_pptx, 'pptx'),
+    '.ppt': (extract_pptx, 'pptx'),
+}
+```
+
+---
+
+### Phase 2: Backend - PDF Conversion (Priority: P0)
+
+**Goal:** Convert PPTX to PDF for viewing
+
+**Option A: Docker with unoserver (Recommended for Production)**
+
+```yaml
+# docker-compose.yml
+services:
+  libreoffice:
+    image: libreofficedocker/libreoffice-unoserver:3.19
+    ports:
+      - "2004:2004"
+    restart: unless-stopped
+```
+
+```python
+# learn_system/app/services/conversion.py
+import httpx
+
+UNOSERVER_URL = "http://libreoffice:2004/request"
+
+async def convert_pptx_to_pdf(pptx_bytes: bytes, filename: str) -> bytes:
+    """Convert PPTX to PDF using unoserver."""
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        files = {"file": (filename, pptx_bytes, "application/vnd.openxmlformats-officedocument.presentationml.presentation")}
+        data = {"convert-to": "pdf"}
+        response = await client.post(UNOSERVER_URL, files=files, data=data)
+        response.raise_for_status()
+        return response.content
+```
+
+**Option B: Local LibreOffice (Development)**
+
+```python
+import subprocess
+from pathlib import Path
+
+def convert_pptx_to_pdf_local(pptx_path: Path, output_dir: Path) -> Path:
+    """Convert using local LibreOffice installation."""
+    subprocess.run([
+        'soffice', '--headless', '--convert-to', 'pdf',
+        '--outdir', str(output_dir), str(pptx_path)
+    ], check=True, timeout=60)
+    return output_dir / f"{pptx_path.stem}.pdf"
+```
+
+---
+
+### Phase 3: Database Schema (Priority: P0)
+
+**File:** `migrations/m40_pptx_support.sql`
+
 ```sql
-ALTER TABLE annotations ADD COLUMN IF NOT EXISTS position_type TEXT DEFAULT 'offset';
-ALTER TABLE annotations ADD COLUMN IF NOT EXISTS pdf_rect JSONB;
--- pdf_rect: {"page": 1, "x": %, "y": %, "width": %, "height": %}
+-- M40: PPTX Support
+-- Add slide_count column for presentations
+
+ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS slide_count INTEGER;
+
+COMMENT ON COLUMN content_sources.slide_count IS
+  'Number of slides for PPTX files. NULL for non-presentation documents.';
+
+-- Store path to converted PDF
+ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS converted_pdf_path TEXT;
+
+COMMENT ON COLUMN content_sources.converted_pdf_path IS
+  'Supabase Storage path to converted PDF (for PPTX sources).';
+
+-- Index for content type filtering
+CREATE INDEX IF NOT EXISTS idx_content_sources_content_type
+ON content_sources(content_type);
 ```
-
-### 3. Text Selection Research (highlight-worktrees/text-selection)
-
-**Status:** VALID algorithm, CRITICAL BUG in prop passing
-
-**Offset Calculation:** Correct for text-based documents
-
-**CRITICAL BUG Found:**
-```jsx
-// ReaderContent.jsx - PDF case DOES NOT pass highlights
-case 'pdf':
-  return (
-    <PDFRenderer
-      fileUrl={fileUrl}
-      onPageChange={onPageChange}
-      // MISSING: highlights={highlights}
-      // MISSING: onDeleteHighlight={onDeleteHighlight}
-    />
-  )
-```
-
-**Cross-Page Selection:** Not supported by react-pdf (each page is isolated DOM)
-
-### 4. Annotation Rendering Research (highlight-worktrees/rendering)
-
-**Status:** VALID for HTML, requires new component for PDF
-
-**TreeWalker Approach:** Works for Markdown/DOCX because content is native HTML text nodes.
-
-**Why It Fails for PDF:**
-1. Text layer uses absolute positioning with PDF coordinates
-2. Character offsets per page, not continuous
-3. Canvas renders actual text; text layer is invisible overlay
-
-**Solution:** Create `PDFAnnotationLayer` with page-based rectangle rendering
-
-### 5. PDF-Specific Research (highlight-worktrees/pdf-specific)
-
-**Status:** NEEDS NEW IMPLEMENTATION
-
-**react-pdf Capabilities:**
-- `renderTextLayer={true}` enables native browser selection
-- Selection accessible via `window.getSelection()`
-- NO built-in highlight persistence
-- NO cross-page selection
-
-**Known react-pdf Issues:**
-- [#101](https://github.com/wojtekmaj/react-pdf/issues/101): Text selection jumps (div ordering)
-- [#279](https://github.com/wojtekmaj/react-pdf/issues/279): No highlight example
-
-**Required Architecture:**
-```
-┌─────────────────────────────────────────┐
-│ PDF Page Container                       │
-│ ├── Canvas Layer (PDF rendering)        │
-│ ├── Text Layer (invisible, for select)  │
-│ └── Highlight Layer (NEW - absolute)    │← Implement this
-└─────────────────────────────────────────┘
-```
-
-### 6. System Integration Research (highlight-worktrees/integration)
-
-**Status:** VALID, but PDF highlights not wired
-
-**Working:**
-- "Ask AI" with selected text
-- Reading progress tracking
-- Annotation storage
-- Real-time subscriptions
-- Markdown/DOCX/Text highlighting
-
-**Not Working:**
-- PDF highlight display (prop not passed)
-- PDF highlight creation (no page context captured)
 
 ---
 
-## Consolidated Implementation Plan
-
-### Phase 0: Wire Up Existing Props (P0 - 5 minutes)
+### Phase 4: Frontend - Content Type Detection (Priority: P0)
 
 **File:** `web/src/components/reader/ReaderContent.jsx`
 
 ```diff
-case 'pdf':
-  return (
-    <PDFRenderer
-      fileUrl={fileUrl}
-      onPageChange={onPageChange}
-      onScroll={onScroll}
-      initialPage={initialPage}
-+     highlights={highlights}
-+     onDeleteHighlight={onDeleteHighlight}
-    />
-  )
-```
-
-This alone won't make PDF highlighting work (PDFRenderer doesn't render them), but it's the necessary first step.
-
----
-
-### Phase 1: Database Schema (P0 - 10 minutes)
-
-**File:** `migrations/m39_pdf_annotations.sql`
-
-```sql
--- M39: PDF Annotation Support
--- Add page-based positioning for PDF highlights
-
--- 1. Add position type discriminator
-ALTER TABLE annotations
-ADD COLUMN IF NOT EXISTS position_type TEXT DEFAULT 'offset'
-CHECK (position_type IN ('offset', 'page_rect'));
-
--- 2. Add PDF page-based coordinates
--- Format: [{"page": 1, "x": 10, "y": 20, "width": 30, "height": 5}]
-ALTER TABLE annotations
-ADD COLUMN IF NOT EXISTS pdf_rects JSONB;
-
--- 3. Migrate existing annotations
-UPDATE annotations
-SET position_type = 'offset'
-WHERE position_type IS NULL;
-
--- 4. Index for filtering
-CREATE INDEX IF NOT EXISTS idx_annotations_position_type
-ON annotations(source_id, position_type);
-```
-
----
-
-### Phase 2: PDF Selection Capture (P0 - 2 hours)
-
-**File:** `web/src/hooks/useTextSelection.js`
-
-Add PDF-aware selection that captures page context:
-
-```javascript
-const getSelectionInfo = useCallback(() => {
-  const selection = window.getSelection()
-  if (!selection || selection.isCollapsed) return null
-
-  const text = selection.toString().trim()
-  if (text.length < 3) return null
-
-  const range = selection.getRangeAt(0)
-  const rect = range.getBoundingClientRect()
-
-  // Detect if selection is within a PDF page
-  const pageElement = range.startContainer.parentElement?.closest('[data-page-number]')
-
-  if (pageElement) {
-    // PDF selection - use page-based positioning
-    const pageNumber = parseInt(pageElement.dataset.pageNumber, 10)
-    const pageRect = pageElement.getBoundingClientRect()
-
-    return {
-      text,
-      isPDF: true,
-      pageNumber,
-      pdfRect: {
-        page: pageNumber,
-        x: ((rect.left - pageRect.left) / pageRect.width) * 100,
-        y: ((rect.top - pageRect.top) / pageRect.height) * 100,
-        width: (rect.width / pageRect.width) * 100,
-        height: (rect.height / pageRect.height) * 100
-      },
-      rect: {
-        tooltipX: rect.left + (rect.width / 2),
-        tooltipY: rect.top,
-        width: rect.width,
-        height: rect.height
-      }
-    }
+function getContentType(mimeType, title) {
+  if (title) {
+    const ext = title.toLowerCase().split('.').pop()
+    if (ext === 'pdf') return 'pdf'
+    if (ext === 'md' || ext === 'markdown') return 'markdown'
+    if (ext === 'txt') return 'text'
+    if (ext === 'docx' || ext === 'doc') return 'docx'
++   if (ext === 'pptx' || ext === 'ppt') return 'pptx'
   }
 
-  // Non-PDF selection - use existing offset logic
-  // ... existing offset calculation ...
-}, [containerRef])
-```
+  if (!mimeType) return 'unknown'
 
----
++ if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'pptx'
+  // ... existing checks ...
+}
 
-### Phase 3: PDFRenderer Props & Page Data Attributes (P0 - 30 minutes)
+const renderContent = () => {
+  switch (contentType) {
+    // ... existing cases ...
 
-**File:** `web/src/components/reader/PDFRenderer.jsx`
++   case 'pptx':
++     // Use converted PDF for viewing
++     if (!convertedPdfUrl) {
++       return <FallbackView message="Converting presentation..." />
++     }
++     return (
++       <PDFRenderer
++         fileUrl={convertedPdfUrl}
++         onPageChange={onPageChange}
++         onScroll={onScroll}
++         initialPage={initialPage}
++         highlights={highlights}
++         onDeleteHighlight={onDeleteHighlight}
++       />
++     )
 
-1. Accept highlights prop
-2. Add data-page-number to each page container
-3. Pass to PDFAnnotationLayer
-
-```diff
-const PDFRenderer = memo(function PDFRenderer({
-  fileUrl,
-  onPageChange,
-  onScroll,
-  initialPage = 1,
-+ highlights = [],
-+ onDeleteHighlight
-}) {
-```
-
-```diff
-<div
-  key={`page_${index + 1}`}
-  ref={(el) => { pageRefs.current[index + 1] = el }}
-  className="relative"
-+ data-page-number={index + 1}
->
-  <Page pageNumber={index + 1} ... />
-+ <PDFHighlightLayer
-+   pageNumber={index + 1}
-+   highlights={highlights.filter(h => h.page_number === index + 1)}
-+   onDeleteHighlight={onDeleteHighlight}
-+ />
-</div>
-```
-
----
-
-### Phase 4: PDFHighlightLayer Component (P1 - 2 hours)
-
-**File:** `web/src/components/reader/PDFHighlightLayer.jsx`
-
-```jsx
-import { memo, useState } from 'react'
-import { Trash2 } from 'lucide-react'
-
-const PDFHighlightLayer = memo(function PDFHighlightLayer({
-  pageNumber,
-  highlights,
-  onDeleteHighlight
-}) {
-  const [hoveredId, setHoveredId] = useState(null)
-
-  if (!highlights || highlights.length === 0) return null
-
-  return (
-    <div className="absolute inset-0 pointer-events-none">
-      {highlights.map(highlight => {
-        const rects = highlight.pdf_rects || []
-
-        return rects
-          .filter(r => r.page === pageNumber)
-          .map((rect, i) => (
-            <div
-              key={`${highlight.id}-${i}`}
-              className="absolute pointer-events-auto cursor-pointer transition-all hover:brightness-90"
-              style={{
-                left: `${rect.x}%`,
-                top: `${rect.y}%`,
-                width: `${rect.width}%`,
-                height: `${rect.height}%`,
-                backgroundColor: highlight.color || '#FFEB3B',
-                opacity: 0.4,
-                borderRadius: '2px'
-              }}
-              onMouseEnter={() => setHoveredId(highlight.id)}
-              onMouseLeave={() => setHoveredId(null)}
-              onClick={() => onDeleteHighlight?.(highlight.id)}
-            >
-              {hoveredId === highlight.id && (
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
-                  <Trash2 className="w-3 h-3" /> Delete
-                </div>
-              )}
-            </div>
-          ))
-      })}
-    </div>
-  )
-})
-
-export default PDFHighlightLayer
-```
-
----
-
-### Phase 5: Update useAnnotations for PDF (P1 - 1 hour)
-
-**File:** `web/src/hooks/useAnnotations.js`
-
-Modify `createHighlight` to handle PDF selections:
-
-```javascript
-const createHighlight = async (selection, color = '#FFEB3B') => {
-  const newAnnotation = {
-    id: `temp_${Date.now()}`,
-    source_id: sourceId,
-    annotation_type: 'highlight',
-    selected_text: selection.text.substring(0, 500),
-    color,
-    created_at: new Date().toISOString()
+    default:
+      return <FallbackView ... />
   }
-
-  if (selection.isPDF) {
-    // PDF-specific positioning
-    newAnnotation.position_type = 'page_rect'
-    newAnnotation.page_number = selection.pageNumber
-    newAnnotation.pdf_rects = [selection.pdfRect]
-  } else {
-    // Offset-based positioning (existing logic)
-    newAnnotation.position_type = 'offset'
-    newAnnotation.start_offset = selection.startOffset
-    newAnnotation.end_offset = selection.endOffset
-  }
-
-  // ... rest of optimistic update logic
 }
 ```
 
 ---
 
-### Phase 6: Minor UI Fixes (P2 - 1 hour)
+### Phase 5: API Endpoint for Converted PDF (Priority: P1)
 
-**File:** `web/src/components/reader/SelectionTooltip.jsx`
+**File:** `learn_system/app/api/routes/sources.py`
 
-1. Add vertical boundary check:
-```javascript
-let top = selection.rect.tooltipY - tooltipRect.height - 8
-if (top < 10) {
-  top = selection.rect.tooltipY + selection.rect.height + 8
-}
-```
+```python
+@router.get("/{source_id}/pdf-url")
+async def get_converted_pdf_url(source_id: str):
+    """Get signed URL for converted PDF (for PPTX sources)."""
+    source = await get_source(source_id)
 
-2. Either implement color picker or remove dead code
+    if source.content_type != 'pptx':
+        raise HTTPException(400, "Not a PPTX source")
 
-**File:** `web/src/hooks/useTextSelection.js`
+    if not source.converted_pdf_path:
+        raise HTTPException(404, "PDF conversion not complete")
 
-1. Increase debounce for mobile:
-```javascript
-const SELECTION_DEBOUNCE = /Mobile|Android/i.test(navigator.userAgent) ? 100 : 10
+    url = supabase.storage.from_("documents").create_signed_url(
+        source.converted_pdf_path, expires_in=3600
+    )
+    return {"url": url}
 ```
 
 ---
@@ -408,79 +298,100 @@ const SELECTION_DEBOUNCE = /Mobile|Android/i.test(navigator.userAgent) ? 100 : 1
 
 | File | Purpose |
 |------|---------|
-| `migrations/m39_pdf_annotations.sql` | Schema for PDF positioning |
-| `web/src/components/reader/PDFHighlightLayer.jsx` | Per-page highlight overlay |
+| `migrations/m40_pptx_support.sql` | Schema for slide_count, converted_pdf_path |
+| `learn_system/app/services/conversion.py` | PPTX→PDF conversion logic |
 
 ### Modified Files
 
 | File | Change |
 |------|--------|
-| `web/src/components/reader/ReaderContent.jsx` | Pass highlights to PDFRenderer |
-| `web/src/components/reader/PDFRenderer.jsx` | Accept highlights, add page data attributes |
-| `web/src/hooks/useTextSelection.js` | PDF-aware selection capture |
-| `web/src/hooks/useAnnotations.js` | Handle PDF position type |
-| `web/src/components/reader/SelectionTooltip.jsx` | Boundary fixes |
-
----
-
-## Effort Estimates
-
-| Phase | Task | Effort |
-|-------|------|--------|
-| Phase 0 | Wire up props | 5 min |
-| Phase 1 | Database schema | 10 min |
-| Phase 2 | PDF selection capture | 2 hours |
-| Phase 3 | PDFRenderer updates | 30 min |
-| Phase 4 | PDFHighlightLayer | 2 hours |
-| Phase 5 | useAnnotations update | 1 hour |
-| Phase 6 | UI fixes | 1 hour |
-| **Total** | | **~7 hours** |
-
----
-
-## Testing Checklist
-
-### PDF Highlighting
-- [ ] Select text on page 1 of PDF
-- [ ] Tooltip appears above selection
-- [ ] Click Highlight creates yellow highlight
-- [ ] Highlight persists after page refresh
-- [ ] Highlight appears at correct position
-- [ ] Clicking highlight shows delete option
-- [ ] Delete removes highlight from page and DB
-- [ ] Multi-line selection within page works
-- [ ] Different pages have separate highlights
-
-### Existing Functionality Preserved
-- [ ] Markdown highlighting still works
-- [ ] DOCX highlighting still works
-- [ ] Text highlighting still works
-- [ ] "Ask AI" still works
-- [ ] "Copy" still works
-- [ ] Reading progress still tracks
-
-### Edge Cases
-- [ ] Zoom in/out preserves highlight positions
-- [ ] Very long selections (full paragraph) work
-- [ ] Highlights near page edges display correctly
-- [ ] Mobile selection works (50ms+ debounce)
+| `requirements.txt` | Add `python-pptx>=1.0.0` |
+| `learn_system/app/ingestion/extractors.py` | Add `extract_pptx()` |
+| `learn_system/app/api/routes/sources.py` | Add `.pptx` extensions, new endpoint |
+| `learn_system/app/api/services/processing.py` | Add PDF conversion step for PPTX |
+| `web/src/components/reader/ReaderContent.jsx` | Add PPTX content type routing |
+| `docker-compose.yml` | Add unoserver container (optional) |
 
 ---
 
 ## Known Limitations (Accepted)
 
-1. **No cross-page selection** - react-pdf limitation, each page is isolated
-2. **No rotation support** - Deferred for future milestone
-3. **Text layer ordering** - May cause selection jumps (react-pdf issue #101)
+1. **Animations/transitions lost** - Slides become static in PDF
+2. **SmartArt text may not extract** - python-pptx limitation
+3. **Conversion latency** - 2-5 seconds per presentation
+4. **LibreOffice sequential processing** - One conversion at a time without scaling
+
+---
+
+## Testing Checklist
+
+### Upload & Processing
+- [ ] Upload PPTX file successfully
+- [ ] Text extraction includes slide titles
+- [ ] Text extraction includes speaker notes
+- [ ] Text extraction includes table content
+- [ ] PDF conversion completes
+- [ ] KCs generated from extracted text
+- [ ] Practice items reference slide content
+
+### Viewing
+- [ ] PPTX opens in reader
+- [ ] Displays as converted PDF
+- [ ] Page/slide navigation works
+- [ ] Reading progress tracks correctly
+- [ ] Text selection works on converted PDF
+- [ ] Highlighting works on converted PDF
+- [ ] Highlights persist across sessions
+
+### Edge Cases
+- [ ] Large presentation (100+ slides)
+- [ ] Presentation with only images (minimal text)
+- [ ] Password-protected PPTX rejected with clear error
+- [ ] Corrupted PPTX file handled gracefully
+
+---
+
+## Dependencies
+
+| Package | Version | Purpose | License |
+|---------|---------|---------|---------|
+| python-pptx | >=1.0.0 | PPTX parsing | MIT |
+| LibreOffice | 7.x+ | PDF conversion | MPL 2.0 |
+| libreoffice-unoserver | Docker image | REST API for LibreOffice | MIT |
+
+---
+
+## Risk Assessment
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| LibreOffice not available | Medium | High | Fallback: show "download original" link |
+| Conversion timeout | Low | Medium | Queue with retry, increase timeout |
+| Poor text extraction | Medium | Low | Speaker notes help, manual review |
+| .ppt (legacy) fails | High | Low | Document ".pptx only" support |
 
 ---
 
 ## Research Worktree References
 
-Full research documents in:
-- `/highlight-worktrees/ui-ux/NEW FEATURES.md`
-- `/highlight-worktrees/data-model/NEW FEATURES.md`
-- `/highlight-worktrees/text-selection/NEW FEATURES.md`
-- `/highlight-worktrees/rendering/NEW FEATURES.md`
-- `/highlight-worktrees/pdf-specific/NEW FEATURES.md`
-- `/highlight-worktrees/integration/NEW FEATURES.md`
+Detailed research from each worktree is available at:
+- `pptx-research-1-library/NEW FEATURES.md` - pptx2html analysis (DO NOT USE)
+- `pptx-research-2-alternatives/NEW FEATURES.md` - LibreOffice + unoserver recommended
+- `pptx-research-3-ui-ux/NEW FEATURES.md` - Continuous scroll view, navigation patterns
+- `pptx-research-4-data-model/NEW FEATURES.md` - Store PPTX only, add slide_count
+- `pptx-research-5-upload-pipeline/NEW FEATURES.md` - python-pptx extraction code
+- `pptx-research-6-integration/NEW FEATURES.md` - Full system integration analysis
+
+---
+
+## Summary
+
+The PPTX implementation follows a **convert-to-PDF** strategy that:
+
+1. **Maximizes code reuse** - Leverages existing PDFRenderer, highlighting, progress tracking
+2. **Ensures high fidelity** - LibreOffice produces accurate PDF output
+3. **Avoids security risks** - No vulnerable client-side libraries
+4. **Minimizes frontend changes** - Only content type detection needed
+5. **Supports all existing features** - Text selection, highlighting, AI chat work on converted PDF
+
+**Total Estimated Effort:** 2-3 days for MVP

@@ -16,6 +16,7 @@ function getContentType(mimeType, title) {
     if (ext === 'md' || ext === 'markdown') return 'markdown'
     if (ext === 'txt') return 'text'
     if (ext === 'docx' || ext === 'doc') return 'docx' // DOCX renders with full fidelity
+    if (ext === 'pptx' || ext === 'ppt') return 'pptx' // PPTX renders via converted PDF
   }
 
   if (!mimeType) return 'unknown'
@@ -32,6 +33,9 @@ function getContentType(mimeType, title) {
   // DOCX (renders with full fidelity via docx-preview)
   if (mimeType.includes('word') || mimeType.includes('officedocument')) return 'docx'
 
+  // PPTX (renders via converted PDF)
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'pptx'
+
   return 'unknown'
 }
 
@@ -41,6 +45,7 @@ function getContentType(mimeType, title) {
  *
  * @param {Object} source - Source object with mime_type and other metadata
  * @param {string} fileUrl - Signed URL to the file
+ * @param {string} convertedPdfUrl - Signed URL to converted PDF (for PPTX sources)
  * @param {string} extractedContent - Text content extracted during ingestion
  * @param {Array} sections - TOC sections for navigation
  * @param {Function} onPageChange - Callback for PDF page changes
@@ -53,6 +58,7 @@ function getContentType(mimeType, title) {
 const ReaderContent = memo(function ReaderContent({
   source,
   fileUrl,
+  convertedPdfUrl,
   extractedContent,
   sections = [],
   onPageChange,
@@ -153,6 +159,44 @@ const ReaderContent = memo(function ReaderContent({
           />
         )
 
+      case 'pptx':
+        // PPTX renders via converted PDF
+        if (convertedPdfUrl) {
+          return (
+            <PDFRenderer
+              fileUrl={convertedPdfUrl}
+              onPageChange={onPageChange}
+              onScroll={onScroll}
+              initialPage={initialPage}
+              highlights={highlights}
+              onDeleteHighlight={onDeleteHighlight}
+            />
+          )
+        }
+        // Fallback: show extracted text if PDF conversion not available
+        if (extractedContent) {
+          return (
+            <div className="p-4">
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+                <strong>Note:</strong> PDF conversion not available. Showing extracted slide content.
+              </div>
+              <TextRenderer
+                content={extractedContent}
+                highlights={highlights}
+                onDeleteHighlight={onDeleteHighlight}
+              />
+            </div>
+          )
+        }
+        return (
+          <FallbackView
+            message="PowerPoint presentation not available"
+            hint="The presentation could not be converted for viewing."
+            fileUrl={fileUrl}
+            mimeType={source?.mime_type}
+          />
+        )
+
       case 'unknown':
       default:
         // Fallback: show link to open in new tab if URL available
@@ -174,8 +218,8 @@ const ReaderContent = memo(function ReaderContent({
     }
   }
 
-  // For PDF and DOCX, render directly (has its own scroll handling)
-  if (contentType === 'pdf' || contentType === 'docx') {
+  // For PDF, DOCX, and PPTX (as PDF), render directly (has its own scroll handling)
+  if (contentType === 'pdf' || contentType === 'docx' || contentType === 'pptx') {
     return (
       <div className="h-full flex flex-col">
         {renderContent()}
