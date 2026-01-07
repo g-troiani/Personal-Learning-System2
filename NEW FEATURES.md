@@ -1786,3 +1786,331 @@ useEffect(() => {
 | Real-time + caching | 1 hour |
 | Testing | 1 hour |
 | **Total** | **5.5 hours**
+
+---
+
+# Sources View & RLS Fix Research
+
+**Research Date:** 2026-01-07
+**Method:** 10 parallel research agents
+**Status:** Research Complete - Ready for Implementation
+
+---
+
+## Executive Summary
+
+Research identified two critical bugs and one security issue that must be addressed:
+
+1. **CRITICAL:** practice_items RLS policy blocks all SELECTs (workaround currently in place)
+2. **CRITICAL:** Study page shows "No items to study" due to redundant user_id filtering
+3. **SOURCES VIEW:** Already fully implemented (M16-M20) - no placeholder exists
+
+> **Note:** Security scan found .env files with credentials, but they are correctly gitignored and not tracked. No credential rotation needed.
+
+---
+
+## Part 1: Critical Bug - Practice Items RLS
+
+### Problem Statement
+
+The practice_items table has RLS enabled with a policy that should work:
+```sql
+USING (auth.uid() = user_id OR user_id IS NULL)
+```
+
+But all SELECT queries return 0 rows even though:
+- All 117 rows have correct user_id matching the authenticated user
+- The identical policy works on kc_state and knowledge_components tables
+
+### Current Workaround
+
+`useSources.js` (lines 47-63) bypasses RLS via backend API:
+```javascript
+// Fetch practice items via backend API (bypasses RLS issue)
+// TODO: Fix RLS policy on practice_items table and revert to direct Supabase query
+const response = await fetch('http://localhost:8001/api/migration/all-practice-items', {
+  headers: { 'Authorization': `Bearer ${token}` }
+})
+```
+
+### Diagnostic Steps
+
+Run these queries in Supabase SQL Editor as an authenticated user:
+
+```sql
+-- 1. Check what auth.uid() returns
+SELECT auth.uid() as current_user_id;
+
+-- 2. Check if practice_items exist with your user_id
+SELECT COUNT(*) as total,
+       COUNT(CASE WHEN user_id = auth.uid() THEN 1 END) as matching_user_id
+FROM practice_items;
+
+-- 3. Check the actual policy definition
+SELECT polname, polcmd, polqual::text
+FROM pg_policies
+WHERE tablename = 'practice_items' AND polname LIKE '%view%';
+
+-- 4. Test direct SELECT (this is what's failing)
+SELECT id FROM practice_items LIMIT 5;
+
+-- 5. Compare with a table that works
+SELECT id FROM knowledge_components LIMIT 5;
+```
+
+### Root Cause Hypothesis
+
+The M45 policy for practice_items uses an indirect ownership check via knowledge_components:
+```sql
+USING (
+    auth.uid() = user_id
+    OR user_id IS NULL
+    OR EXISTS (
+        SELECT 1 FROM knowledge_components
+        WHERE knowledge_components.id = practice_items.kc_id
+        AND (knowledge_components.user_id = auth.uid() OR knowledge_components.user_id IS NULL)
+    )
+)
+```
+
+This complex nested query may have performance issues or subtle evaluation bugs.
+
+### Fix: Apply Simplified Policy
+
+The file `migrations/fix_practice_items_rls.sql` already exists with the fix:
+
+```sql
+-- Drop and recreate with simpler policy
+DROP POLICY IF EXISTS "Users can view own practice items" ON practice_items;
+
+CREATE POLICY "Users can view own practice items"
+    ON practice_items FOR SELECT
+    USING (auth.uid() = user_id OR user_id IS NULL);
+```
+
+**Steps:**
+1. Run `migrations/fix_practice_items_rls.sql` in Supabase SQL Editor
+2. Verify with: `SELECT COUNT(*) FROM practice_items;` (should return 117)
+3. If successful, remove workaround from `useSources.js` lines 47-63
+
+### Verification
+
+After applying fix, test from frontend:
+```javascript
+const { data, error } = await supabase
+  .from('practice_items')
+  .select('id')
+  .limit(5)
+
+console.log('Count:', data?.length, 'Error:', error)
+// Expected: Count: 5, Error: null
+```
+
+---
+
+## Part 2: Critical Bug - Study Page "No Items"
+
+### Problem Statement
+
+Study page shows "No items to study. Try adding some documents first!" even when 40+ practice items exist and should be available for study.
+
+### Root Cause
+
+File: `learn_system/app/api/routes/migration.py` lines 87 (and similar at 36, 56)
+
+The query applies TWO user_id filters:
+```python
+# Step 1: Get KCs filtered by user_id ✓
+kcs_result = client.table('knowledge_components').select(...).eq('user_id', current_user.id)
+kc_ids = [kc['id'] for kc in kcs_result.data]
+
+# Step 2: Get practice items with DOUBLE filter ✗
+items_result = client.table('practice_items').select('*').in_('kc_id', kc_ids).eq('user_id', current_user.id)
+```
+
+**The problem:** If practice_items have `user_id = NULL` (orphaned data from before M46), the second `.eq('user_id', current_user.id)` filter excludes them, even though they belong to the user's KCs.
+
+### Fix
+
+The KC ownership check is sufficient security - remove the redundant user_id filter:
+
+**File:** `learn_system/app/api/routes/migration.py`
+
+| Line | Before | After |
+|------|--------|-------|
+| 36 | `.eq('user_id', current_user.id)` | (remove) |
+| 56 | `.eq('user_id', current_user.id)` | (remove) |
+| 87 | `.eq('user_id', current_user.id)` | (remove) |
+
+**Example fix for line 87:**
+```python
+# BEFORE (broken)
+items_result = client.table('practice_items').select('*').in_('kc_id', kc_ids).eq('user_id', current_user.id).limit(limit).execute()
+
+# AFTER (fixed)
+items_result = client.table('practice_items').select('*').in_('kc_id', kc_ids).limit(limit).execute()
+```
+
+### Alternative: Fix Data Instead of Code
+
+If keeping the user_id filter is preferred for defense-in-depth, ensure all practice_items have user_id set:
+
+```sql
+-- Backfill NULL user_ids from parent KC
+UPDATE practice_items pi
+SET user_id = kc.user_id
+FROM knowledge_components kc
+WHERE pi.kc_id = kc.id AND pi.user_id IS NULL;
+
+-- Verify
+SELECT COUNT(*) FROM practice_items WHERE user_id IS NULL;
+-- Should return 0
+```
+
+---
+
+## Part 3: Sources View Architecture (Reference)
+
+The Sources view is **already fully implemented** through M16-M20. This section documents its architecture.
+
+### Component Hierarchy
+
+```
+Sources.jsx (Page Controller)
+├── SourcesHeader.jsx          - Title + source count
+├── SourcesToolbar.jsx         - Search, filter, sort, "Add" button
+├── UploadZone.jsx            - Drag-drop upload with progress
+│   └── UploadProgress        - Step indicators (Extract→Analyze→Generate)
+├── EmptyState.jsx            - Onboarding when no sources
+├── SourcesList.jsx           - Responsive grid of cards
+│   └── SourceCard.jsx        - Individual source with stats
+│       ├── Domain badge + emoji
+│       ├── Processing status
+│       ├── Mastery progress bar
+│       ├── Due counts (overdue/due/new)
+│       └── Actions (Read, Practice, Menu)
+├── SourceDetailPanel.jsx     - Slide-out panel with KC list
+└── ConfirmationDialog.jsx    - Delete confirmation
+```
+
+### Data Flow
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ useSources() Hook - Central Data Management                   │
+├──────────────────────────────────────────────────────────────┤
+│ 1. Fetch content_sources from Supabase                       │
+│ 2. Fetch knowledge_components from Supabase                  │
+│ 3. Fetch practice_items via backend API (RLS workaround)     │
+│ 4. Fetch kc_state from Supabase                              │
+│ 5. Compute enrichments per source:                           │
+│    - kcCount: # of KCs                                       │
+│    - itemCount: # of practice items                          │
+│    - mastery: avg mastery %                                  │
+│    - overdueCount, dueCount, newCount                        │
+│ 6. Apply filters (search, domain) and sort (date/name/mastery)│
+│ 7. Return: { sources, allSources, loading, error, refresh }  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Upload Pipeline
+
+| Stage | Status | Progress | Duration |
+|-------|--------|----------|----------|
+| Upload file | UPLOADING | 0-10% | <1s |
+| Extract text | extracting_text | 10-35% | 5-30s |
+| Analyze KCs | extracting_kcs | 35-60% | 10-60s |
+| Generate items | generating_items | 60-99% | 20-120s |
+| Complete | ready | 100% | — |
+
+**Real-time monitoring:**
+- Primary: Supabase Realtime subscription on `content_sources` UPDATE
+- Fallback: Polling every 2 seconds if Realtime fails
+
+### State Management Summary
+
+| State | Location | Purpose |
+|-------|----------|---------|
+| enrichedSources | useSources hook | Cached source data with computed fields |
+| searchQuery | useSources hook | Text filter |
+| domainFilter | useSources hook | Domain dropdown selection |
+| sortBy/sortOrder | useSources hook | Sort configuration |
+| showUploadZone | Sources.jsx | Upload panel visibility |
+| selectedSource | Sources.jsx | Source shown in detail panel |
+| processingStatus | useSourceProcessing | Real-time upload progress |
+
+---
+
+## Part 4: Implementation Checklist
+
+### Immediate (Fix Critical Bugs)
+
+- [ ] **Diagnose RLS issue** - Run diagnostic queries in Supabase
+- [ ] **Apply RLS fix** - Run `migrations/fix_practice_items_rls.sql`
+- [ ] **Verify RLS works** - Test direct Supabase query for practice_items
+- [ ] **Fix Study page filtering** - Remove redundant `.eq('user_id')` from migration.py
+- [ ] **Test Study page** - Verify items load correctly
+
+### Cleanup (After Fixes Verified)
+
+- [ ] **Remove RLS workaround** - Delete lines 47-63 in useSources.js
+- [ ] **Remove debug endpoint** - Gate `/api/migration/debug-items` behind dev flag
+- [ ] **Update documentation** - Note that workarounds have been removed
+
+### Verification Testing
+
+- [ ] **Sources page** - Upload document, verify KC/item counts display
+- [ ] **Study page** - Navigate to /study, verify items load
+- [ ] **Data isolation** - Create second user, verify they see empty list
+- [ ] **Progress tracking** - Complete study session, verify mastery updates
+
+---
+
+## Appendix: Database Query Reference
+
+### Sources View Queries
+
+**Fetch all sources with enrichment:**
+```javascript
+// Base sources
+const { data: sources } = await supabase
+  .from('content_sources')
+  .select('*')
+  .order('ingested_at', { ascending: false })
+
+// KCs per source
+const { data: kcs } = await supabase
+  .from('knowledge_components')
+  .select('id, source_id, name')
+
+// KC mastery state
+const { data: states } = await supabase
+  .from('kc_state')
+  .select('kc_id, mastery_level, next_review_at, exposure_count')
+
+// Practice items (via API due to RLS issue)
+const response = await fetch('/api/migration/all-practice-items', {
+  headers: { 'Authorization': `Bearer ${token}` }
+})
+```
+
+**Delete source (cascade):**
+```sql
+-- FK constraints handle cascade
+DELETE FROM content_sources WHERE id = ? AND user_id = auth.uid();
+
+-- This automatically deletes:
+-- → knowledge_components (via FK cascade)
+--   → practice_items (via FK cascade)
+--   → kc_state (via FK cascade)
+-- → document_sections
+-- → reading_progress
+-- → annotations
+```
+
+---
+
+## Revision History
+
+- 2026-01-07: Initial RLS/Sources research (10 parallel agents)
+- 2026-01-06: Authentication & Multi-User plan (M41-M46)

@@ -37,18 +37,28 @@ export default function Study() {
     try {
       setLoading(true)
 
-      // Get practice items with their KC info
-      let query = supabase
-        .from('practice_items')
-        .select('*, knowledge_components!inner(id, name, knowledge_type, source_id)')
+      // Get practice items via backend API (bypasses RLS issue on practice_items)
+      // TODO: Fix RLS policy on practice_items table and revert to direct Supabase query
+      const authSession = await supabase.auth.getSession()
+      const token = authSession?.data?.session?.access_token
 
-      if (sourceId) {
-        query = query.eq('knowledge_components.source_id', sourceId)
+      if (!token) {
+        setError('Please log in to study.')
+        setLoading(false)
+        return
       }
 
-      const { data: practiceItems, error: itemsError } = await query.limit(20)
+      const apiUrl = `http://localhost:8001/api/migration/study-items${sourceId ? `?source_id=${sourceId}` : ''}`
+      const response = await fetch(apiUrl, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
 
-      if (itemsError) throw itemsError
+      if (!response.ok) {
+        throw new Error('Failed to fetch study items')
+      }
+
+      const result = await response.json()
+      const practiceItems = result.items || []
 
       if (!practiceItems || practiceItems.length === 0) {
         setError('No items to study. Try adding some documents first!')
@@ -60,19 +70,24 @@ export default function Study() {
       const shuffled = [...practiceItems].sort(() => Math.random() - 0.5)
       setItems(shuffled)
 
-      // Create session
-      const { data: session, error: sessionError } = await supabase
-        .from('sessions')
-        .insert({
-          id: `sess_${Date.now().toString(36)}`,
+      // Create session via backend API (bypasses RLS issue on sessions table)
+      const sessionResponse = await fetch('http://localhost:8001/api/migration/create-session', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
           session_type: sourceId ? 'source_review' : 'mixed',
-          started_at: new Date().toISOString(),
+          source_id: sourceId || null
         })
-        .select()
-        .single()
+      })
 
-      if (sessionError) throw sessionError
+      if (!sessionResponse.ok) {
+        throw new Error('Failed to create study session')
+      }
 
+      const session = await sessionResponse.json()
       setSessionId(session.id)
       setSessionStartTime(Date.now())
       setItemStartTime(Date.now())
