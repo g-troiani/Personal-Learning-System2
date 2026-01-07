@@ -68,7 +68,7 @@ contradicting and the user journey makes sense. so until the task is successful 
   9) # RESEARCH FOR NEW FEATURE
   Let's do some research. Do not change anything in the code for now, just output the crisp and distilled fruit of the research in NEW FEATURES.md. 
   In the future, this research and specs will be then integrated in EXECPLAN.md. 
-  Spin up 5 git work trees to research how to best implement the SOURCES view as right now it just contains a placeholder. 
+  Spin up 10 git work trees to research how to best implement the SOURCES view as right now it just contains a placeholder. 
   Then, integrate the result of each research in the context of building a view that is cohesive with the rest of the system that is built so far.
   What are the UI considerations? How the logic should work? And just general engineering and design consideration to
   implement the sources tab. What would be required to upload something? How would it translate from upload to practice
@@ -81,9 +81,6 @@ contradicting and the user journey makes sense. so until the task is successful 
   Ensure business requirements follow good practice
   Establish clean service boundaries
   Prevent unnecessary coupling 
-
-
-
 
 
 
