@@ -9,9 +9,7 @@ import UploadZone from '../components/sources/UploadZone'
 import SourceDetailPanel from '../components/sources/SourceDetailPanel'
 import ConfirmationDialog from '../components/shared/ConfirmationDialog'
 import { Loader2, CheckCircle } from 'lucide-react'
-
-// API base URL from environment or default to localhost:8001
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
+import { deleteSource, retrySource } from '../lib/api'
 
 export default function Sources() {
   const navigate = useNavigate()
@@ -92,16 +90,7 @@ export default function Sources() {
   // Retry a failed source
   const handleRetry = useCallback(async (sourceId) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/retry`, {
-        method: 'POST'
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Retry failed:', errorData.detail || response.status)
-        return
-      }
-
+      await retrySource(sourceId)
       // Refresh to show updated status
       refresh()
     } catch (err) {
@@ -123,16 +112,7 @@ export default function Sources() {
 
     setIsDeleting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sources/${sourceToDelete.id}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Delete failed:', errorData.detail || response.status)
-        return
-      }
-
+      await deleteSource(sourceToDelete.id)
       // Close dialog and refresh
       setDeleteDialogOpen(false)
       setSourceToDelete(null)

@@ -14,7 +14,11 @@ load_dotenv(env_path)
 
 # Database configuration (Supabase)
 SUPABASE_URL: str = os.getenv('SUPABASE_URL', '')
-SUPABASE_KEY: str = os.getenv('SUPABASE_KEY', '')
+# Use legacy JWT service_role key for backend (bypasses RLS - backend validates JWT separately)
+# Priority: Legacy JWT key > new secret key > anon key
+SUPABASE_KEY: str = os.getenv('SUPABASE_SERVICE_ROLE_JWT',
+                              os.getenv('SUPABASE_SERVICE_ROLE_KEY',
+                                       os.getenv('SUPABASE_KEY', '')))
 
 # LLM configuration
 # Claude for high-reasoning tasks (KC extraction)

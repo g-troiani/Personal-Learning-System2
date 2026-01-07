@@ -2,9 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { Upload, FileText, X, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import UploadProgress from './UploadProgress'
 import { useSourceProcessing } from '../../hooks/useSourceProcessing'
-
-// API base URL from environment or default to localhost:8001
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
+import { uploadSource } from '../../lib/api'
 
 // Supported file types and max size
 const SUPPORTED_TYPES = {
@@ -165,7 +163,7 @@ export default function UploadZone({ onUpload, onClose, onComplete, isExpanded =
     }
   }, [handleFileSelect])
 
-  // Upload file to real API
+  // Upload file to real API with authentication
   const handleUpload = useCallback(async () => {
     if (!selectedFile) return
 
@@ -176,23 +174,8 @@ export default function UploadZone({ onUpload, onClose, onComplete, isExpanded =
     setError(null)
 
     try {
-      // Create FormData for file upload
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('domain', 'general') // Default domain
-
-      // Upload to API
-      const response = await fetch(`${API_BASE_URL}/api/sources/upload`, {
-        method: 'POST',
-        body: formData
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || `Upload failed with status ${response.status}`)
-      }
-
-      const data = await response.json()
+      // Upload using authenticated API
+      const data = await uploadSource(selectedFile, 'general')
 
       // Set source ID to start monitoring via Supabase Realtime
       setSourceId(data.source_id)

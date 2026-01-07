@@ -18,6 +18,7 @@ class AuthenticatedUser(BaseModel):
     """Authenticated user context passed to endpoints."""
     id: str  # user UUID
     email: Optional[str] = None
+    access_token: Optional[str] = None  # Raw JWT for RLS-authenticated DB calls
 
     @property
     def user_id(self) -> str:

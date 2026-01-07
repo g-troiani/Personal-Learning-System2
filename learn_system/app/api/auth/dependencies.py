@@ -24,7 +24,7 @@ async def get_current_user(
         authorization: Authorization header value
 
     Returns:
-        AuthenticatedUser with user info
+        AuthenticatedUser with user info including access token
 
     Raises:
         AuthenticationError: If not authenticated
@@ -39,6 +39,7 @@ async def get_current_user(
     return AuthenticatedUser(
         id=payload.sub,
         email=payload.email,
+        access_token=token,  # Preserve token for RLS-authenticated DB operations
     )
 
 

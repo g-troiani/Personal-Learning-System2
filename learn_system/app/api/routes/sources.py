@@ -26,7 +26,7 @@ from ..services.processing import (
 )
 from ..auth import CurrentUser
 from ..auth.ownership import verify_source_ownership
-from ...database.connection import get_client
+from ...database.connection import get_client, get_user_client
 
 
 # Response models for new endpoints
@@ -151,15 +151,20 @@ async def upload_source(
     original_filename = file.filename or "untitled"
     mime_type = mimetypes.guess_type(original_filename)[0] or "application/octet-stream"
 
-    # Create pending source entry with user_id
-    source_id = create_pending_source(original_filename, domain, user_id=current_user.id)
+    # Create pending source entry with user_id and access token for RLS
+    source_id = create_pending_source(
+        original_filename,
+        domain,
+        user_id=current_user.id,
+        access_token=current_user.access_token
+    )
 
     # Upload to Supabase Storage
     try:
         storage_path = upload_to_storage(source_id, content, original_filename)
 
-        # Update source with storage metadata
-        db_client = get_client()
+        # Update source with storage metadata (use user client for RLS)
+        db_client = get_user_client(current_user.access_token)
         db_client.table("content_sources").update({
             "storage_path": storage_path,
             "original_filename": original_filename,
