@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Brain, FileText, Clock, AlertCircle, RefreshCw, MoreVertical, Trash2, Eye } from 'lucide-react'
+import { BookOpen, Brain, FileText, Clock, AlertCircle, RefreshCw, MoreVertical, Trash2, Eye, GraduationCap } from 'lucide-react'
 import { ProcessingBadge } from './ProcessingStatus'
 import ProcessingStatus from './ProcessingStatus'
 
@@ -124,6 +124,17 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
   const navigate = useNavigate()
   const emoji = getSourceEmoji(source)
 
+  // Navigation handlers
+  const handleRead = (e) => {
+    e.stopPropagation()
+    navigate(`/reader/${source.id}`)
+  }
+
+  const handlePractice = (e) => {
+    e.stopPropagation()
+    navigate(`/study?source=${source.id}`)
+  }
+
   // Check if source is currently processing
   const isProcessing = source.processing_status && !['ready', 'error'].includes(source.processing_status)
   const hasError = source.processing_status === 'error'
@@ -179,8 +190,9 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
         : 'border-bg-card-border cursor-pointer hover:shadow-md hover:border-accent-new/30'
   }`
 
-  // Disable menu during processing/pending states (unless failed due to timeout)
-  const menuDisabled = (isProcessing || isPending) && !hasFailed
+  // Disable menu only during active processing (not pending or failed)
+  // Allow deletion of pending/stuck uploads
+  const menuDisabled = isProcessing && !isPending && !hasFailed
 
   return (
     <div onClick={handleClick} className={cardClasses}>
@@ -254,15 +266,15 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
       {/* Only show stats and progress if processing is complete */}
       {!isProcessing && !isPending && !hasError && (
         <>
-          {/* Stats row */}
-          <div className="flex gap-4 mb-4 text-sm text-text-secondary">
-            <div className="flex items-center gap-1" title="Knowledge Components">
+          {/* Stats */}
+          <div className="flex flex-col gap-1.5 mb-4 text-sm text-text-secondary">
+            <div className="flex items-center gap-2">
               <Brain className="w-4 h-4" />
-              <span>{source.kcCount || 0}</span>
+              <span>{source.kcCount || 0} Knowledge Components</span>
             </div>
-            <div className="flex items-center gap-1" title="Practice Items">
+            <div className="flex items-center gap-2">
               <FileText className="w-4 h-4" />
-              <span>{source.itemCount || 0}</span>
+              <span>{source.itemCount || 0} Practice Items</span>
             </div>
           </div>
 
@@ -304,6 +316,24 @@ function SourceCard({ source, onRetry, onDelete, onViewDetails }) {
                 All caught up
               </span>
             )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2 pt-3 mt-3 border-t border-bg-card-border">
+            <button
+              onClick={handleRead}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-800 border border-gray-800 hover:bg-gray-800 hover:text-white rounded-button transition-colors"
+            >
+              <BookOpen className="h-4 w-4" />
+              Read
+            </button>
+            <button
+              onClick={handlePractice}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-btn-primary hover:bg-gray-800 rounded-button transition-colors"
+            >
+              <GraduationCap className="h-4 w-4" />
+              Practice
+            </button>
           </div>
         </>
       )}

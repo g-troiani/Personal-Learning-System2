@@ -16,6 +16,27 @@ export function useAnnotations(sourceId) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Sort annotations by position (handles both offset and page-based)
+  const sortAnnotations = useCallback((annotations) => {
+    return [...annotations].sort((a, b) => {
+      // PDF annotations sort by page, then y position
+      if (a.position_type === 'page_rect' && b.position_type === 'page_rect') {
+        const aPage = a.page_number || a.pdf_rects?.[0]?.page || 0
+        const bPage = b.page_number || b.pdf_rects?.[0]?.page || 0
+        if (aPage !== bPage) return aPage - bPage
+        const aY = a.pdf_rects?.[0]?.y || 0
+        const bY = b.pdf_rects?.[0]?.y || 0
+        return aY - bY
+      }
+      // Offset-based annotations sort by start_offset
+      if (a.position_type !== 'page_rect' && b.position_type !== 'page_rect') {
+        return (a.start_offset || 0) - (b.start_offset || 0)
+      }
+      // Mixed: offset first, then page_rect
+      return a.position_type === 'page_rect' ? 1 : -1
+    })
+  }, [])
+
   // Fetch annotations for this source
   const fetchAnnotations = useCallback(async () => {
     if (!sourceId || !supabase) return
@@ -26,17 +47,16 @@ export function useAnnotations(sourceId) {
         .from('annotations')
         .select('*')
         .eq('source_id', sourceId)
-        .order('start_offset', { ascending: true })
 
       if (fetchError) throw fetchError
-      setAnnotations(data || [])
+      setAnnotations(sortAnnotations(data || []))
     } catch (err) {
       console.error('Error fetching annotations:', err)
       setError(err.message)
     } finally {
       setLoading(false)
     }
-  }, [sourceId, supabase])
+  }, [sourceId, supabase, sortAnnotations])
 
   // Load annotations on mount
   useEffect(() => {
@@ -62,7 +82,20 @@ export function useAnnotations(sourceId) {
             setAnnotations(prev => {
               // Avoid duplicates from optimistic updates
               if (prev.some(a => a.id === payload.new.id)) return prev
-              return [...prev, payload.new].sort((a, b) => a.start_offset - b.start_offset)
+              // Sort by position type (handles both offset and page-based)
+              const updated = [...prev, payload.new]
+              return updated.sort((a, b) => {
+                if (a.position_type === 'page_rect' && b.position_type === 'page_rect') {
+                  const aPage = a.page_number || a.pdf_rects?.[0]?.page || 0
+                  const bPage = b.page_number || b.pdf_rects?.[0]?.page || 0
+                  if (aPage !== bPage) return aPage - bPage
+                  return (a.pdf_rects?.[0]?.y || 0) - (b.pdf_rects?.[0]?.y || 0)
+                }
+                if (a.position_type !== 'page_rect' && b.position_type !== 'page_rect') {
+                  return (a.start_offset || 0) - (b.start_offset || 0)
+                }
+                return a.position_type === 'page_rect' ? 1 : -1
+              })
             })
           } else if (payload.eventType === 'UPDATE') {
             setAnnotations(prev =>
@@ -89,16 +122,25 @@ export function useAnnotations(sourceId) {
     const newAnnotation = {
       source_id: sourceId,
       annotation_type: 'highlight',
-      start_offset: selection.startOffset,
-      end_offset: selection.endOffset,
       selected_text: selection.text.substring(0, 500), // Limit text length
       color
+    }
+
+    // Handle PDF vs offset-based positioning
+    if (selection.isPDF) {
+      newAnnotation.position_type = 'page_rect'
+      newAnnotation.page_number = selection.pageNumber
+      newAnnotation.pdf_rects = [selection.pdfRect]
+    } else {
+      newAnnotation.position_type = 'offset'
+      newAnnotation.start_offset = selection.startOffset
+      newAnnotation.end_offset = selection.endOffset
     }
 
     // Optimistic update with temp ID
     const tempId = `temp_${Date.now()}`
     const optimisticAnnotation = { ...newAnnotation, id: tempId }
-    setAnnotations(prev => [...prev, optimisticAnnotation].sort((a, b) => a.start_offset - b.start_offset))
+    setAnnotations(prev => sortAnnotations([...prev, optimisticAnnotation]))
 
     try {
       const { data, error: insertError } = await supabase
@@ -122,7 +164,7 @@ export function useAnnotations(sourceId) {
       setError(err.message)
       return null
     }
-  }, [sourceId, supabase])
+  }, [sourceId, supabase, sortAnnotations])
 
   // Create a note annotation
   const createNote = useCallback(async (selection, noteText) => {
@@ -146,14 +188,14 @@ export function useAnnotations(sourceId) {
 
       if (insertError) throw insertError
 
-      setAnnotations(prev => [...prev, data].sort((a, b) => a.start_offset - b.start_offset))
+      setAnnotations(prev => sortAnnotations([...prev, data]))
       return data
     } catch (err) {
       console.error('Error creating note:', err)
       setError(err.message)
       return null
     }
-  }, [sourceId, supabase])
+  }, [sourceId, supabase, sortAnnotations])
 
   // Update an annotation (color or note text)
   const updateAnnotation = useCallback(async (annotationId, updates) => {
@@ -201,12 +243,12 @@ export function useAnnotations(sourceId) {
       console.error('Error deleting annotation:', err)
       // Rollback
       if (deletedAnnotation) {
-        setAnnotations(prev => [...prev, deletedAnnotation].sort((a, b) => a.start_offset - b.start_offset))
+        setAnnotations(prev => sortAnnotations([...prev, deletedAnnotation]))
       }
       setError(err.message)
       return false
     }
-  }, [supabase, annotations])
+  }, [supabase, annotations, sortAnnotations])
 
   // Get only highlights
   const highlights = annotations.filter(a => a.annotation_type === 'highlight')

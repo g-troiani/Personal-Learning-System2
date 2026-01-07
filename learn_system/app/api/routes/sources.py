@@ -53,7 +53,7 @@ class ContentResponse(BaseModel):
 router = APIRouter()
 
 # Supported file types
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt"}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt", ".pptx", ".ppt"}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 
@@ -218,6 +218,40 @@ async def get_status(source_id: str):
     )
 
 
+async def reprocess_from_storage(source_id: str, storage_path: str, domain: str):
+    """Background task to download file from storage and reprocess."""
+    client = get_client()
+
+    try:
+        # Download file from Supabase Storage
+        file_bytes = client.storage.from_("documents").download(storage_path)
+
+        # Get file extension from storage path
+        ext = os.path.splitext(storage_path)[1].lower()
+
+        # Save to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(file_bytes)
+            temp_path = tmp.name
+
+        # Process the file
+        pipeline = ProcessingPipeline(source_id)
+        pipeline.process_file(temp_path, domain)
+
+        # Clean up temp file
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+
+    except Exception as e:
+        # Update status to error if download/reprocess fails
+        client.table("content_sources").update({
+            "processing_status": "error",
+            "error_message": f"Retry failed: {str(e)}"
+        }).eq("id", source_id).execute()
+
+
 @router.post("/{source_id}/retry", response_model=RetryResponse)
 async def retry_source(source_id: str, background_tasks: BackgroundTasks):
     """
@@ -231,15 +265,29 @@ async def retry_source(source_id: str, background_tasks: BackgroundTasks):
     Returns:
         RetryResponse with new status
     """
-    status = get_source_status(source_id)
+    client = get_client()
 
-    if not status:
+    # Get source info including storage path
+    result = client.table("content_sources").select(
+        "id, processing_status, storage_path, domain"
+    ).eq("id", source_id).execute()
+
+    if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail=f"Source not found: {source_id}")
 
-    if status.get("processing_status") != "error":
+    source = result.data[0]
+
+    if source.get("processing_status") != "error":
         raise HTTPException(
             status_code=400,
             detail="Only sources in error state can be retried"
+        )
+
+    storage_path = source.get("storage_path")
+    if not storage_path:
+        raise HTTPException(
+            status_code=400,
+            detail="No stored file available for retry. Please re-upload the document."
         )
 
     success = retry_processing(source_id)
@@ -247,14 +295,14 @@ async def retry_source(source_id: str, background_tasks: BackgroundTasks):
     if not success:
         raise HTTPException(status_code=500, detail="Failed to initiate retry")
 
-    # Note: In a full implementation, we would need to re-process the file
-    # For now, retry just resets the status. The file would need to be re-uploaded
-    # or we'd need to store the file path for retry.
+    # Trigger background reprocessing using stored file
+    domain = source.get("domain", "general")
+    background_tasks.add_task(reprocess_from_storage, source_id, storage_path, domain)
 
     return RetryResponse(
         source_id=source_id,
         status=ProcessingStatus.PENDING,
-        message="Retry initiated. Please re-upload the file to complete processing."
+        message="Retry initiated. Processing started."
     )
 
 
@@ -329,6 +377,51 @@ async def get_file_url(source_id: str, expires_in: int = 3600):
             expires_in=expires_in
         )
         return FileUrlResponse(url=signed_url["signedURL"], expires_in=expires_in)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate signed URL: {str(e)}")
+
+
+class ConvertedPdfUrlResponse(BaseModel):
+    url: str
+    expires_in: int = 3600
+
+
+@router.get("/{source_id}/pdf-url", response_model=ConvertedPdfUrlResponse)
+async def get_converted_pdf_url(source_id: str, expires_in: int = 3600):
+    """
+    Get a signed URL for the converted PDF (for PPTX sources).
+
+    Args:
+        source_id: The source ID
+        expires_in: URL expiry time in seconds (default: 3600)
+
+    Returns:
+        ConvertedPdfUrlResponse with signed URL
+    """
+    client = get_client()
+
+    result = client.table("content_sources").select(
+        "converted_pdf_path, content_type"
+    ).eq("id", source_id).execute()
+
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail=f"Source not found: {source_id}")
+
+    source = result.data[0]
+    converted_pdf_path = source.get("converted_pdf_path")
+
+    if not converted_pdf_path:
+        raise HTTPException(
+            status_code=404,
+            detail="No converted PDF available. The presentation may not have been converted yet."
+        )
+
+    try:
+        signed_url = client.storage.from_("documents").create_signed_url(
+            path=converted_pdf_path,
+            expires_in=expires_in
+        )
+        return ConvertedPdfUrlResponse(url=signed_url["signedURL"], expires_in=expires_in)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate signed URL: {str(e)}")
 

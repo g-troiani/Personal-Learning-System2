@@ -49,7 +49,7 @@ export default function EmptyState({ onAddClick, isFiltered = false }) {
               Upload
             </h4>
             <p className="text-sm text-text-secondary">
-              PDF, DOCX, Markdown, or plain text files
+              PDF, PPTX, DOCX, Markdown, or plain text files
             </p>
           </div>
 

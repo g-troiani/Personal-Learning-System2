@@ -294,7 +294,7 @@ export default function UploadZone({ onUpload, onClose, onComplete, isExpanded =
               </p>
             </div>
             <p className="text-xs text-text-muted">
-              Supports PDF, DOCX, Markdown, and TXT (max 25MB)
+              Supports PDF, PPTX, DOCX, Markdown, and TXT (max 25MB)
             </p>
           </div>
         )}

@@ -3,6 +3,7 @@ import { FileText, AlertCircle, ExternalLink } from 'lucide-react'
 import PDFRenderer from './PDFRenderer'
 import MarkdownRenderer from './MarkdownRenderer'
 import TextRenderer from './TextRenderer'
+import DOCXRenderer from './DOCXRenderer'
 
 /**
  * Content type detection based on mime type and filename
@@ -14,7 +15,8 @@ function getContentType(mimeType, title) {
     if (ext === 'pdf') return 'pdf'
     if (ext === 'md' || ext === 'markdown') return 'markdown'
     if (ext === 'txt') return 'text'
-    if (ext === 'docx' || ext === 'doc') return 'text' // DOCX renders as extracted text
+    if (ext === 'docx' || ext === 'doc') return 'docx' // DOCX renders with full fidelity
+    if (ext === 'pptx' || ext === 'ppt') return 'pptx' // PPTX renders via converted PDF
   }
 
   if (!mimeType) return 'unknown'
@@ -28,8 +30,11 @@ function getContentType(mimeType, title) {
   // Plain text
   if (mimeType.includes('text/plain')) return 'text'
 
-  // DOCX (will show as text since we extract content)
-  if (mimeType.includes('word') || mimeType.includes('officedocument')) return 'text'
+  // DOCX (renders with full fidelity via docx-preview)
+  if (mimeType.includes('word') || mimeType.includes('officedocument')) return 'docx'
+
+  // PPTX (renders via converted PDF)
+  if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'pptx'
 
   return 'unknown'
 }
@@ -40,6 +45,7 @@ function getContentType(mimeType, title) {
  *
  * @param {Object} source - Source object with mime_type and other metadata
  * @param {string} fileUrl - Signed URL to the file
+ * @param {string} convertedPdfUrl - Signed URL to converted PDF (for PPTX sources)
  * @param {string} extractedContent - Text content extracted during ingestion
  * @param {Array} sections - TOC sections for navigation
  * @param {Function} onPageChange - Callback for PDF page changes
@@ -52,6 +58,7 @@ function getContentType(mimeType, title) {
 const ReaderContent = memo(function ReaderContent({
   source,
   fileUrl,
+  convertedPdfUrl,
   extractedContent,
   sections = [],
   onPageChange,
@@ -104,7 +111,10 @@ const ReaderContent = memo(function ReaderContent({
           <PDFRenderer
             fileUrl={fileUrl}
             onPageChange={onPageChange}
+            onScroll={onScroll}
             initialPage={initialPage}
+            highlights={highlights}
+            onDeleteHighlight={onDeleteHighlight}
           />
         )
 
@@ -120,6 +130,24 @@ const ReaderContent = memo(function ReaderContent({
           />
         )
 
+      case 'docx':
+        // DOCX renders with full fidelity via docx-preview
+        if (!fileUrl) {
+          return (
+            <FallbackView
+              message="Document file not available"
+              hint="The original file may have been uploaded before file storage was enabled."
+            />
+          )
+        }
+        return (
+          <DOCXRenderer
+            fileUrl={fileUrl}
+            highlights={highlights}
+            onDeleteHighlight={onDeleteHighlight}
+          />
+        )
+
       case 'text':
         // Use extracted content for text files
         return (
@@ -128,6 +156,44 @@ const ReaderContent = memo(function ReaderContent({
             fileUrl={fileUrl}
             highlights={highlights}
             onDeleteHighlight={onDeleteHighlight}
+          />
+        )
+
+      case 'pptx':
+        // PPTX renders via converted PDF
+        if (convertedPdfUrl) {
+          return (
+            <PDFRenderer
+              fileUrl={convertedPdfUrl}
+              onPageChange={onPageChange}
+              onScroll={onScroll}
+              initialPage={initialPage}
+              highlights={highlights}
+              onDeleteHighlight={onDeleteHighlight}
+            />
+          )
+        }
+        // Fallback: show extracted text if PDF conversion not available
+        if (extractedContent) {
+          return (
+            <div className="p-4">
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+                <strong>Note:</strong> PDF conversion not available. Showing extracted slide content.
+              </div>
+              <TextRenderer
+                content={extractedContent}
+                highlights={highlights}
+                onDeleteHighlight={onDeleteHighlight}
+              />
+            </div>
+          )
+        }
+        return (
+          <FallbackView
+            message="PowerPoint presentation not available"
+            hint="The presentation could not be converted for viewing."
+            fileUrl={fileUrl}
+            mimeType={source?.mime_type}
           />
         )
 
@@ -152,8 +218,8 @@ const ReaderContent = memo(function ReaderContent({
     }
   }
 
-  // For PDF, render directly (has its own scroll handling)
-  if (contentType === 'pdf') {
+  // For PDF, DOCX, and PPTX (as PDF), render directly (has its own scroll handling)
+  if (contentType === 'pdf' || contentType === 'docx' || contentType === 'pptx') {
     return (
       <div className="h-full flex flex-col">
         {renderContent()}

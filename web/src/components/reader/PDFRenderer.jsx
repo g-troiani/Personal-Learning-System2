@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import PDFHighlightLayer from './PDFHighlightLayer'
 
 // Configure PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`
@@ -11,32 +12,37 @@ import 'react-pdf/dist/Page/TextLayer.css'
 
 /**
  * PDF Renderer component using react-pdf with text layer enabled.
- * Supports page navigation, zoom, and scroll-to-page events.
+ * Shows all pages in a continuous scrollable view (like DOCX).
  * Memoized to prevent unnecessary re-renders.
  *
  * @param {string} fileUrl - Signed URL to the PDF file
  * @param {Function} onPageChange - Callback when page changes (page, totalPages)
- * @param {number} initialPage - Page number to restore (default: 1)
+ * @param {Function} onScroll - Callback for scroll tracking (scrollTop, clientHeight, scrollHeight)
+ * @param {number} initialPage - Page number to scroll to initially (default: 1)
+ * @param {Array} highlights - Highlight annotations to display
+ * @param {Function} onDeleteHighlight - Callback when highlight is deleted
  */
-const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPage = 1 }) {
+const PDFRenderer = memo(function PDFRenderer({
+  fileUrl,
+  onPageChange,
+  onScroll,
+  initialPage = 1,
+  highlights = [],
+  onDeleteHighlight
+}) {
   const [numPages, setNumPages] = useState(null)
-  const [pageNumber, setPageNumber] = useState(initialPage)
-  const [scale, setScale] = useState(1.0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const containerRef = useRef(null)
-  const pageInputRef = useRef(null)
+  const pageRefs = useRef({})
 
   // Handle document load success
   const onDocumentLoadSuccess = useCallback(({ numPages }) => {
     setNumPages(numPages)
     setLoading(false)
     setError(null)
-    // Restore to initial page (clamped to valid range)
-    const restoredPage = Math.min(initialPage, numPages)
-    setPageNumber(restoredPage)
     if (onPageChange) {
-      onPageChange(restoredPage, numPages)
+      onPageChange(initialPage, numPages)
     }
   }, [onPageChange, initialPage])
 
@@ -47,47 +53,31 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
     setLoading(false)
   }, [])
 
-  // Navigate to specific page
-  const goToPage = useCallback((page) => {
-    const targetPage = Math.max(1, Math.min(page, numPages || 1))
-    setPageNumber(targetPage)
-    if (onPageChange) {
-      onPageChange(targetPage, numPages)
+  // Handle scroll for progress tracking
+  const handleScroll = useCallback((e) => {
+    if (onScroll) {
+      const container = e.target
+      onScroll({
+        target: {
+          scrollTop: container.scrollTop,
+          clientHeight: container.clientHeight,
+          scrollHeight: container.scrollHeight
+        }
+      })
     }
-  }, [numPages, onPageChange])
+  }, [onScroll])
 
-  // Navigation handlers
-  const previousPage = () => goToPage(pageNumber - 1)
-  const nextPage = () => goToPage(pageNumber + 1)
-
-  // Zoom handlers
-  const zoomIn = () => setScale(prev => Math.min(prev + 0.25, 3.0))
-  const zoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5))
-
-  // Handle page input
-  const handlePageInput = (e) => {
-    if (e.key === 'Enter') {
-      const value = parseInt(e.target.value, 10)
-      if (!isNaN(value)) {
-        goToPage(value)
-      }
-    }
-  }
-
-  // Listen for scroll-to-section events
+  // Scroll to initial page after document loads (only if not page 1)
   useEffect(() => {
-    const handleScrollToSection = (event) => {
-      const { pageNumber: targetPage } = event.detail
-      if (targetPage && numPages) {
-        goToPage(targetPage)
+    if (numPages && initialPage > 1) {
+      const pageElement = pageRefs.current[initialPage]
+      if (pageElement) {
+        setTimeout(() => {
+          pageElement.scrollIntoView({ behavior: 'auto', block: 'start' })
+        }, 100)
       }
     }
-
-    window.addEventListener('scroll-to-section', handleScrollToSection)
-    return () => {
-      window.removeEventListener('scroll-to-section', handleScrollToSection)
-    }
-  }, [numPages, goToPage])
+  }, [numPages, initialPage])
 
   if (!fileUrl) {
     return (
@@ -98,101 +88,69 @@ const PDFRenderer = memo(function PDFRenderer({ fileUrl, onPageChange, initialPa
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Controls */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-300">
-        {/* Page Navigation */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={previousPage}
-            disabled={pageNumber <= 1}
-            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-500 hover:text-gray-700 transition-colors"
-            title="Previous page"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <div className="flex items-center gap-1 text-sm text-gray-600">
-            <input
-              ref={pageInputRef}
-              type="number"
-              min={1}
-              max={numPages || 1}
-              defaultValue={pageNumber}
-              key={pageNumber}
-              onKeyDown={handlePageInput}
-              className="w-12 px-2 py-1 text-center bg-white border border-gray-300 rounded text-gray-700 text-sm focus:outline-none focus:border-teal-500"
-            />
-            <span className="text-gray-400">/</span>
-            <span>{numPages || '-'}</span>
+    <div
+      className="h-full overflow-auto bg-gray-200"
+      ref={containerRef}
+      onScroll={handleScroll}
+    >
+      {/* Loading overlay */}
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+          <div className="flex flex-col items-center gap-3 text-gray-400">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <span>Loading PDF...</span>
           </div>
-          <button
-            onClick={nextPage}
-            disabled={pageNumber >= numPages}
-            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-500 hover:text-gray-700 transition-colors"
-            title="Next page"
-          >
-            <ChevronRight size={18} />
-          </button>
         </div>
+      )}
 
-        {/* Zoom Controls */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={zoomOut}
-            disabled={scale <= 0.5}
-            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-500 hover:text-gray-700 transition-colors"
-            title="Zoom out"
-          >
-            <ZoomOut size={18} />
-          </button>
-          <span className="text-sm text-gray-500 w-14 text-center">
-            {Math.round(scale * 100)}%
-          </span>
-          <button
-            onClick={zoomIn}
-            disabled={scale >= 3.0}
-            className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-500 hover:text-gray-700 transition-colors"
-            title="Zoom in"
-          >
-            <ZoomIn size={18} />
-          </button>
+      {/* Error state */}
+      {error && (
+        <div className="flex items-center justify-center h-full text-red-400">
+          {error}
         </div>
-      </div>
+      )}
 
-      {/* PDF Document */}
-      <div
-        ref={containerRef}
-        className="flex-1 overflow-auto bg-gray-200 p-4 flex justify-center"
-      >
-        {loading && (
-          <div className="flex items-center justify-center h-full w-full">
-            <div className="flex flex-col items-center gap-3 text-gray-400">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <span>Loading PDF...</span>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="flex items-center justify-center h-full w-full text-red-400">
-            {error}
-          </div>
-        )}
-
+      {/* PDF Document with all pages */}
+      <div className="flex flex-col items-center gap-4 py-4 px-4">
         <Document
           file={fileUrl}
           onLoadSuccess={onDocumentLoadSuccess}
           onLoadError={onDocumentLoadError}
           loading={null}
-          className="flex flex-col items-center"
+          className="flex flex-col items-center gap-4"
         >
-          <Page
-            pageNumber={pageNumber}
-            scale={scale}
-            renderTextLayer={true}
-            renderAnnotationLayer={true}
-            className="shadow-lg"
-          />
+          {numPages && Array.from({ length: numPages }, (_, index) => {
+            const pageNum = index + 1
+            const pageHighlights = highlights.filter(h =>
+              h.page_number === pageNum || h.pdf_rects?.some(r => r.page === pageNum)
+            )
+            return (
+              <div
+                key={`page_${pageNum}`}
+                ref={(el) => { pageRefs.current[pageNum] = el }}
+                className="relative"
+                data-page-number={pageNum}
+              >
+                <Page
+                  pageNumber={pageNum}
+                  width={800}
+                  renderTextLayer={true}
+                  renderAnnotationLayer={true}
+                  className="shadow-lg bg-white"
+                />
+                {/* Highlight overlay layer */}
+                <PDFHighlightLayer
+                  pageNumber={pageNum}
+                  highlights={pageHighlights}
+                  onDeleteHighlight={onDeleteHighlight}
+                />
+                {/* Page number indicator */}
+                <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/50 text-white text-xs rounded">
+                  {pageNum} / {numPages}
+                </div>
+              </div>
+            )
+          })}
         </Document>
       </div>
     </div>

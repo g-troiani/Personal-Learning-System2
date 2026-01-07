@@ -118,7 +118,7 @@ export function useReadingProgress(sourceId, options = {}) {
     }
   }, [sourceId, supabase])
 
-  // Update scroll position with debounce
+  // Update scroll position with debounce (ratchet: only increases, never decreases)
   const updateScrollPosition = useCallback((scrollPosition, containerHeight, contentHeight) => {
     // Clear any pending save
     if (saveTimeoutRef.current) {
@@ -130,6 +130,11 @@ export function useReadingProgress(sourceId, options = {}) {
     if (contentHeight > containerHeight) {
       const maxScroll = contentHeight - containerHeight
       completionPercentage = Math.min(100, Math.round((scrollPosition / maxScroll) * 100))
+    }
+
+    // Ratchet behavior: only update if new percentage is higher
+    if (completionPercentage <= progress.completionPercentage) {
+      return // Don't go backwards
     }
 
     const newProgress = {

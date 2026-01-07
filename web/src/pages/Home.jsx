@@ -7,25 +7,27 @@ import QuickActions from '../components/home/QuickActions'
 import SourceCard from '../components/home/SourceCard'
 
 export default function Home() {
-  const { sources, getDueCounts, getMasteryBySource } = useSupabase()
+  const { sources, loading: contextLoading, fetchSources, getDueCounts, getMasteryBySource } = useSupabase()
   const [searchQuery, setSearchQuery] = useState('')
   const [dueCounts, setDueCounts] = useState(null)
   const [masteryBySource, setMasteryBySource] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [dataLoaded, setDataLoaded] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true)
+      // Refresh sources silently in background (handles deletions from other pages)
+      await fetchSources()
       const [dueData, masteryData] = await Promise.all([
         getDueCounts(),
         getMasteryBySource()
       ])
       setDueCounts(dueData)
       setMasteryBySource(masteryData)
-      setLoading(false)
+      setDataLoaded(true)
     }
     fetchData()
-  }, [getDueCounts, getMasteryBySource])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Run once on mount - functions are stable from context
 
   // Create a map of source id to mastery and due counts
   const sourceDataMap = {}
@@ -50,7 +52,9 @@ export default function Home() {
     console.log('Search:', query)
   }
 
-  if (loading) {
+  // Only show spinner on very first app load when context has no data yet
+  // Once context has loaded (even with empty data), show UI immediately
+  if (contextLoading && !dataLoaded) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-progress"></div>

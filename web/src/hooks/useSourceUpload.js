@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useSupabase } from '../contexts/SupabaseContext'
 
 // Supported file types
-const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.md', '.txt']
+const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.md', '.txt', '.pptx', '.ppt']
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
 
 /**
@@ -54,6 +54,7 @@ export function useSourceUpload() {
     if (lower.endsWith('.docx')) return 'docx'
     if (lower.endsWith('.md')) return 'markdown'
     if (lower.endsWith('.txt')) return 'text'
+    if (lower.endsWith('.pptx') || lower.endsWith('.ppt')) return 'pptx'
     return 'unknown'
   }, [])
 

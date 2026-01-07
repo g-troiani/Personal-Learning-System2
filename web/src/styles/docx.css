@@ -1,0 +1,135 @@
+/* DOCX Renderer Styles - Scoped for docx-preview */
+
+/* Container styling */
+.docx-container {
+  font-family: 'Calibri', 'Arial', sans-serif;
+  line-height: 1.6;
+  color: #1f2937;
+  padding: 2rem;
+}
+
+/* Wrapper styling from docx-preview */
+.docx-container .docx-wrapper {
+  background: white;
+  min-height: 100%;
+}
+
+/* Ensure proper paragraph spacing */
+.docx-container p {
+  margin-bottom: 0.75rem;
+}
+
+/* Heading styles */
+.docx-container h1,
+.docx-container h2,
+.docx-container h3,
+.docx-container h4,
+.docx-container h5,
+.docx-container h6 {
+  font-weight: 600;
+  color: #111827;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.docx-container h1 {
+  font-size: 1.875rem;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.5rem;
+}
+
+.docx-container h2 {
+  font-size: 1.5rem;
+}
+
+.docx-container h3 {
+  font-size: 1.25rem;
+}
+
+/* Table styles */
+.docx-container table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+.docx-container td,
+.docx-container th {
+  border: 1px solid #d1d5db;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.docx-container th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+}
+
+.docx-container tr:nth-child(even) td {
+  background-color: #f9fafb;
+}
+
+/* Image styles */
+.docx-container img {
+  max-width: 100%;
+  height: auto;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+
+/* List styles */
+.docx-container ul,
+.docx-container ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.docx-container li {
+  margin-bottom: 0.25rem;
+}
+
+/* Link styles */
+.docx-container a {
+  color: #0d9488;
+  text-decoration: none;
+}
+
+.docx-container a:hover {
+  text-decoration: underline;
+}
+
+/* Blockquote styles */
+.docx-container blockquote {
+  border-left: 4px solid #14b8a6;
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+  background-color: #f0fdfa;
+  color: #115e59;
+}
+
+/* Code styles (if any) */
+.docx-container code {
+  background-color: #f3f4f6;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.875em;
+}
+
+/* Horizontal rule */
+.docx-container hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 1.5rem 0;
+}
+
+/* Text selection for highlighting */
+.docx-container ::selection {
+  background-color: #99f6e4;
+  color: inherit;
+}
+
+/* Ensure text is selectable */
+.docx-container * {
+  user-select: text;
+}

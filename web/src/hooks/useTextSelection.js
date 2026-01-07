@@ -40,7 +40,41 @@ export function useTextSelection(containerRef) {
     const scrollTop = window.scrollY || document.documentElement.scrollTop
     const scrollLeft = window.scrollX || document.documentElement.scrollLeft
 
-    // Calculate character offsets for storing annotations
+    // Detect if selection is within a PDF page
+    const pageElement = range.startContainer.parentElement?.closest('[data-page-number]')
+
+    if (pageElement) {
+      // PDF selection - use page-based positioning with percentages
+      const pageNumber = parseInt(pageElement.dataset.pageNumber, 10)
+      const pageRect = pageElement.getBoundingClientRect()
+
+      return {
+        text,
+        range: range.cloneRange(),
+        isPDF: true,
+        pageNumber,
+        pdfRect: {
+          page: pageNumber,
+          x: ((rect.left - pageRect.left) / pageRect.width) * 100,
+          y: ((rect.top - pageRect.top) / pageRect.height) * 100,
+          width: (rect.width / pageRect.width) * 100,
+          height: (rect.height / pageRect.height) * 100
+        },
+        rect: {
+          top: rect.top + scrollTop,
+          left: rect.left + scrollLeft,
+          right: rect.right + scrollLeft,
+          bottom: rect.bottom + scrollTop,
+          width: rect.width,
+          height: rect.height,
+          // Position for tooltip (centered above selection)
+          tooltipX: rect.left + scrollLeft + (rect.width / 2),
+          tooltipY: rect.top + scrollTop - 10
+        }
+      }
+    }
+
+    // Non-PDF selection - use existing offset-based logic
     const preSelectionRange = range.cloneRange()
     preSelectionRange.selectNodeContents(containerRef?.current || document.body)
     preSelectionRange.setEnd(range.startContainer, range.startOffset)
@@ -50,6 +84,7 @@ export function useTextSelection(containerRef) {
     return {
       text,
       range: range.cloneRange(),
+      isPDF: false,
       startOffset,
       endOffset,
       rect: {

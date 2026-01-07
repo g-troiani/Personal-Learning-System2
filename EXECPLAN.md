@@ -19,7 +19,10 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Web UI work → `.claude/memory/milestones/webui_core.md`
    - Upload/processing → `.claude/memory/milestones/sources_feature.md`
    - Performance issues → `.claude/memory/milestones/speed_optimization.md`
-   - Document Reader (M30-M37) → `NEW FEATURES.md` (full specs)
+   - Document Reader (M30-M37) → See completed milestones in Progress section
+   - Document Viewer Fidelity (M38) → Complete
+   - PDF Highlighting (M39) → Complete
+   - PPTX Support (M40) → `NEW FEATURES.md` (full implementation plan)
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
 
@@ -47,6 +50,12 @@ The observable behavior works as follows. On Monday, the user runs `python -m ap
 The system solves five problems. First, it eliminates the "I don't know what I don't know" problem by forcing retrieval practice that reveals actual gaps. Second, it fights forgetting through spaced repetition scheduling. Third, it measures learning objectively through tracked performance rather than felt fluency. Fourth, it enables self-experimentation by recording which techniques were used for which content. Fifth, it removes cognitive overhead by telling the user exactly what to practice and when.
 
 **Document Reader Feature (M30-M37):** After these milestones, users can read uploaded documents directly in the browser before starting practice. The workflow becomes: upload → read/study → practice, with documents always one click away. Users navigate to `/reader/:sourceId` to view PDFs or Markdown with a Table of Contents in the sidebar, take notes, highlight text, and ask AI questions about the content.
+
+**Document Viewer Fidelity (M38):** This milestone fixes a critical gap where DOCX files render as plain text, losing all formatting. After M38, uploaded DOCX files display with full visual fidelity—headings, tables, images, colors, and formatting preserved—using the `docx-preview` library for client-side rendering.
+
+**PDF Highlighting (M39):** This milestone implements PDF-specific highlighting. Currently, highlights save to the database but don't render in PDFs because the prop isn't passed and the positioning system is incompatible. After M39, users can highlight PDF text and see those highlights persist across sessions using page-based percentage coordinates.
+
+**PowerPoint Support (M40):** This milestone adds PowerPoint (.pptx) document support. After M40, users can upload PowerPoint presentations and view them in the document reader with full visual fidelity. The system extracts text using python-pptx for KC generation, converts PPTX to PDF using LibreOffice + unoserver for display, and reuses the existing PDFRenderer for viewing. Highlights work on the converted PDF.
 
 
 ## Progress
@@ -94,64 +103,38 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M28: Slim EXECPLAN - reduced from 1500 to 502 lines (2026-01-04)
 - [x] M29: Update CLAUDE.md - memory access instructions added (2026-01-04)
 
-**Document Reader Feature (M30-M37)** - In Progress
+**Document Reader Feature (M30-M37)** - See `.claude/memory/milestones/document_reader.md`
 - [x] Research phase - 6 parallel agents, NEW FEATURES.md consolidated spec (2026-01-05)
 - [x] M30: Core infrastructure - database migration, Supabase Storage, /reader route (2026-01-05)
-  - Added storage_path, original_filename, file_size_bytes, mime_type to content_sources
-  - Created reading_progress, annotations, document_sections tables
-  - Created "documents" bucket in Supabase Storage with RLS policies
-  - Modified upload endpoint to store files in Storage
-  - Added /api/sources/{id}/file-url and /api/sources/{id}/sections endpoints
-  - Created DocumentReader.jsx page with header, document viewer, assistant panel placeholder
 - [x] M31: Sidebar TOC integration - TableOfContentsSection, route detection (2026-01-05)
-  - Created `useDocumentSections.js` hook fetching from `/api/sources/{id}/sections`
-  - Created `TableOfContentsSection.jsx` with collapse/expand, hierarchy indentation
-  - Modified `Sidebar.jsx` with route detection via `useLocation()`, conditional TOC rendering
-  - Added `scroll-to-section` custom event listener in DocumentReader.jsx
-  - TOC shows only on `/reader/:sourceId`, disappears on other routes
 - [x] M32: Document rendering - PDF, Markdown, text viewers (2026-01-05)
-  - Installed react-pdf, react-markdown, remark-gfm, rehype-highlight, @tailwindcss/typography
-  - Created `PDFRenderer.jsx` with page navigation, zoom controls, scroll-to-page listener
-  - Created `MarkdownRenderer.jsx` with GFM support, syntax highlighting, scroll-to-heading
-  - Created `TextRenderer.jsx` for plain text with line numbers
-  - Created `ReaderContent.jsx` container selecting renderer by content type
-  - Added `/api/sources/{id}/content` endpoint for extracted text
-  - Updated getContentType() to check filename extension (more reliable than mime_type)
-  - Fixed Tailwind config to use ESM import for typography plugin
 - [x] M33: Navigation entry points - Read buttons, upload redirect (2026-01-05)
-  - Added "Read" button to `SourceCard.jsx` in Home page with BookOpen icon
-  - Added "Read" button to `SourceDetailPanel.jsx` footer (alongside Study and Delete)
-  - Updated Sidebar recent sources to link to `/reader/:id` instead of sources page
-  - Added navigate redirect in `Sources.jsx` handleProcessingComplete after upload
 - [x] M34: Text selection and highlights - SelectionTooltip, annotations (2026-01-05)
-  - Created `useTextSelection.js` hook with character offset calculation
-  - Created `SelectionTooltip.jsx` with Ask AI, Highlight, Generate, Copy buttons
-  - Created `useAnnotations.js` hook with Supabase CRUD and optimistic updates
-  - Created `AnnotationLayer.jsx` rendering highlights via DOM text node wrapping
-  - Updated `DocumentReader.jsx` to integrate selection and highlights
-  - **VERIFIED:** Highlights persist to database and display after page refresh
-  - Fixed: Required legacy JWT-format anon key in web/.env (not sb_publishable_ format)
 - [x] M35: Assistant panel - notes, AI chat tabs (2026-01-05)
-  - Created `AssistantPanel.jsx` with Notes, AI, and KCs tabs
-  - Created `NotesList.jsx` and `NoteEditor.jsx` for note management
-  - Created `AIChatPanel.jsx` with message input and chat history
-  - Created `KCsPanel.jsx` displaying extracted knowledge components
-  - Added `POST /api/ai/chat` endpoint with Groq/Claude fallback
-  - Wired "Ask AI" from SelectionTooltip to pre-fill chat with selected text
 - [x] M36: Reading progress - position tracking, completion percentage (2026-01-05)
-  - Created `useReadingProgress.js` hook with debounced sync (500ms)
-  - Tracks scroll_position, current_page, total_pages, last_read_at
-  - Calculates completion percentage locally (from page or scroll position)
-  - Shows progress indicator with percentage and progress bar in header
-  - Uses upsert to prevent duplicate records
-  - Restores scroll position for non-PDF, page number for PDF on return
 - [x] M37: Polish and performance - zen mode, memoization, deep linking (2026-01-05)
-  - Created `ZenModeContext.jsx` for distraction-free reading (hides sidebar, assistant, footer)
-  - Added zen mode toggle button (Maximize2/Minimize2) with ESC key to exit
-  - Memoized reader components with React.memo: PDFRenderer, MarkdownRenderer, TextRenderer, ReaderContent
-  - Added useMemo for expensive calculations (line splitting, plugin arrays)
-  - Implemented deep linking with URL page parameter (?page=5) for PDF sharing
-  - Deferred: responsive mobile layouts, PDF virtualization, IndexedDB caching (lower priority)
+
+**Document Viewer Fidelity (M38)** - Complete
+- [x] M38 Research: 6 parallel worktrees, docx-preview recommendation (2026-01-06)
+- [x] M38 Implementation: DOCX high-fidelity rendering with docx-preview (2026-01-06)
+
+**PDF Highlighting (M39)** - Complete
+- [x] M39 Research: 6 parallel worktrees, validated architecture (2026-01-06)
+- [x] M39 Implementation: PDF page-based highlighting with PDFHighlightLayer (2026-01-06)
+  - Phase 0: Wired up highlights prop to PDFRenderer in ReaderContent.jsx
+  - Phase 1: Database migration added position_type and pdf_rects columns
+  - Phase 2: Updated useTextSelection for PDF-aware page-based selection
+  - Phase 3: Updated PDFRenderer with data-page-number attributes
+  - Phase 4: Created PDFHighlightLayer component for overlay rendering
+  - Phase 5: Updated useAnnotations to handle PDF position type and sorting
+
+**PowerPoint Support (M40)** - Complete
+- [x] M40 Research: 6 parallel worktrees, consolidated spec in NEW FEATURES.md (2026-01-06)
+- [x] M40 Phase 1: Backend text extraction with python-pptx (2026-01-06)
+- [x] M40 Phase 2: PPTX→PDF conversion with LibreOffice (local, no Docker required) (2026-01-06)
+- [x] M40 Phase 3: Database schema (slide_count, converted_pdf_path columns) (2026-01-06)
+- [x] M40 Phase 4: Frontend content type detection and routing (2026-01-06)
+- [x] M40 Phase 5: API endpoint for converted PDF URL (2026-01-06)
 
 
 ## Surprises and Discoveries
@@ -170,6 +153,7 @@ Key lessons learned during implementation:
 - Always use polling fallback alongside Realtime subscriptions
 - Python library v2.27.0+ required for newer key formats
 - **M30 Migration:** The `migrations/m30_document_reader.sql` must be fully applied for annotations to persist.
+- **M39 PDF Positioning:** PDF highlights use percentage-based coordinates (x%, y%, width%, height%) relative to page dimensions to survive zoom/scale changes. Character offsets from Markdown/Text are incompatible with PDF's multi-page structure.
 
 **Python 3.9 Compatibility:**
 - Use `Optional[X]` instead of `X | None`, `List[Dict]` instead of `list[dict]`
@@ -241,6 +225,22 @@ Recent decisions only below. See archives for full rationale.
   **Rationale:** Core polish items (zen mode, memoization, deep linking) deliver most value. Mobile responsive, 100+ page PDF virtualization, and offline caching are lower priority for single-user desktop tool. Dependencies installed for future use.
   **Date:** 2026-01-05
 
+- **Decision:** Use docx-preview library for DOCX rendering (client-side) over server-side LibreOffice PDF conversion
+  **Rationale:** (1) No server infrastructure changes required - works with Netlify + Supabase architecture. (2) 1-2 day implementation vs 3-5 days for server PDF. (3) Native HTML output enables text selection and existing AnnotationLayer. (4) ~1.7MB bundle addition acceptable for document viewer. (5) 168 projects use it in production. Server-side LibreOffice option remains as fallback if fidelity insufficient.
+  **Date:** 2026-01-06
+
+- **Decision:** Use page-based percentage coordinates for PDF highlights instead of character offsets
+  **Rationale:** (1) Character offsets are unstable for PDFs - text layer ordering can change between PDF.js versions. (2) Each PDF page is an isolated DOM subtree, making cumulative offsets impossible. (3) Percentage-based coordinates survive zoom/scale changes. (4) Existing AnnotationLayer with TreeWalker is incompatible with PDF's absolute-positioned text layer.
+  **Date:** 2026-01-06
+
+- **Decision:** Use LibreOffice + unoserver for PPTX rendering instead of client-side pptx2html
+  **Rationale:** (1) pptx2html is abandoned (8 years, no updates) with unpatched XSS vulnerability - DO NOT USE. (2) LibreOffice produces high-fidelity PDF output. (3) Reuses existing PDFRenderer, no new frontend bundle. (4) Existing PDF highlighting works on converted output. (5) PPTXjs is fallback option if Docker unavailable.
+  **Date:** 2026-01-06
+
+- **Decision:** Extract PPTX text with python-pptx for KC generation
+  **Rationale:** (1) Pure Python, no native dependencies. (2) Extracts text from shapes, tables, and speaker notes. (3) Speaker notes are valuable learning material often missed. (4) SmartArt limitation accepted (python-pptx doesn't support it).
+  **Date:** 2026-01-06
+
 
 ## Outcomes and Retrospective
 
@@ -258,7 +258,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through thirty-seven milestones. Milestones 1-29 are complete. Milestones 30-37 implement the AlphaXiv-style Document Reader feature.
+Implementation proceeds through forty milestones. M1-M40 are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -270,7 +270,13 @@ Implementation proceeds through thirty-seven milestones. Milestones 1-29 are com
 
 **Agent Memory System (Complete):** M24: Create memory directory structure. M25: Extract completed milestones to archive. M26: Extract decisions and schemas. M27: Extract reference material. M28: Slim EXECPLAN to active content only. M29: Update CLAUDE.md with memory access instructions.
 
-**Document Reader Feature (Pending):** M30: Core infrastructure (database, storage, route). M31: Sidebar TOC integration. M32: Document rendering (PDF, Markdown, text). M33: Navigation entry points. M34: Text selection and highlights. M35: Assistant panel (notes, AI chat). M36: Reading progress tracking. M37: Polish and performance.
+**Document Reader Feature (Complete):** M30: Core infrastructure (database, storage, route). M31: Sidebar TOC integration. M32: Document rendering (PDF, Markdown, text). M33: Navigation entry points. M34: Text selection and highlights. M35: Assistant panel (notes, AI chat). M36: Reading progress tracking. M37: Polish and performance.
+
+**Document Viewer Fidelity (Complete):** M38: DOCX high-fidelity rendering with docx-preview (client-side).
+
+**PDF Highlighting (Complete):** M39: Page-based PDF highlighting with percentage coordinates.
+
+**PowerPoint Support (Complete):** M40: PPTX document support with LibreOffice conversion. Upload PowerPoint presentations, view as PDF, highlight text, generate KCs from slides.
 
 
 ## CLI Usage Reference
@@ -327,12 +333,12 @@ The app runs at http://localhost:5173
 
 ## Memory Index
 
-External memory in `.claude/memory/` (13 files):
+External memory in `.claude/memory/` (16 files):
 
 | Category | Files |
 |----------|-------|
-| `milestones/` | cli_foundation.md, webui_core.md, sources_feature.md, speed_optimization.md |
-| `decisions/` | architecture.md, technology.md, patterns.md |
+| `milestones/` | cli_foundation.md, webui_core.md, sources_feature.md, speed_optimization.md, agent_memory.md, document_reader.md |
+| `decisions/` | architecture.md, technology.md, patterns.md, memory_system.md |
 | `schemas/` | database.md, api.md, components.md |
 | `reference/` | research.md, context.md, retrospective.md |
 
@@ -396,7 +402,7 @@ M16-M20 implemented Sources page with document upload, FastAPI backend, real-tim
 M21-M23 reduced processing time from 60-165s to 15-40s (~4x speedup). Groq (Qwen3 32B) for item generation, ThreadPoolExecutor (5 workers) for parallel processing, retry logic with exponential backoff.
 
 
-### Agent Memory System Milestones 24-29 (Pending)
+### Agent Memory System Milestones 24-29 (Complete)
 
 These milestones implement a tiered memory system to manage EXECPLAN complexity. The pattern adapts MemGPT's "LLM as Operating System" architecture for file-based Claude Code: core memory (always loaded) plus external memory (retrieved on demand). After completion, EXECPLAN.md shrinks from ~1500 lines to ~400 lines of active content while preserving full historical access.
 
@@ -432,14 +438,10 @@ These milestones implement a tiered memory system to manage EXECPLAN complexity.
 
 ### Milestones 24-27 (Complete)
 
-All directory structure and content extraction complete:
-- M24: Created `.claude/memory/{milestones,decisions,schemas,reference}/` with INDEX.md
-- M25: Archived M1-M23 to 4 milestone files, trimmed Progress section
-- M26: Created 6 decision/schema files, trimmed Decision Log and Artifacts
-- M27: Created 3 reference files, trimmed Research Foundation section
+M24-M27 created `.claude/memory/` directory structure with 14 files. See `.claude/memory/milestones/agent_memory.md` for details.
 
 
-### Milestone 28: Slim EXECPLAN to Active Content Only
+### Milestone 28: Slim EXECPLAN to Active Content Only (OPERATIONAL POLICY - DO NOT DELETE)
 
 At the end of this milestone, EXECPLAN.md is under 500 lines containing only active work content.
 
@@ -472,9 +474,9 @@ At the end of this milestone, EXECPLAN.md is under 500 lines containing only act
 **Verification:** EXECPLAN.md under 500 lines. `wc -l EXECPLAN.md` returns < 500. All content still accessible via memory files.
 
 
-### Milestone 29: Update CLAUDE.md with Memory Access Instructions
+### Milestone 29: Memory Access Protocols (OPERATIONAL GUIDANCE - DO NOT DELETE)
 
-At the end of this milestone, CLAUDE.md contains complete instructions for accessing the memory system, including proactive lookups before starting new work.
+This section defines how to use the memory system. These protocols are ACTIVE and must be followed by every session.
 
 **Work:**
 
@@ -601,7 +603,7 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 **Verification:** CLAUDE.md contains Memory System section with both proactive and reactive protocols. New session starting a milestone reads relevant archives before implementation.
 
 
-### Document Reader Feature Milestones 30-37 (Pending)
+### Document Reader Feature Milestones 30-38 (In Progress)
 
 These milestones implement an AlphaXiv-style document reader that enables users to read uploaded documents before practice. The core flow becomes: upload → read/study → practice (source always one click away).
 
@@ -627,194 +629,297 @@ These milestones implement an AlphaXiv-style document reader that enables users 
     └────────────┴────────────────────────────────────────────────────┘
 
 
-### Milestone 30: Core Infrastructure
+### Milestones 30-37: Document Reader Implementation (Complete)
 
-At the end of this milestone, the database has new tables for reading progress and annotations, files are stored in Supabase Storage, and a basic `/reader/:sourceId` route exists.
+**Full implementation details:** `.claude/memory/milestones/document_reader.md`
 
-**Database Migration:**
+M30-M37 implemented all Document Reader components: database tables (reading_progress, annotations, document_sections), Supabase Storage integration, PDF/Markdown/Text renderers, sidebar TOC, text selection with highlights, assistant panel (notes, AI chat, KCs), reading progress tracking, and zen mode.
 
-    -- Run in Supabase SQL Editor
-
-    -- Extend content_sources for file storage
-    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS storage_path TEXT;
-    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS original_filename TEXT;
-    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS file_size_bytes BIGINT;
-    ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS mime_type TEXT;
-
-    -- Reading progress tracking
-    CREATE TABLE IF NOT EXISTS reading_progress (
-        id TEXT PRIMARY KEY DEFAULT ('rp_' || substr(md5(random()::text), 1, 12)),
-        source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
-        last_page INTEGER,
-        last_scroll_position REAL,
-        total_pages INTEGER,
-        pages_viewed TEXT,
-        completion_percentage REAL DEFAULT 0.0,
-        first_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        last_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        total_reading_time_seconds INTEGER DEFAULT 0,
-        UNIQUE(source_id)
-    );
-
-    -- Annotations (highlights, notes, bookmarks)
-    CREATE TABLE IF NOT EXISTS annotations (
-        id TEXT PRIMARY KEY DEFAULT ('ann_' || substr(md5(random()::text), 1, 12)),
-        source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
-        annotation_type TEXT NOT NULL DEFAULT 'highlight',
-        start_offset INTEGER NOT NULL,
-        end_offset INTEGER NOT NULL,
-        anchor_text TEXT,
-        page_number INTEGER,
-        note_text TEXT,
-        color TEXT DEFAULT '#FFEB3B',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    -- Document sections for TOC
-    CREATE TABLE IF NOT EXISTS document_sections (
-        id TEXT PRIMARY KEY DEFAULT ('sec_' || substr(md5(random()::text), 1, 12)),
-        source_id TEXT NOT NULL REFERENCES content_sources(id) ON DELETE CASCADE,
-        title TEXT NOT NULL,
-        level INTEGER NOT NULL DEFAULT 1,
-        start_line INTEGER NOT NULL,
-        end_line INTEGER,
-        sequence_order INTEGER NOT NULL DEFAULT 0,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-
-    -- Storage bucket
-    INSERT INTO storage.buckets (id, name, public, file_size_limit)
-    VALUES ('documents', 'documents', false, 52428800);
-
-**Work:**
-
-1. Run database migration in Supabase SQL Editor
-2. Modify upload endpoint to store files in Supabase Storage instead of deleting after text extraction
-3. Add `GET /api/sources/{id}/file-url` endpoint returning signed URL
-4. Add `GET /api/sources/{id}/sections` endpoint returning document TOC
-5. Add `/reader/:sourceId` route to `App.jsx` using existing Layout
-6. Create basic `DocumentReader.jsx` page shell
-
-**Verification:** Navigate to `/reader/{sourceId}` and see a basic page layout. Upload a new document and confirm the file appears in Supabase Storage dashboard under "documents" bucket.
+**Key files created:**
+- `web/src/pages/DocumentReader.jsx` - main reader page
+- `web/src/components/reader/` - PDFRenderer, MarkdownRenderer, TextRenderer, SelectionTooltip, AnnotationLayer, AssistantPanel
+- `web/src/hooks/` - useDocumentSections, useTextSelection, useAnnotations, useReadingProgress
+- `learn_system/app/api/server.py` - /api/sources/{id}/file-url, /sections, /content, /api/ai/chat endpoints
 
 
-### Milestone 31: Sidebar TOC Integration
+### Milestone 38: Document Viewer Fidelity (COMPLETE)
 
-At the end of this milestone, when viewing `/reader/:sourceId`, a teal-colored "CONTENTS" section appears in the sidebar with collapsible document sections.
+At the end of this milestone, DOCX files render with full visual fidelity—headings, tables, images, colors, and formatting are preserved instead of displaying as plain text.
 
-**Work:**
+**The Problem:**
 
-1. Create `TableOfContentsSection.jsx` in `web/src/components/reader/`
-2. Create `useDocumentSections.js` hook to fetch sections from API
-3. Modify `Sidebar.jsx` to detect `/reader/:sourceId` route via `useLocation()`
-4. Conditionally render TOC section with accent color (`text-accent-progress`)
-5. Implement collapse/expand toggle with ChevronDown/ChevronRight icons
-6. Wire TOC clicks to dispatch `scroll-to-section` custom event
+Currently, DOCX files are extracted as plain text via `python-docx` and displayed with line numbers in `TextRenderer.jsx`. Users see "Chapter 1" instead of styled headings, lose all tables, images, bold/italic, colors, and formatting. The code path is:
 
-**Verification:** Navigate to `/reader/{sourceId}`. The sidebar shows normal nav items plus a teal "CONTENTS" section below "Recent". Click a section title and observe the custom event in browser console. Navigate to `/sources` and confirm TOC section disappears.
+    ReaderContent.jsx line 17: if (ext === 'docx') return 'text'
+    → TextRenderer.jsx renders plain monospace text
 
+**The Solution:**
 
-### Milestone 32: Document Rendering
+Use `docx-preview` library to render DOCX files with high fidelity directly in the browser. This is a client-side solution requiring no server changes—works with Netlify + Supabase architecture.
 
-At the end of this milestone, PDF, Markdown, and plain text documents render correctly in the document area with page navigation for PDFs.
+**Full specs:** `NEW FEATURES.md` (root directory) contains complete implementation plan with code examples, database migrations, and testing checklist.
 
 **Dependencies:**
 
-    cd web && npm install react-pdf pdfjs-dist react-markdown remark-gfm rehype-highlight highlight.js
+    cd web && npm install docx-preview
+    # JSZip is a peer dependency, installed automatically
 
 **Work:**
 
-1. Create `PDFRenderer.jsx` using react-pdf with text layer enabled
-2. Create `MarkdownRenderer.jsx` using react-markdown with syntax highlighting
-3. Create `TextRenderer.jsx` for plain text display
-4. Create `ReaderHeader.jsx` with title, view mode tabs (PDF|Blog), and Start Practice button
-5. Create `ReaderContent.jsx` container that selects renderer based on content_type
-6. Implement PDF page navigation (prev/next, page number input, zoom)
-7. Listen for `scroll-to-section` events and scroll document to matching section
+1. Create `DOCXRenderer.jsx` component in `web/src/components/reader/`:
+   - Fetch DOCX blob from Supabase Storage signed URL
+   - Call `renderAsync(blob, containerRef.current, options)` from docx-preview
+   - Handle loading and error states
+   - Apply CSS scoping for docx-preview output
 
-**Verification:** Upload a PDF and navigate to reader - see rendered pages with selectable text. Upload a Markdown file and see formatted content with syntax-highlighted code blocks. Click TOC items and observe document scrolling.
+2. Add DOCX-specific styles in `web/src/styles/docx.css`:
+   - Scope styles to `.docx-container`
+   - Ensure tables have visible borders
+   - Make images responsive
+
+3. Update `ReaderContent.jsx` to route DOCX to new renderer:
+   - Change line 17: `if (ext === 'docx' || ext === 'doc') return 'docx'`
+   - Add case in switch for 'docx' rendering DOCXRenderer
+   - Pass fileUrl from Supabase Storage
+
+4. Verify original DOCX files are stored in Supabase Storage:
+   - Check upload endpoint stores files (should be from M30)
+   - Confirm `/api/sources/{id}/file-url` returns signed URL
+
+5. Test annotation compatibility:
+   - Verify text selection works on rendered DOCX
+   - Confirm highlights save to database
+   - Check existing AnnotationLayer renders on DOCX content
+
+**Code Example - DOCXRenderer.jsx:**
+
+    import { useState, useEffect, useRef, memo } from 'react'
+    import { renderAsync } from 'docx-preview'
+    import { Loader2 } from 'lucide-react'
+
+    const DOCXRenderer = memo(function DOCXRenderer({ fileUrl }) {
+      const containerRef = useRef(null)
+      const [loading, setLoading] = useState(true)
+      const [error, setError] = useState(null)
+
+      useEffect(() => {
+        if (!fileUrl) {
+          setError('No document URL provided')
+          setLoading(false)
+          return
+        }
+
+        async function render() {
+          setLoading(true)
+          try {
+            const response = await fetch(fileUrl)
+            const arrayBuffer = await response.arrayBuffer()
+            await renderAsync(arrayBuffer, containerRef.current, {
+              inWrapper: true,
+              ignoreWidth: false,
+              breakPages: false,
+              useBase64URL: true,
+              className: 'docx-wrapper'
+            })
+            setLoading(false)
+          } catch (err) {
+            console.error('DOCX render error:', err)
+            setError('Failed to render document')
+            setLoading(false)
+          }
+        }
+        render()
+      }, [fileUrl])
+
+      if (loading) {
+        return (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          </div>
+        )
+      }
+
+      if (error) {
+        return (
+          <div className="flex items-center justify-center h-full text-red-400">
+            {error}
+          </div>
+        )
+      }
+
+      return (
+        <div className="h-full overflow-auto bg-white">
+          <div ref={containerRef} className="docx-container mx-auto max-w-4xl p-8" />
+        </div>
+      )
+    })
+
+    export default DOCXRenderer
+
+**Verification:**
+
+1. Upload a DOCX file with headings (H1, H2, H3), tables, images, and formatted text
+2. Navigate to `/reader/:sourceId`
+3. Observe:
+   - Headings display with proper hierarchy and sizing
+   - Tables render with borders and structure
+   - Images display inline
+   - Bold, italic, colors are preserved
+   - Text selection works for highlighting
+4. Create a highlight on DOCX content
+5. Refresh page - highlight persists
+6. Check browser console for errors - should be none
+
+**Fallback:**
+
+If docx-preview fidelity is insufficient for specific documents, consider implementing server-side LibreOffice PDF conversion as documented in `NEW FEATURES.md`. This would require:
+- LibreOffice installation on backend server
+- Conversion during upload pipeline
+- Storing converted PDF alongside original DOCX
+- Using existing PDFRenderer for display
 
 
-### Milestone 33: Navigation Entry Points
+### Milestone 39: PDF Highlighting (COMPLETE)
 
-At the end of this milestone, users can access the document reader from Sources page, Home page, Sidebar recent, and post-upload redirect.
+At the end of this milestone, users can highlight text in PDFs and see those highlights persist across sessions.
+
+**The Problem:**
+
+PDF highlighting is not implemented. The UI exists (SelectionTooltip, useTextSelection, useAnnotations), highlights save to database, but:
+1. `ReaderContent.jsx` does NOT pass `highlights` prop to `PDFRenderer`
+2. `PDFRenderer.jsx` has NO highlight rendering logic
+3. Offset-based positioning is incompatible with PDF's multi-page structure
+
+**The Solution:**
+
+Implement page-based highlighting with percentage coordinates. Create `PDFHighlightLayer` component that renders absolute-positioned overlays per page.
+
+**Full specs:** `NEW FEATURES.md` (root directory) contains complete implementation plan with 6 phases, code examples, schema migration, and testing checklist.
 
 **Work:**
 
-1. Add "Read" button to `SourceCard.jsx` → `navigate(/reader/${id})`
-2. Add "Read Document" button to `SourceDetailPanel.jsx`
-3. Update Sidebar recent sources to link to `/reader/:id` instead of `/sources/:id`
-4. Modify `UploadZone.jsx` to redirect to `/reader/:id` after successful upload
-5. Add "Start Practice" button in `ReaderHeader.jsx` → `navigate(/study?source=${id})`
+1. Wire up existing props (5 min) - Pass highlights to PDFRenderer in ReaderContent.jsx
+2. Database schema (10 min) - Add `position_type`, `pdf_rects` columns to annotations
+3. PDF selection capture (2 hrs) - Detect PDF pages, capture pageNumber and percentage-based pdfRect
+4. PDFRenderer updates (30 min) - Accept highlights prop, add data-page-number attributes
+5. PDFHighlightLayer (2 hrs) - Create per-page highlight overlay component
+6. useAnnotations update (1 hr) - Handle PDF position type in createHighlight
 
-**Verification:** From Sources page, click "Read" on a source card - opens reader. From Home page, click recent source - opens reader. Upload new document - redirected to reader after processing. Click "Start Practice" in reader - starts practice session filtered to that source.
+**Verification:**
 
+1. Select text on page 1 of a PDF
+2. Click Highlight in tooltip
+3. Yellow highlight appears at correct position
+4. Refresh page - highlight persists
+5. Navigate to different page, return - highlight still visible
+6. Click highlight to delete - highlight removed
 
-### Milestone 34: Text Selection and Highlights
+**Known Limitations:**
 
-At the end of this milestone, users can select text in documents and see a tooltip with actions (Ask AI, Highlight, Copy). Highlights persist to database.
-
-**Work:**
-
-1. Create `SelectionTooltip.jsx` component with three action buttons
-2. Create `useTextSelection.js` hook detecting selection via `window.getSelection()`
-3. Position tooltip above selection using `getBoundingClientRect()`
-4. Create `useAnnotations.js` hook with CRUD operations to annotations table
-5. Add annotations API endpoints (GET, POST, PUT, DELETE)
-6. Create `AnnotationLayer.jsx` overlay rendering saved highlights
-7. Implement optimistic updates for smooth UX
-
-**Verification:** Select text in document - tooltip appears. Click "Highlight" - text turns yellow. Refresh page - highlight persists. Check annotations table in Supabase - record exists.
+- No cross-page selection (react-pdf limitation)
+- No rotation support (deferred)
 
 
-### Milestone 35: Assistant Panel
+### Milestone 40: PowerPoint Support (COMPLETE)
 
-At the end of this milestone, a collapsible right-side panel shows Notes, AI Chat, and KCs tabs.
+At the end of this milestone, users can upload PowerPoint (.pptx) presentations and view them in the document reader with full visual fidelity. The system extracts text for KC generation, converts PPTX to PDF for display, and highlighting works on the converted PDF.
 
-**Work:**
+**The Problem:**
 
-1. Create `AssistantPanel.jsx` with three tabs (Notes | AI | KCs)
-2. Create `NotesList.jsx` displaying user notes for this source
-3. Create `NoteEditor.jsx` for creating/editing notes
-4. Add notes API endpoints using annotations table with type='note'
-5. Create `AIChatPanel.jsx` with message input and chat history
-6. Add `POST /api/ai/chat` endpoint integrating Claude API for document Q&A
-7. Wire "Ask AI" action from SelectionTooltip to pre-fill chat with selected text
+Currently, the system only supports PDF, DOCX, Markdown, and plain text documents. PowerPoint presentations are a common format for educational content but cannot be uploaded or viewed.
 
-**Verification:** Click Notes tab - see list of notes. Create note - appears in list. Click AI tab - type question - receive answer about document content. Select text, click "Ask AI" - chat opens with selected text quoted.
+**The Solution:**
 
+Use a server-side conversion approach:
+1. **Text extraction:** python-pptx extracts text from slides, tables, and speaker notes for KC generation
+2. **PDF conversion:** LibreOffice + unoserver converts PPTX to PDF for viewing
+3. **Display:** Existing PDFRenderer displays the converted PDF
+4. **Highlighting:** Existing PDF highlighting works on converted output
 
-### Milestone 36: Reading Progress
+**CRITICAL WARNING:** Do NOT use pptx2html library. It is abandoned (8 years), has an unpatched XSS vulnerability, and lacks essential features.
 
-At the end of this milestone, reading position and completion percentage are tracked and restored on return.
+**Full specs:** `NEW FEATURES.md` (root directory) contains complete implementation plan with code examples, architecture diagram, and testing checklist.
 
-**Work:**
+**Dependencies:**
 
-1. Create `useReadingProgress.js` hook tracking scroll position and pages viewed
-2. Add `GET/PUT /api/sources/{id}/progress` endpoints
-3. Implement debounced sync (500ms) to avoid overwhelming database
-4. Restore scroll position when returning to previously-read document
-5. Show completion percentage in ReaderHeader ("45% read")
-6. Update reading_progress.last_opened_at on each visit
+    # Backend
+    pip install python-pptx>=1.0.0
 
-**Verification:** Read half a document, navigate away, return - scroll position restored. Check reading_progress table - completion_percentage updated. See "45% read" in header.
-
-
-### Milestone 37: Polish and Performance
-
-At the end of this milestone, the reader is production-ready with caching, virtualization, and responsive layouts.
+    # Docker (for unoserver)
+    docker pull libreofficedocker/libreoffice-unoserver:3.19
 
 **Work:**
 
-1. Implement IndexedDB caching for documents using `idb` library
-2. Add PDF page virtualization using `@tanstack/react-virtual` for large documents
-3. Create Zen mode (hide sidebar and assistant panel, toggle via header button)
-4. Add responsive layouts: tablet (assistant as drawer), mobile (assistant as bottom sheet)
-5. Performance optimization: lazy loading, React.memo, useMemo for expensive computations
-6. Deep linking: update URL on section scroll, restore on page load
+Phase 1: Backend text extraction
+1. Add `python-pptx>=1.0.0` to `requirements.txt`
+2. Create `extract_pptx()` function in `extractors.py` that extracts:
+   - Slide titles
+   - Body text from all shapes
+   - Table content
+   - Speaker notes
+3. Add `.pptx`, `.ppt` to `ALLOWED_EXTENSIONS` in `sources.py`
+4. Update extractor dispatch table
 
-**Verification:** Open 100-page PDF - pages load progressively without freezing. Toggle Zen mode - only document visible. Resize browser to mobile - assistant becomes bottom sheet. Offline: previously-viewed document loads from cache.
+Phase 2: PPTX→PDF conversion
+1. Add unoserver container to `docker-compose.yml`:
+
+       services:
+         libreoffice:
+           image: libreofficedocker/libreoffice-unoserver:3.19
+           ports:
+             - "2004:2004"
+           restart: unless-stopped
+
+2. Create `learn_system/app/services/conversion.py` with `convert_pptx_to_pdf()` function
+3. Update processing pipeline to convert PPTX after text extraction
+4. Store converted PDF in Supabase Storage alongside original PPTX
+
+Phase 3: Database schema
+1. Create `migrations/m40_pptx_support.sql`:
+
+       ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS slide_count INTEGER;
+       ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS converted_pdf_path TEXT;
+       CREATE INDEX IF NOT EXISTS idx_content_sources_content_type ON content_sources(content_type);
+
+2. Apply migration in Supabase SQL Editor
+
+Phase 4: Frontend content type detection
+1. Update `getContentType()` in `ReaderContent.jsx`:
+   - Add: `if (ext === 'pptx' || ext === 'ppt') return 'pptx'`
+   - Add MIME type check for presentation types
+2. Add PPTX case in `renderContent()` switch to use PDFRenderer with converted PDF URL
+
+Phase 5: API endpoint for converted PDF
+1. Add `/api/sources/{id}/pdf-url` endpoint in `sources.py`
+2. Return signed URL for converted PDF (stored in `converted_pdf_path`)
+3. Handle case where conversion is not complete (return 404)
+
+**Verification:**
+
+1. Upload a PPTX file with multiple slides, tables, and speaker notes
+2. Observe processing status shows extraction and conversion steps
+3. Navigate to `/reader/:sourceId`
+4. Observe:
+   - Presentation displays as PDF with all slides
+   - Slide navigation works (using existing PDF pagination)
+   - Text selection works
+   - Highlights persist across sessions
+5. Check that KCs were extracted from slide content
+6. Practice items reference presentation content correctly
+
+**Known Limitations:**
+
+- Animations/transitions lost (slides become static in PDF)
+- SmartArt text may not extract (python-pptx limitation)
+- Conversion latency 2-5 seconds per presentation
+- Legacy .ppt files may require LibreOffice conversion fallback
+
+**Fallback (if Docker unavailable):**
+
+If unoserver Docker is not available in the deployment environment:
+1. Use local LibreOffice installation: `brew install libreoffice` (macOS) or `apt install libreoffice` (Linux)
+2. Use `convert_pptx_to_pdf_local()` function with `soffice --headless --convert-to pdf`
+3. Consider PPTXjs for client-side rendering as alternative (adds ~500KB to bundle)
 
 
 ## Web UI Reference
@@ -840,3 +945,6 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-03: M20-M23 Error handling, speed optimization (Groq, parallel processing)
 - 2026-01-04: M24-M29 Agent memory system implementation
 - 2026-01-05: M30-M37 Document Reader feature complete (AlphaXiv-style reader with zen mode, AI chat, highlights, reading progress)
+- 2026-01-06: M38 Complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview, text selection, highlights)
+- 2026-01-06: M39 Complete - PDF Highlighting (page-based percentage coordinates, PDFHighlightLayer component)
+- 2026-01-06: M40 Complete - PowerPoint Support (PPTX with LibreOffice conversion, python-pptx text extraction, converted PDF viewing)
