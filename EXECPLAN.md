@@ -441,7 +441,7 @@ These milestones implement a tiered memory system to manage EXECPLAN complexity.
 M24-M27 created `.claude/memory/` directory structure with 14 files. See `.claude/memory/milestones/agent_memory.md` for details.
 
 
-### Milestone 28: Slim EXECPLAN to Active Content Only (OPERATIONAL POLICY - DO NOT DELETE)
+### Slim EXECPLAN to Active Content Only (OPERATIONAL POLICY - DO NOT DELETE)
 
 At the end of this milestone, EXECPLAN.md is under 500 lines containing only active work content.
 
@@ -474,7 +474,7 @@ At the end of this milestone, EXECPLAN.md is under 500 lines containing only act
 **Verification:** EXECPLAN.md under 500 lines. `wc -l EXECPLAN.md` returns < 500. All content still accessible via memory files.
 
 
-### Milestone 29: Memory Access Protocols (OPERATIONAL GUIDANCE - DO NOT DELETE)
+### Memory Access Protocols (OPERATIONAL POLICY - DO NOT DELETE)
 
 This section defines how to use the memory system. These protocols are ACTIVE and must be followed by every session.
 

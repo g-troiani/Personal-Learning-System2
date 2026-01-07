@@ -7,7 +7,7 @@
 
 | Category | Files | Key Topics |
 |----------|-------|------------|
-| Milestones | 6 | M1-M38 implementation history |
+| Milestones | 6 | M1-M40 implementation history |
 | Decisions | 4 | Architecture, technology, patterns, memory system |
 | Schemas | 3 | Database, API, React components |
 | Reference | 3 | Research, context, retrospectives |
@@ -23,7 +23,7 @@
 | `sources_feature.md` | M16-M20 | File upload, FastAPI backend, real-time processing, delete/detail panels |
 | `speed_optimization.md` | M21-M23 | Groq integration, parallel processing, retry logic, bug fixes |
 | `agent_memory.md` | M24-M29 | Memory system, tiered architecture, scout subagents, EXECPLAN slimming |
-| `document_reader.md` | M30-M38 | PDF/Markdown/DOCX rendering, TOC, highlights, AI chat, notes, zen mode, progress, docx-preview |
+| `document_reader.md` | M30-M40 | PDF/Markdown/DOCX/PPTX rendering, TOC, highlights, AI chat, notes, zen mode, progress, docx-preview, PDF highlighting, LibreOffice conversion |
 
 ### decisions/
 

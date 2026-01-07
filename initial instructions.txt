@@ -91,8 +91,10 @@ contradicting and the user journey makes sense. so until the task is successful 
 
 
  10)   # REVIEW & CLEANING EXECPLAN.md
-  Review the additions to EXECPLAN.md. Also, make sure we don't keep in EXECPLAN.md outdated or superfloud information to make
-  the document crisp. Consider if the information is still active content 
+Review the additions to EXECPLAN.md. Also, make sure we don't keep in EXECPLAN.md outdated or superfloud information to make the document crisp. 
+It's imperative you don't not delete the operational policy, guidance or instructions. Update the memory when appropriate. 
+Before you are done, check you didn't delete any section that was used as operational guidance or instructions (eg MEMORY ACCESS PROTOCOLS, Slim EXECPLAN to Active Content Only). 
+Check you didn't delete any section that was used as operational guidance or instructions even if you think you don't need to.
 
 
 
@@ -205,7 +207,7 @@ RESEARCH_TARGET that matches the architecture and conventions already present in
 
 
 
-# IMPROVE THE PROMPT 
+# IMPROVE A PROMPT FOR A TARGET FEATURE
 step 1) 
 consider this prompt : 
 
@@ -256,3 +258,12 @@ before starting practice questions, treating it as a study phase before assessme
  refer back to the original material at any point during practice. Think of it as separating the workflow into: upload → read/study → practice, with the source always one click away for reference. Leverage the research provided in RESEARCH DONE." 
 
  RESEARCH DONE = @ALPHAXIV RESEARCH.docx
+
+
+
+
+ STEPS: 
+ 1 - review & clean EXECPLAN.md
+ 2 - Research feature
+ 3 - implement feature in execplan
+ 4 - implement execplan

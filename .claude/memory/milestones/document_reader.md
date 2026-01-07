@@ -1,11 +1,11 @@
-# Document Reader Feature - M30-M38
+# Document Reader Feature - M30-M40
 
 **Status:** Complete (2026-01-06)
 **Purpose:** AlphaXiv-style document reader for reading uploads before practice
 
 ## Overview
 
-Implements in-browser document reading with: PDF/Markdown/DOCX/text rendering, sidebar TOC, text selection with highlights, AI chat, notes, reading progress tracking, and zen mode. Flow: upload -> read/study -> practice.
+Implements in-browser document reading with: PDF/Markdown/DOCX/PPTX/text rendering, sidebar TOC, text selection with highlights, AI chat, notes, reading progress tracking, and zen mode. Flow: upload -> read/study -> practice.
 
 ## M38: Document Viewer Fidelity (2026-01-06)
 
@@ -30,6 +30,69 @@ Implements in-browser document reading with: PDF/Markdown/DOCX/text rendering, s
 - `web/src/components/reader/DOCXRenderer.jsx` - Main renderer with AnnotationLayer integration
 - `web/src/styles/docx.css` - DOCX-specific styling
 - `web/src/components/reader/ReaderContent.jsx` - Content type routing (line 18, 33, 125-141)
+
+## M39: PDF Highlighting (2026-01-06)
+
+**Goal:** Users can highlight text in PDFs and see those highlights persist across sessions.
+
+**The Problem:**
+PDF highlighting wasn't implemented. UI existed (SelectionTooltip, useTextSelection, useAnnotations), highlights saved to database, but:
+1. `ReaderContent.jsx` didn't pass `highlights` prop to `PDFRenderer`
+2. `PDFRenderer.jsx` had no highlight rendering logic
+3. Offset-based positioning incompatible with PDF's multi-page structure
+
+**Implementation:**
+- Phase 0: Wired up highlights prop to PDFRenderer in ReaderContent.jsx
+- Phase 1: Database migration added `position_type` and `pdf_rects` columns to annotations
+- Phase 2: Updated useTextSelection for PDF-aware page-based selection
+- Phase 3: Updated PDFRenderer with `data-page-number` attributes on page wrappers
+- Phase 4: Created PDFHighlightLayer component for overlay rendering
+- Phase 5: Updated useAnnotations to handle PDF position type and sorting
+
+**Key Files:**
+- `web/src/components/reader/PDFHighlightLayer.jsx` - Per-page highlight overlay
+- `web/src/hooks/useTextSelection.js` - PDF page detection, percentage-based rects
+- `web/src/hooks/useAnnotations.js` - PDF position type handling
+
+**Coordinate System:**
+- Uses percentage-based coordinates (x%, y%, width%, height%) relative to page dimensions
+- Survives zoom/scale changes
+- Character offsets from Markdown/Text are incompatible with PDF's multi-page structure
+
+**Limitations:**
+- No cross-page selection (react-pdf limitation)
+- No rotation support (deferred)
+
+## M40: PowerPoint Support (2026-01-06)
+
+**Goal:** Upload PowerPoint (.pptx) presentations and view in document reader with full visual fidelity.
+
+**Implementation:**
+1. **Text extraction:** python-pptx extracts text from slides, tables, speaker notes for KC generation
+2. **PDF conversion:** LibreOffice (local, no Docker) converts PPTX to PDF for viewing
+3. **Display:** Existing PDFRenderer displays the converted PDF
+4. **Highlighting:** Existing PDF highlighting works on converted output
+
+**Key Files:**
+- `learn_system/app/services/extractors.py` - `extract_pptx()` function
+- `learn_system/app/services/conversion.py` - `convert_pptx_to_pdf()` using LibreOffice
+- `learn_system/app/api/sources.py` - PPTX handling, `/api/sources/{id}/pdf-url` endpoint
+- `web/src/components/reader/ReaderContent.jsx` - PPTX content type routing
+
+**Database Changes:**
+- `slide_count` column added to content_sources
+- `converted_pdf_path` column for PDF storage path
+
+**Dependencies:**
+- Backend: `python-pptx>=1.0.0`
+- System: LibreOffice (`soffice --headless --convert-to pdf`)
+
+**CRITICAL WARNING:** Do NOT use pptx2html library - abandoned 8 years, unpatched XSS vulnerability.
+
+**Limitations:**
+- Animations/transitions lost (slides become static PDF)
+- SmartArt text may not extract (python-pptx limitation)
+- Conversion latency 2-5 seconds per presentation
 
 ## Architecture
 
@@ -174,6 +237,10 @@ Restores: scroll position for non-PDF, page number for PDF on return.
 | Upsert for reading_progress | Prevents race condition duplicates | 2026-01-05 |
 | Remove Highlight-to-Generate milestone | Contradicts VISION.md "no manual flashcards" | 2026-01-05 |
 | Defer mobile/virtualization/caching | Lower priority for desktop tool | 2026-01-05 |
+| docx-preview for DOCX rendering | Client-side, no server changes, 1-2 day implementation | 2026-01-06 |
+| Page-based % coords for PDF highlights | Character offsets unstable for PDFs, survives zoom | 2026-01-06 |
+| LibreOffice for PPTX→PDF | High fidelity, reuses PDFRenderer, no new bundle | 2026-01-06 |
+| python-pptx for PPTX text extraction | Pure Python, extracts slides/tables/speaker notes | 2026-01-06 |
 
 ## Component Hierarchy
 
@@ -181,12 +248,13 @@ Restores: scroll position for non-PDF, page number for PDF on return.
 DocumentReader.jsx
 ├── ReaderHeader.jsx (title, zen toggle, practice button)
 ├── ReaderContent.jsx
-│   ├── PDFRenderer.jsx (react-pdf)
+│   ├── PDFRenderer.jsx (react-pdf) + PDFHighlightLayer.jsx
 │   ├── MarkdownRenderer.jsx (react-markdown)
 │   ├── TextRenderer.jsx (plain text)
-│   └── DOCXRenderer.jsx (M38 - pending)
+│   ├── DOCXRenderer.jsx (docx-preview)
+│   └── PPTX → routes to PDFRenderer (converted PDF)
 ├── SelectionTooltip.jsx (on text select)
-├── AnnotationLayer.jsx (highlights overlay)
+├── AnnotationLayer.jsx (highlights overlay - Markdown/Text/DOCX)
 └── AssistantPanel.jsx
     ├── NotesList.jsx / NoteEditor.jsx
     ├── AIChatPanel.jsx
@@ -210,4 +278,10 @@ DocumentReader.jsx
 | `annotations` | Highlights, notes with offsets |
 | `document_sections` | TOC structure |
 
-Extended `content_sources` with: storage_path, original_filename, file_size_bytes, mime_type.
+Extended `content_sources` with:
+- M30: storage_path, original_filename, file_size_bytes, mime_type
+- M40: slide_count, converted_pdf_path
+
+Extended `annotations` with (M39):
+- position_type: 'character' or 'pdf_page'
+- pdf_rects: JSONB array of {pageNumber, x, y, width, height} for PDF highlights
