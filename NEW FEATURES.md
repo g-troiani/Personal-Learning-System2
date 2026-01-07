@@ -1101,3 +1101,688 @@ This implementation adds secure multi-user authentication to the Personal Learni
 | M45: RLS Policies | 2 hours |
 | M46: Deployment | 4 hours |
 | Testing & Verification | 4 hours |
+
+---
+
+## Calendar Improvement: System Integration and Navigation
+
+### Current State Summary
+
+The Calendar page exists as a standalone view for scheduling future study sessions, but it operates in isolation from the rest of the application. Users must manually navigate to different views to understand their learning schedule, and completing a study session does not trigger any updates in the calendar view.
+
+### Problems Identified
+
+- **Disconnected OverdueAlert**: Home page shows overdue count but links to incorrect route `/due-for-review` (should be `/review`)
+- **No calendar link from Home**: Dashboard Quick Stats show "Due Today" and "Overdue" counts but don't link to Calendar
+- **Calendar shows sessions only**: Current Calendar page only displays scheduled/completed `sessions` records, not the actual due items from `kc_state.next_review_at`
+- **DueForReview and Calendar are parallel**: Both show "what to study" but in completely different formats with no cross-linking
+- **No state synchronization**: Completing a study session doesn't invalidate/refresh Calendar or Home page data
+- **Sidebar badge on wrong item**: Due count badge is on "Due for Review" nav item, not on Calendar
+- **No deep linking**: Cannot share a URL like `/calendar?date=2026-01-15` to jump to specific day
+- **No "Today" unified view**: Users must check Home (stats) + Calendar (schedule) + DueForReview (item list) separately
+
+### Navigation Flow Diagram
+
+```
+CURRENT STATE (Fragmented):
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   Home ─────────── OverdueAlert ─────────► /due-for-review (BROKEN!)        │
+│     │                                                                       │
+│     │              Quick Stats                                              │
+│     │              ├─ Due Today: 5      (no link)                          │
+│     │              └─ Overdue: 3        (no link)                          │
+│     │                                                                       │
+│     └──────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   Calendar ────────── Shows sessions only (not KC due dates)               │
+│                       No connection to DueForReview or Study                │
+│                                                                             │
+│   DueForReview ────── Shows due items by source                            │
+│                       "Study All" button → /study                          │
+│                                                                             │
+│   Study ──────────────────────────────────────────────────────────────────►│
+│               Session ends → navigate('/') or handleStudyMore()            │
+│               NO refresh of Calendar/Home data                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PROPOSED STATE (Integrated):
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   Home                                                                      │
+│     │                                                                       │
+│     ├─ OverdueAlert ──────────────────────► /calendar?view=today           │
+│     │                                                                       │
+│     ├─ Quick Stats (clickable)                                             │
+│     │   ├─ Due Today: 5 ──────────────────► /calendar?view=today           │
+│     │   ├─ Overdue: 3 ────────────────────► /calendar?view=overdue         │
+│     │   └─ New: 12 ───────────────────────► /review                        │
+│     │                                                                       │
+│     └─ TodayPreview card ─────────────────► /calendar?view=today           │
+│                                                                             │
+│   Sidebar                                                                   │
+│     ├─ Calendar [5] ◄──────────────────────  Badge shows TODAY's count     │
+│     └─ Due for Review ◄────────────────────  Badge shows OVERDUE count     │
+│                                                                             │
+│   Calendar (Central Hub)                                                    │
+│     ├─ ?view=today ────────► Today panel: due KCs + scheduled sessions     │
+│     ├─ ?view=overdue ──────► Overdue panel: all overdue KCs grouped        │
+│     ├─ ?date=2026-01-15 ───► Jump to specific date                         │
+│     └─ Click KC ───────────► /study?kc={id} or /study?source={id}          │
+│                                                                             │
+│   Study                                                                     │
+│     │                                                                       │
+│     └─ Session ends ─────────► calendarRefreshTrigger++ in context         │
+│                                Home/Calendar useEffect re-fetches          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Components to Modify
+
+| Component | File | Changes |
+|-----------|------|---------|
+| **OverdueAlert** | `web/src/components/home/OverdueAlert.jsx` | Fix route from `/due-for-review` to `/calendar?view=today` |
+| **Sidebar** | `web/src/components/layout/Sidebar.jsx` | Move badge to Calendar nav item (today's due count) |
+| **Home** | `web/src/pages/Home.jsx` | Add clickable Quick Stats linking to Calendar views |
+| **Calendar** | `web/src/pages/Calendar.jsx` | Add query param handling, fetch KC due dates, show TodayPanel |
+| **App** | `web/src/App.jsx` | No route changes needed (Calendar already at `/calendar`) |
+| **SupabaseContext** | `web/src/contexts/SupabaseContext.jsx` | Add `refreshTrigger` state + increment function |
+| **Study** | `web/src/pages/Study.jsx` | Call context refresh trigger after session ends |
+
+### URL Routing Additions
+
+No new routes needed. Calendar accepts query parameters:
+
+| URL | Behavior |
+|-----|----------|
+| `/calendar` | Default month view, today selected |
+| `/calendar?view=today` | Month view with expanded "Today" panel showing all due KCs |
+| `/calendar?view=overdue` | Month view with expanded "Overdue" panel showing all overdue KCs |
+| `/calendar?date=2026-01-15` | Jump to that date, select it, show its details |
+
+**Implementation:**
+
+```javascript
+// Calendar.jsx - Add at top of component
+const [searchParams] = useSearchParams()
+const viewParam = searchParams.get('view') // 'today' | 'overdue' | null
+const dateParam = searchParams.get('date') // '2026-01-15' | null
+
+useEffect(() => {
+  if (dateParam) {
+    const targetDate = new Date(dateParam)
+    setSelectedDate(targetDate)
+    setCurrentDate(targetDate) // Navigate month view to that date
+  }
+  if (viewParam === 'today') {
+    setSelectedDate(new Date())
+    setShowTodayPanel(true)
+  } else if (viewParam === 'overdue') {
+    setShowOverduePanel(true)
+  }
+}, [dateParam, viewParam])
+```
+
+### State Synchronization Strategy
+
+**Problem:** When Study completes, Calendar/Home show stale data until page refresh.
+
+**Solution:** Add a `refreshTrigger` counter in SupabaseContext that components subscribe to.
+
+**SupabaseContext.jsx additions:**
+
+```javascript
+// Add to state
+const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+// Add to value
+const triggerDataRefresh = useCallback(() => {
+  setRefreshTrigger(prev => prev + 1)
+}, [])
+
+const value = {
+  // ... existing
+  refreshTrigger,
+  triggerDataRefresh,
+}
+```
+
+**Study.jsx modification:**
+
+```javascript
+const { triggerDataRefresh } = useSupabase()
+
+// In endSession function, after updating session:
+const endSession = async () => {
+  // ... existing session update code ...
+
+  // Trigger global data refresh for Calendar/Home
+  triggerDataRefresh()
+
+  setShowSummary(true)
+}
+```
+
+**Calendar.jsx subscription:**
+
+```javascript
+const { refreshTrigger, getDueCounts } = useSupabase()
+
+// Re-fetch when trigger changes
+useEffect(() => {
+  fetchScheduledSessions()
+  fetchDueKCs() // New function to get KC due dates
+}, [supabase, currentDate, refreshTrigger])
+```
+
+**Home.jsx subscription:**
+
+```javascript
+const { refreshTrigger } = useSupabase()
+
+useEffect(() => {
+  const fetchData = async () => {
+    await fetchSources()
+    const [dueData, masteryData] = await Promise.all([
+      getDueCounts(),
+      getMasteryBySource()
+    ])
+    setDueCounts(dueData)
+    setMasteryBySource(masteryData)
+    setDataLoaded(true)
+  }
+  fetchData()
+}, [refreshTrigger]) // Add refreshTrigger dependency
+```
+
+### New Calendar Features Required
+
+1. **Fetch KC Due Dates**: Query `kc_state` for items where `next_review_at` falls within displayed month
+2. **TodayPanel Component**: Shows due KCs for today with "Start Studying" button
+3. **OverduePanel Component**: Shows all overdue KCs grouped by source
+4. **Calendar dots**: Show dots on calendar days that have due items (not just sessions)
+
+**New query for Calendar:**
+
+```javascript
+const fetchDueKCs = async () => {
+  const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+  const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+
+  const { data, error } = await supabase
+    .from('kc_state')
+    .select(`
+      kc_id,
+      next_review_at,
+      mastery_level,
+      knowledge_components!inner(name, source_id, content_sources(title))
+    `)
+    .gte('next_review_at', firstDay.toISOString())
+    .lte('next_review_at', lastDay.toISOString())
+
+  if (!error) {
+    setDueKCs(data || [])
+  }
+}
+```
+
+### Implementation Priority
+
+| Priority | Task | Effort |
+|----------|------|--------|
+| 1 | Fix OverdueAlert route (`/review` not `/due-for-review`) | 5 min |
+| 2 | Add refreshTrigger to SupabaseContext | 15 min |
+| 3 | Wire Study.jsx to call triggerDataRefresh | 10 min |
+| 4 | Add query param handling to Calendar | 30 min |
+| 5 | Add KC due date fetching to Calendar | 45 min |
+| 6 | Create TodayPanel component | 1 hour |
+| 7 | Make Home Quick Stats clickable | 30 min |
+| 8 | Move Sidebar badge to Calendar item | 15 min |
+| **Total** | | ~3.5 hours |
+
+### Files to Create
+
+| File | Purpose |
+|------|---------|
+| `web/src/components/calendar/TodayPanel.jsx` | Shows today's due KCs with study buttons |
+| `web/src/components/calendar/OverduePanel.jsx` | Shows all overdue KCs grouped by source |
+| `web/src/components/calendar/DayDot.jsx` | Visual indicator for days with due items |
+
+### Testing Checklist
+
+- [ ] OverdueAlert "Review now" button navigates to `/calendar?view=today`
+- [ ] Home Quick Stats are clickable and link correctly
+- [ ] Calendar accepts `?view=today`, `?view=overdue`, `?date=YYYY-MM-DD` params
+- [ ] Calendar shows dots on days with due KCs
+- [ ] TodayPanel shows correct count of due items
+- [ ] Clicking "Study" in TodayPanel navigates to `/study`
+- [ ] Completing a study session refreshes Calendar view
+- [ ] Completing a study session refreshes Home Quick Stats
+- [ ] Sidebar Calendar badge shows today's due count
+- [ ] Sidebar Due for Review badge shows overdue count
+- [ ] Deep linking: sharing `/calendar?date=2026-01-15` works correctly
+
+---
+
+## Calendar Improvement: Data Model and State Management
+
+**Current State:** The calendar view displays sessions by `started_at` timestamp but lacks integration with spaced repetition due dates from `kc_state.next_review_at`. CalendarGrid.jsx incorrectly references a non-existent `scheduled_for` field.
+
+### Problems Identified
+
+- **`sessions` table has no `scheduled_for` field** - CalendarGrid.jsx line 32 references `s.scheduled_for` which does not exist in the schema
+- **Scheduling creates sessions with `started_at` set to future dates** - Conflates "when session began" with "when session was planned for"
+- **Calendar ignores due items from kc_state** - Does not aggregate `kc_state.next_review_at` by day for display
+- **No distinction between scheduled vs started sessions** - Using `ended_at IS NULL` as a proxy is fragile
+- **No caching strategy** - Fetches sessions on every month navigation without caching
+- **No real-time updates** - Due items crossing into "overdue" at midnight are not reflected
+
+### Database Schema Changes
+
+**Migration: `migrations/calendar_schema.sql`**
+
+```sql
+-- Add scheduled_for to sessions (distinct from started_at)
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS scheduled_for TIMESTAMPTZ;
+
+-- Index for calendar queries
+CREATE INDEX IF NOT EXISTS idx_sessions_scheduled_for ON sessions(scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_scheduled ON sessions(user_id, scheduled_for);
+
+-- View for due items aggregated by date (for calendar display)
+CREATE OR REPLACE VIEW calendar_due_items AS
+SELECT
+    DATE(next_review_at) AS due_date,
+    user_id,
+    COUNT(*) AS due_count,
+    SUM(CASE WHEN next_review_at < NOW() THEN 1 ELSE 0 END) AS overdue_count,
+    SUM(CASE WHEN next_review_at >= NOW() AND next_review_at < NOW() + INTERVAL '1 day' THEN 1 ELSE 0 END) AS due_today_count
+FROM kc_state
+WHERE next_review_at IS NOT NULL
+GROUP BY DATE(next_review_at), user_id;
+
+-- RLS policy for the view (if needed as a table instead of view)
+-- Views inherit RLS from underlying tables, so this works automatically
+```
+
+**Session State Clarification:**
+
+| Field | Meaning |
+|-------|---------|
+| `scheduled_for` | When user planned to study (NULL = unscheduled session) |
+| `started_at` | When session actually began (set when user starts) |
+| `ended_at` | When session ended (NULL = in progress or not started) |
+
+**Session States:**
+
+| State | scheduled_for | started_at | ended_at |
+|-------|---------------|------------|----------|
+| Scheduled (future) | date | NULL | NULL |
+| In Progress | date or NULL | timestamp | NULL |
+| Completed | date or NULL | timestamp | timestamp |
+
+### React State/Hook Structure
+
+**New File: `web/src/hooks/useCalendarData.js`**
+
+```javascript
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSupabase } from '../contexts/SupabaseContext'
+
+/**
+ * Hook for calendar data management with caching and real-time updates
+ *
+ * @param {Date} currentMonth - Month to display
+ * @returns {Object} Calendar data and methods
+ */
+export function useCalendarData(currentMonth) {
+  const { supabase } = useSupabase()
+
+  // State
+  const [sessions, setSessions] = useState([])
+  const [dueItemsByDate, setDueItemsByDate] = useState({}) // { 'YYYY-MM-DD': { due: N, overdue: N } }
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Cache: Map<'YYYY-MM', { sessions, dueItems, fetchedAt }>
+  const cache = useRef(new Map())
+  const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+  // Generate cache key from month
+  const getCacheKey = (date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+  }
+
+  // Get month boundaries
+  const getMonthRange = (date) => {
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1)
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999)
+    return { firstDay, lastDay }
+  }
+
+  // Fetch sessions for month
+  const fetchSessions = async (firstDay, lastDay) => {
+    // Query sessions that are:
+    // 1. Scheduled for this month (scheduled_for in range)
+    // 2. OR started this month but unscheduled (started_at in range, scheduled_for IS NULL)
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('*')
+      .or(`and(scheduled_for.gte.${firstDay.toISOString()},scheduled_for.lte.${lastDay.toISOString()}),and(scheduled_for.is.null,started_at.gte.${firstDay.toISOString()},started_at.lte.${lastDay.toISOString()})`)
+      .order('scheduled_for', { ascending: true, nullsFirst: false })
+
+    if (error) throw error
+    return data || []
+  }
+
+  // Fetch due items aggregated by date
+  const fetchDueItems = async (firstDay, lastDay) => {
+    // Get all KC states with next_review_at in this month
+    const { data, error } = await supabase
+      .from('kc_state')
+      .select('kc_id, next_review_at')
+      .gte('next_review_at', firstDay.toISOString())
+      .lte('next_review_at', lastDay.toISOString())
+
+    if (error) throw error
+
+    // Aggregate by date
+    const byDate = {}
+    const now = new Date()
+
+    data?.forEach(item => {
+      const reviewDate = new Date(item.next_review_at)
+      const dateKey = reviewDate.toISOString().split('T')[0] // 'YYYY-MM-DD'
+
+      if (!byDate[dateKey]) {
+        byDate[dateKey] = { due: 0, overdue: 0 }
+      }
+
+      byDate[dateKey].due++
+      if (reviewDate < now) {
+        byDate[dateKey].overdue++
+      }
+    })
+
+    return byDate
+  }
+
+  // Main fetch function with caching
+  const fetchCalendarData = useCallback(async (forceRefresh = false) => {
+    const cacheKey = getCacheKey(currentMonth)
+    const cached = cache.current.get(cacheKey)
+
+    // Return cached data if valid and not forcing refresh
+    if (!forceRefresh && cached && (Date.now() - cached.fetchedAt < CACHE_TTL_MS)) {
+      setSessions(cached.sessions)
+      setDueItemsByDate(cached.dueItems)
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const { firstDay, lastDay } = getMonthRange(currentMonth)
+
+      // Fetch in parallel
+      const [sessionsData, dueItemsData] = await Promise.all([
+        fetchSessions(firstDay, lastDay),
+        fetchDueItems(firstDay, lastDay)
+      ])
+
+      // Update cache
+      cache.current.set(cacheKey, {
+        sessions: sessionsData,
+        dueItems: dueItemsData,
+        fetchedAt: Date.now()
+      })
+
+      setSessions(sessionsData)
+      setDueItemsByDate(dueItemsData)
+    } catch (err) {
+      console.error('Error fetching calendar data:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [currentMonth, supabase])
+
+  // Initial fetch and refetch on month change
+  useEffect(() => {
+    fetchCalendarData()
+  }, [fetchCalendarData])
+
+  // Real-time subscription for kc_state changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('calendar-due-items')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'kc_state',
+          filter: 'next_review_at=neq.null'
+        },
+        (payload) => {
+          // Invalidate cache and refetch
+          cache.current.clear()
+          fetchCalendarData(true)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase, fetchCalendarData])
+
+  // Get data for a specific day
+  const getDataForDay = useCallback((day) => {
+    const dateKey = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+
+    const daySessions = sessions.filter(s => {
+      const sessionDate = s.scheduled_for || s.started_at
+      return sessionDate?.startsWith(dateKey)
+    })
+
+    const dueData = dueItemsByDate[dateKey] || { due: 0, overdue: 0 }
+
+    return {
+      sessions: daySessions,
+      dueCount: dueData.due,
+      overdueCount: dueData.overdue,
+      hasActivity: daySessions.length > 0 || dueData.due > 0
+    }
+  }, [sessions, dueItemsByDate, currentMonth])
+
+  // Schedule a new session
+  const scheduleSession = useCallback(async (sessionData) => {
+    const { data, error } = await supabase
+      .from('sessions')
+      .insert({
+        id: `sess_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 9)}`,
+        session_type: sessionData.session_type,
+        scheduled_for: sessionData.scheduled_for, // Use scheduled_for, not started_at
+        target_duration_minutes: sessionData.duration_minutes,
+        // started_at is NULL until session actually starts
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Update local state
+    setSessions(prev => [...prev, data])
+
+    // Invalidate cache for this month
+    cache.current.delete(getCacheKey(currentMonth))
+
+    return data
+  }, [supabase, currentMonth])
+
+  // Invalidate cache (for external triggers)
+  const invalidateCache = useCallback(() => {
+    cache.current.clear()
+    fetchCalendarData(true)
+  }, [fetchCalendarData])
+
+  return {
+    sessions,
+    dueItemsByDate,
+    loading,
+    error,
+    getDataForDay,
+    scheduleSession,
+    invalidateCache,
+    refetch: () => fetchCalendarData(true)
+  }
+}
+```
+
+### Updated CalendarGrid Component
+
+**Key changes to `CalendarGrid.jsx`:**
+
+```javascript
+// Before: references non-existent scheduled_for
+const getSessionsForDay = (day) => {
+  return scheduledSessions.filter(s => s.scheduled_for?.startsWith(dateStr))
+}
+
+// After: uses hook's getDataForDay
+export default function CalendarGrid({ currentDate, selectedDate, onSelectDate, calendarData }) {
+  // ...
+  const dayData = calendarData.getDataForDay(day)
+  const hasSession = dayData.sessions.length > 0
+  const hasDueItems = dayData.dueCount > 0
+  const hasOverdue = dayData.overdueCount > 0
+
+  return (
+    <button /* ... */>
+      {day}
+      {/* Session indicator */}
+      {hasSession && (
+        <span className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 bg-accent-progress rounded-full" />
+      )}
+      {/* Due items indicator */}
+      {hasDueItems && !hasSession && (
+        <span className={`absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full ${hasOverdue ? 'bg-accent-alert' : 'bg-accent-info'}`} />
+      )}
+    </button>
+  )
+}
+```
+
+### Data Fetching Queries (Supabase Syntax)
+
+**Fetch sessions for month:**
+```javascript
+const { data } = await supabase
+  .from('sessions')
+  .select('*')
+  .or(`scheduled_for.gte.${firstDay},scheduled_for.lte.${lastDay}`)
+  .order('scheduled_for', { ascending: true })
+```
+
+**Fetch due items for month:**
+```javascript
+const { data } = await supabase
+  .from('kc_state')
+  .select('kc_id, next_review_at')
+  .gte('next_review_at', firstDay.toISOString())
+  .lte('next_review_at', lastDay.toISOString())
+```
+
+**Count due items for today (dashboard widget):**
+```javascript
+const { count } = await supabase
+  .from('kc_state')
+  .select('*', { count: 'exact', head: true })
+  .lte('next_review_at', new Date().toISOString())
+```
+
+### Caching and Optimization Strategy
+
+| Strategy | Implementation |
+|----------|----------------|
+| **Month-level cache** | Cache key: `YYYY-MM`, TTL: 5 minutes |
+| **Parallel fetching** | Fetch sessions + due items simultaneously via `Promise.all` |
+| **Optimistic updates** | Add scheduled session to local state before server confirms |
+| **Real-time invalidation** | Subscribe to `kc_state` changes, clear cache on update |
+| **Stale-while-revalidate** | Show cached data immediately, fetch fresh in background |
+| **Preload adjacent months** | On mount, prefetch prev/next month in background |
+
+**Cache structure:**
+```javascript
+// useRef Map in useCalendarData hook
+cache = Map<'YYYY-MM', {
+  sessions: Session[],
+  dueItems: { [date: string]: { due: number, overdue: number } },
+  fetchedAt: number // timestamp for TTL check
+}>
+```
+
+### Real-Time Updates
+
+**Subscription for due item updates:**
+```javascript
+supabase
+  .channel('calendar-due-items')
+  .on('postgres_changes', {
+    event: '*',
+    schema: 'public',
+    table: 'kc_state',
+    filter: 'next_review_at=neq.null'
+  }, () => {
+    invalidateCache()
+  })
+  .subscribe()
+```
+
+**Midnight boundary handling:**
+```javascript
+// In useCalendarData, set up a timer to refresh at midnight
+useEffect(() => {
+  const now = new Date()
+  const midnight = new Date(now)
+  midnight.setDate(midnight.getDate() + 1)
+  midnight.setHours(0, 0, 0, 0)
+  const msUntilMidnight = midnight - now
+
+  const timer = setTimeout(() => {
+    invalidateCache() // Items become overdue at midnight
+  }, msUntilMidnight)
+
+  return () => clearTimeout(timer)
+}, [invalidateCache])
+```
+
+### Implementation Checklist
+
+- [ ] Run migration to add `scheduled_for` column to sessions
+- [ ] Update ScheduleForm to use `scheduled_for` instead of `started_at`
+- [ ] Create `useCalendarData` hook with caching
+- [ ] Update Calendar.jsx to use new hook
+- [ ] Update CalendarGrid.jsx to accept `calendarData` prop
+- [ ] Add due items indicators (different color from sessions)
+- [ ] Set up real-time subscription for kc_state changes
+- [ ] Add midnight timer for overdue refresh
+- [ ] Test with existing sessions (backward compatible)
+
+### Estimated Effort
+
+| Task | Time |
+|------|------|
+| Schema migration | 30 min |
+| useCalendarData hook | 2 hours |
+| Component updates | 1 hour |
+| Real-time + caching | 1 hour |
+| Testing | 1 hour |
+| **Total** | **5.5 hours**

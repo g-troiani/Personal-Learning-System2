@@ -400,7 +400,7 @@ See `.claude/memory/INDEX.md` for full summaries and cross-references.
 
 All completed milestones are archived in `.claude/memory/milestones/`. See Progress section for dates.
 
-### Agent Memory System Milestones 24-29 (Complete)
+### Agent Memory System Milestones
 
 These milestones implement a tiered memory system to manage EXECPLAN complexity. The pattern adapts MemGPT's "LLM as Operating System" architecture for file-based Claude Code: core memory (always loaded) plus external memory (retrieved on demand). After completion, EXECPLAN.md shrinks from ~1500 lines to ~400 lines of active content while preserving full historical access.
 
@@ -426,12 +426,11 @@ These milestones implement a tiered memory system to manage EXECPLAN complexity.
     │  schemas/             │  reference/                     │
     └─────────────────────────────────────────────────────────┘
 
-- **M24:** Create memory directory structure
-- **M25:** Extract completed milestones to archive
-- **M26:** Extract decisions and schemas
-- **M27:** Extract reference material
-- **M28:** Slim EXECPLAN to active content only
-- **M29:** Update CLAUDE.md with memory access instructions
+- Extract completed milestones to archive
+- Extract decisions and schemas
+- Extract reference material
+- Slim EXECPLAN to active content only
+- Update CLAUDE.md with memory access instructions
 
 
 ### Slim EXECPLAN to Active Content Only (OPERATIONAL POLICY - DO NOT DELETE)
