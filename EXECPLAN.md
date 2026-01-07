@@ -152,7 +152,8 @@ Key lessons learned during implementation:
 **Environment & Configuration:**
 - Single `.env` file in project root serves both Python (no `export` prefix) and Vite (`VITE_` prefix required)
 - Shell env vars override `.env` files - run `env | grep VITE_` to diagnose connection issues
-- API server must run on port 8001 to match frontend: `uvicorn app.api.server:app --port 8001`
+- API server runs on port 8000: `uvicorn app.api.server:app --port 8000`
+- Frontend api.js and all page components must use port 8000 (not 8001)
 
 **Supabase:**
 - **CRITICAL:** Supabase JS client requires legacy JWT-format anon key (starts with `eyJhbG...`), NOT the new `sb_publishable_` format keys
@@ -171,6 +172,11 @@ Key lessons learned during implementation:
 - Groq model `qwen-qwq-32b` deprecated → use `qwen/qwen3-32b`
 - Groq rate limits can cause stuck processing - retry logic helps but timeouts needed
 - Practice items: 3 per KC consistently (predictable 3:1 ratio)
+
+**FastAPI Background Tasks:**
+- `process_document_background` MUST be a sync function (not async) for FastAPI to run it in thread pool
+- Using `async def` with blocking I/O code silently fails - the task appears to be scheduled but never executes
+- Solution: Remove `async` keyword, add try/except/finally with logging for visibility
 
 **Supabase Auth (M41-M46):**
 - Never use API keys as access tokens - use `session.access_token`, not anon key
@@ -400,38 +406,11 @@ See `.claude/memory/INDEX.md` for full summaries and cross-references.
 
 All completed milestones are archived in `.claude/memory/milestones/`. See Progress section for dates.
 
-### Agent Memory System Milestones 24-29 (Complete)
+### Agent Memory System M24-M29 (Complete)
 
-These milestones implement a tiered memory system to manage EXECPLAN complexity. The pattern adapts MemGPT's "LLM as Operating System" architecture for file-based Claude Code: core memory (always loaded) plus external memory (retrieved on demand). After completion, EXECPLAN.md shrinks from ~1500 lines to ~400 lines of active content while preserving full historical access.
+**Full specs:** `.claude/memory/milestones/agent_memory.md`
 
-**Architecture:**
-
-    ┌─────────────────────────────────────────────────────────┐
-    │                    CORE MEMORY                          │
-    │              (Always in context)                        │
-    ├─────────────────────────────────────────────────────────┤
-    │  CLAUDE.md          │  EXECPLAN.md (slim)               │
-    │  - Instructions     │  - Active state                   │
-    │  - Memory access    │  - Current milestones             │
-    │  - Conventions      │  - Known issues                   │
-    └─────────────────────────────────────────────────────────┘
-                              │
-                              │ Read on demand
-                              ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │                  EXTERNAL MEMORY                        │
-    │              (.claude/memory/)                          │
-    ├─────────────────────────────────────────────────────────┤
-    │  milestones/          │  decisions/                     │
-    │  schemas/             │  reference/                     │
-    └─────────────────────────────────────────────────────────┘
-
-- **M24:** Create memory directory structure
-- **M25:** Extract completed milestones to archive
-- **M26:** Extract decisions and schemas
-- **M27:** Extract reference material
-- **M28:** Slim EXECPLAN to active content only
-- **M29:** Update CLAUDE.md with memory access instructions
+Tiered memory system adapting MemGPT pattern: core memory (CLAUDE.md + EXECPLAN.md always loaded) plus external memory (`.claude/memory/` read on demand). Enables EXECPLAN to stay under 500 lines while preserving full historical access.
 
 
 ### Slim EXECPLAN to Active Content Only (OPERATIONAL POLICY - DO NOT DELETE)
@@ -737,3 +716,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-06: M41-M46 Research Complete - Authentication & Multi-User (6 parallel worktrees, consolidated spec, Supabase Auth, RLS, JWT middleware, frontend auth flow, deployment strategy)
 - 2026-01-07: M41-M44 Complete - Supabase Auth config, database schema migration (user_id on 12 tables, 20 indexes), backend auth middleware (JWT validation, ownership checks), frontend auth flow (AuthContext, ProtectedRoute, login/signup/reset forms, logout)
 - 2026-01-07: M45 Complete + Auth Testing - RLS policies (46+ table + 4 storage), comprehensive auth testing validated: signup (email confirmation), login (redirect to home), protected routes (data visible), API auth (sources load), upload UI (modal works), logout (redirect to login, routes blocked)
+- 2026-01-07: Bug fixes - Fixed API port mismatch (api.js and DocumentReader.jsx using 8001 instead of 8000), fixed background task not running (async→sync function), fixed Supabase key priority in config.py, DocumentReader now uses authenticated api.js helpers
