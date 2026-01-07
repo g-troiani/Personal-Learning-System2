@@ -223,13 +223,14 @@ class ProcessingPipeline:
         return result
 
 
-def create_pending_source(filename: str, domain: str = "general") -> str:
+def create_pending_source(filename: str, domain: str = "general", user_id: Optional[str] = None) -> str:
     """
     Create a pending source entry in the database.
 
     Args:
         filename: Original filename
         domain: Knowledge domain
+        user_id: Optional user UUID for ownership
 
     Returns:
         source_id: The created source ID
@@ -237,7 +238,7 @@ def create_pending_source(filename: str, domain: str = "general") -> str:
     source_id = generate_id("src")
     client = get_client()
 
-    client.table("content_sources").insert({
+    insert_data = {
         "id": source_id,
         "title": filename,
         "content": "",  # Will be filled during processing
@@ -247,7 +248,13 @@ def create_pending_source(filename: str, domain: str = "general") -> str:
         "processing_progress": 0,
         "processing_step": "Waiting to process...",
         "ingested_at": datetime.utcnow().isoformat()
-    }).execute()
+    }
+
+    # Add user_id if provided
+    if user_id:
+        insert_data["user_id"] = user_id
+
+    client.table("content_sources").insert(insert_data).execute()
 
     return source_id
 

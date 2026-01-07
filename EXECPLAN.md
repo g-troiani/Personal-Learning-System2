@@ -54,6 +54,8 @@ The system solves five problems. First, it eliminates the "I don't know what I d
 
 **PowerPoint Support (M40):** This milestone adds PowerPoint (.pptx) document support. After M40, users can upload PowerPoint presentations and view them in the document reader with full visual fidelity. The system extracts text using python-pptx for KC generation, converts PPTX to PDF using LibreOffice + unoserver for display, and reuses the existing PDFRenderer for viewing. Highlights work on the converted PDF.
 
+**Authentication & Multi-User (M41-M46):** These milestones transform the single-user localhost system into a secure multi-user web deployment. After M46, users can sign up with email/password, log in, and have their data completely isolated from other users. The system uses Supabase Auth for authentication, Row-Level Security (RLS) for data isolation, and JWT validation in the FastAPI backend. Existing data is migrated to the first registered user. The architecture supports deployment to Vercel (frontend) + Railway (backend) + Supabase (database).
+
 
 ## Progress
 
@@ -133,6 +135,15 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M40 Phase 4: Frontend content type detection and routing (2026-01-06)
 - [x] M40 Phase 5: API endpoint for converted PDF URL (2026-01-06)
 
+**Authentication & Multi-User (M41-M46)** - In Progress
+- [x] M41-M46 Research: 6 parallel worktrees, consolidated spec in NEW FEATURES.md (2026-01-06)
+- [x] M41: Supabase Auth Configuration - email enabled, Site URL/Redirects configured, JWT=3600s, env vars added (2026-01-06)
+- [x] M42: Database Schema Migration - user_id UUID column on 12 tables, 12 single-column indexes, 8 compound indexes for query patterns (2026-01-06)
+- [x] M43: Backend Auth Middleware - PyJWT, auth package (schemas, jwt_utils, dependencies, ownership), CurrentUser on all routes, CORS expose X-Token-Expiring-Soon (2026-01-06)
+- [x] M44: Frontend Auth Flow - AuthContext, ProtectedRoute, login/signup/reset forms, api.js with auth headers, Sidebar logout (2026-01-07)
+- [x] M45: Row-Level Security Policies - RLS enabled on 14 tables, 46+ table policies, 4 storage policies for documents bucket (2026-01-07)
+- [ ] M46: Data Migration & Deployment - first user migration, enforce NOT NULL, go-live
+
 
 ## Surprises and Discoveries
 
@@ -160,6 +171,15 @@ Key lessons learned during implementation:
 - Groq model `qwen-qwq-32b` deprecated → use `qwen/qwen3-32b`
 - Groq rate limits can cause stuck processing - retry logic helps but timeouts needed
 - Practice items: 3 per KC consistently (predictable 3:1 ratio)
+
+**Supabase Auth (M41-M46):**
+- Never use API keys as access tokens - use `session.access_token`, not anon key
+- Don't modify auth schema - never add RLS to `auth.users` or modify its columns
+- getSession() is fast but doesn't verify; getUser() verifies with server
+- Service role key bypasses RLS - use only server-side, never expose
+- Email tracking breaks confirmation links - disable tracking in SMTP provider
+- Clock skew causes random auth failures - don't set JWT expiry < 1 hour
+- Foreign keys need `ON DELETE CASCADE` on auth.users references
 
 
 ## Known Issues and Future Improvements
@@ -238,6 +258,22 @@ Recent decisions only below. See archives for full rationale.
   **Rationale:** (1) Pure Python, no native dependencies. (2) Extracts text from shapes, tables, and speaker notes. (3) Speaker notes are valuable learning material often missed. (4) SmartArt limitation accepted (python-pptx doesn't support it).
   **Date:** 2026-01-06
 
+- **Decision:** Use Supabase Auth for authentication instead of custom JWT implementation
+  **Rationale:** (1) Battle-tested, built-in JWT handling with automatic token refresh. (2) Already using Supabase for database. (3) Email/password first, OAuth can be added later. (4) Built-in password reset, email confirmation flows. (5) Reduces security surface area vs custom implementation.
+  **Date:** 2026-01-06
+
+- **Decision:** Use Row-Level Security (RLS) for data isolation instead of application-level filtering
+  **Rationale:** (1) Database-level enforcement - can't be bypassed by application bugs. (2) Works with direct database access (Supabase client). (3) auth.uid() function provides user context automatically. (4) 48 policies across 11 user-owned tables. (5) Storage policies use same pattern for file isolation.
+  **Date:** 2026-01-06
+
+- **Decision:** Zero-downtime migration with phased approach
+  **Rationale:** (1) Phase 1 adds nullable user_id columns (non-breaking). (2) Phase 2 deploys auth code (backwards compatible). (3) Phase 3 migrates existing data to first user. (4) Phase 4 enforces NOT NULL + RLS (breaking for unauthenticated). (5) Each phase has rollback scripts.
+  **Date:** 2026-01-06
+
+- **Decision:** Deploy to Vercel (frontend) + Railway (backend) + Supabase (database)
+  **Rationale:** (1) Vercel has excellent Vite support with free tier. (2) Railway supports Docker for LibreOffice container. (3) Supabase already in use. (4) API keys (Claude/Groq) only in Railway environment - never exposed to frontend.
+  **Date:** 2026-01-06
+
 
 ## Outcomes and Retrospective
 
@@ -255,7 +291,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through forty milestones. M1-M40 are complete.
+Implementation proceeds through forty-six milestones. M1-M40 are complete. M41-M46 implement authentication and multi-user support.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -274,6 +310,8 @@ Implementation proceeds through forty milestones. M1-M40 are complete.
 **PDF Highlighting (Complete):** M39: Page-based PDF highlighting with percentage coordinates.
 
 **PowerPoint Support (Complete):** M40: PPTX document support with LibreOffice conversion. Upload PowerPoint presentations, view as PDF, highlight text, generate KCs from slides.
+
+**Authentication & Multi-User (Pending):** M41: Supabase Auth configuration (email provider, JWT settings). M42: Database schema migration (user_id columns, indexes). M43: Backend auth middleware (JWT validation, ownership checks). M44: Frontend auth flow (AuthContext, ProtectedRoute, login/signup forms). M45: Row-Level Security policies (48 RLS policies, storage policies). M46: Data migration and deployment (first user migration, go-live).
 
 
 ## CLI Usage Reference
@@ -565,6 +603,111 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 AlphaXiv-style document reader. Flow: upload → read/study → practice. Supports PDF, DOCX (docx-preview), PPTX (LibreOffice→PDF), Markdown, text. Features: sidebar TOC, text selection, highlights (character-based for text, page-based % coords for PDF), AI chat, notes, reading progress, zen mode.
 
 
+### Authentication & Multi-User Feature M41-M46 (Pending)
+
+**Full specs:** `NEW FEATURES.md` (Authentication & Multi-User Implementation Plan)
+
+Transform single-user localhost system into secure multi-user web deployment.
+
+**Architecture:**
+
+    ┌─────────────────────────────────────────────────────────────────────────────┐
+    │  FRONTEND (React + Vite)                                                     │
+    │  ├─ AuthContext manages session state                                        │
+    │  ├─ ProtectedRoute guards authenticated pages                               │
+    │  └─ Auth header attached to all API calls                                   │
+    ├─────────────────────────────────────────────────────────────────────────────┤
+    │  BACKEND (FastAPI)                                                           │
+    │  ├─ Auth middleware validates JWT from Authorization header                 │
+    │  ├─ get_current_user() dependency injects user into endpoints               │
+    │  └─ API keys (Claude/Groq) kept server-side only                            │
+    ├─────────────────────────────────────────────────────────────────────────────┤
+    │  DATABASE (Supabase PostgreSQL)                                              │
+    │  ├─ auth.users managed by Supabase Auth                                     │
+    │  ├─ user_id FK on all user-owned tables                                     │
+    │  └─ RLS policies enforce data isolation                                     │
+    └─────────────────────────────────────────────────────────────────────────────┘
+
+**M41: Supabase Auth Configuration**
+At the end of this milestone, Supabase Auth is configured for email/password authentication with JWT settings, email templates, and environment variables.
+
+Work:
+1. Enable email provider in Supabase Dashboard (Auth > Providers > Email)
+2. Configure Site URL: `http://localhost:5173` (dev)
+3. Configure Redirect URLs: `http://localhost:5173/**`
+4. Set JWT expiry to 3600 seconds (1 hour)
+5. Add `SUPABASE_JWT_SECRET` to backend environment
+6. Add `SUPABASE_SERVICE_ROLE_KEY` to backend environment
+
+Verification: Auth endpoints accessible at Supabase project URL. Environment variables set in backend.
+
+**M42: Database Schema Migration**
+At the end of this milestone, all user-owned tables have nullable user_id columns with indexes, preserving backwards compatibility.
+
+Work:
+1. Create `migrations/m42_auth_schema.sql`
+2. Add user_id UUID column to: content_sources, knowledge_components, kc_state, kc_prerequisites, kc_subskills, practice_items, sessions, attempts, kc_technique_history, retention_tests, learning_goals
+3. Create indexes on user_id columns
+4. Create compound indexes for common queries
+5. Run migration on Supabase
+
+Verification: `SELECT column_name FROM information_schema.columns WHERE table_name='content_sources' AND column_name='user_id'` returns row.
+
+**M43: Backend Auth Middleware**
+At the end of this milestone, all API endpoints require valid JWT and return 401 for unauthenticated requests.
+
+Work:
+1. Add `PyJWT>=2.8.0` to requirements.txt
+2. Create `learn_system/app/api/auth/` package with: `__init__.py`, `schemas.py`, `exceptions.py`, `jwt_utils.py`, `dependencies.py`, `ownership.py`
+3. Implement `get_current_user()` FastAPI dependency
+4. Add `CurrentUser` dependency to all routes in `sources.py` and `ai.py`
+5. Update `processing.py` to include user_id when creating sources
+6. Configure CORS to expose `X-Token-Expiring-Soon` header
+
+Verification: `curl http://localhost:8001/api/sources` returns 401. With valid token, returns 200.
+
+**M44: Frontend Auth Flow**
+At the end of this milestone, users can sign up, log in, reset password, and access protected routes.
+
+Work:
+1. Create `web/src/contexts/AuthContext.jsx` with signIn, signUp, signOut, resetPassword
+2. Create `web/src/components/auth/ProtectedRoute.jsx`
+3. Create `web/src/components/auth/LoginForm.jsx`, `SignupForm.jsx`, `ForgotPasswordForm.jsx`, `ResetPasswordForm.jsx`
+4. Create `web/src/pages/Login.jsx`, `Signup.jsx`, `ForgotPassword.jsx`, `ResetPassword.jsx`
+5. Update `App.jsx` with AuthProvider and protected routes
+6. Update `web/src/lib/api.js` to include auth headers and handle 401
+7. Add logout button to Sidebar
+
+Verification: Navigate to `/` unauthenticated → redirects to `/login`. Sign up → create account. Sign in → access app.
+
+**M45: Row-Level Security Policies**
+At the end of this milestone, RLS policies enforce data isolation at database level.
+
+Work:
+1. Create `migrations/m45_rls_policies.sql`
+2. Enable RLS on all user-owned tables
+3. Create SELECT/INSERT/UPDATE/DELETE policies for each table using `auth.uid() = user_id`
+4. Create storage policies for documents bucket with path `documents/{user_id}/*`
+5. technique_bundles: users can view system bundles (user_id IS NULL) + own bundles
+6. Run migration on Supabase
+
+Verification: User A cannot SELECT rows where user_id != their UUID. Direct SQL test in Supabase.
+
+**M46: Data Migration & Deployment**
+At the end of this milestone, system is deployed with first user owning all existing data.
+
+Work:
+1. Create `learn_system/app/auth/first_user_migration.py` with `migrate_existing_data_to_user()` and `check_is_first_user()`
+2. Create `migrations/m46_enforce_auth.sql` to add NOT NULL constraints (run after first user registers)
+3. Set up Vercel project for frontend with environment variables
+4. Set up Railway project for backend with environment variables
+5. Configure production CORS origins
+6. Deploy and verify first user registration triggers data migration
+7. Run m46_enforce_auth.sql after data migrated
+
+Verification: Sign up as first user → all existing sources appear in list. Second user → sees empty source list.
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -591,3 +734,6 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-06: M38 Complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview, text selection, highlights)
 - 2026-01-06: M39 Complete - PDF Highlighting (page-based percentage coordinates, PDFHighlightLayer component)
 - 2026-01-06: M40 Complete - PowerPoint Support (PPTX with LibreOffice conversion, python-pptx text extraction, converted PDF viewing)
+- 2026-01-06: M41-M46 Research Complete - Authentication & Multi-User (6 parallel worktrees, consolidated spec, Supabase Auth, RLS, JWT middleware, frontend auth flow, deployment strategy)
+- 2026-01-07: M41-M44 Complete - Supabase Auth config, database schema migration (user_id on 12 tables, 20 indexes), backend auth middleware (JWT validation, ownership checks), frontend auth flow (AuthContext, ProtectedRoute, login/signup/reset forms, logout)
+- 2026-01-07: M45 Complete + Auth Testing - RLS policies (46+ table + 4 storage), comprehensive auth testing validated: signup (email confirmation), login (redirect to home), protected routes (data visible), API auth (sources load), upload UI (modal works), logout (redirect to login, routes blocked)

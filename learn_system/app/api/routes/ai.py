@@ -6,6 +6,8 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from ..auth import CurrentUser
+from ..auth.ownership import verify_source_ownership
 from ...database.connection import get_client
 
 
@@ -24,11 +26,16 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_with_document(request: ChatRequest):
+async def chat_with_document(request: ChatRequest, current_user: CurrentUser):
     """
     Chat with AI about a specific document.
     Uses Groq for fast responses.
+
+    Args:
+        request: ChatRequest with source_id, message, and optional context
+        current_user: Authenticated user (from JWT)
     """
+    verify_source_ownership(request.source_id, current_user)
     try:
         client = get_client()
 

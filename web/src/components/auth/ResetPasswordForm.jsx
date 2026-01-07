@@ -1,0 +1,115 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
+
+export default function ResetPasswordForm() {
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+
+  const { updatePassword } = useAuth()
+  const navigate = useNavigate()
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords do not match')
+      setIsLoading(false)
+      return
+    }
+
+    // Validate password strength
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters')
+      setIsLoading(false)
+      return
+    }
+
+    const { error } = await updatePassword(password)
+
+    setIsLoading(false)
+
+    if (error) {
+      setErrorMessage(error)
+    } else {
+      setSuccessMessage('Password updated successfully! Redirecting...')
+      setTimeout(() => {
+        navigate('/')
+      }, 2000)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#FAF9F7] px-4">
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-semibold text-gray-900">Set new password</h1>
+          <p className="text-gray-600 mt-2">Choose a strong password</p>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {errorMessage && (
+              <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">
+                {errorMessage}
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="bg-emerald-50 text-emerald-700 px-4 py-3 rounded-lg text-sm">
+                {successMessage}
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                New password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
+                placeholder="At least 6 characters"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                Confirm new password
+              </label>
+              <input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
+                placeholder="Confirm your password"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-gray-900 text-white py-3 px-4 rounded-lg font-medium hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isLoading ? 'Updating...' : 'Update password'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
