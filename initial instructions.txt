@@ -92,7 +92,7 @@ contradicting and the user journey makes sense. so until the task is successful 
 
  10)   # REVIEW & CLEANING EXECPLAN.md
 Review the additions to EXECPLAN.md. Also, make sure we don't keep in EXECPLAN.md outdated or superfloud information to make the document crisp. 
-It's imperative you don't not delete the operational policy, guidance or instructions. Update the memory when appropriate. 
+It's imperative you don't not delete the operational policy, guidance or instructions. Update the memory when appropriate and move operational policies out of milestones if necessary. 
 Before you are done, check you didn't delete any section that was used as operational guidance or instructions (eg MEMORY ACCESS PROTOCOLS, Slim EXECPLAN to Active Content Only). 
 Check you didn't delete any section that was used as operational guidance or instructions even if you think you don't need to.
 
