@@ -43,23 +43,13 @@ export function useSources() {
 
       if (kcsError) throw kcsError
 
-      // Fetch practice items via backend API (bypasses RLS issue)
-      // TODO: Fix RLS policy on practice_items table and revert to direct Supabase query
-      let itemsData = []
-      try {
-        const session = await supabase.auth.getSession()
-        const token = session?.data?.session?.access_token
-        if (token) {
-          const response = await fetch('http://localhost:8001/api/migration/all-practice-items', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-          if (response.ok) {
-            const result = await response.json()
-            itemsData = result.items || []
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch practice items via API:', err)
+      // Fetch practice items directly (RLS policy fixed to allow user_id = auth.uid() OR user_id IS NULL)
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('practice_items')
+        .select('id, kc_id')
+
+      if (itemsError) {
+        console.error('Failed to fetch practice items:', itemsError)
       }
 
       // Fetch KC states

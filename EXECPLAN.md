@@ -156,7 +156,10 @@ This section tracks granular progress with timestamps. Each stopping point must 
   - Line 94: study-items endpoint - now queries via KC ownership only
 - [x] Verified: Sources page shows 117 Practice Items correctly
 - [x] Verified: Study page loads items (1 of 20) correctly
-- [ ] Optional: Run `migrations/fix_practice_items_rls.sql` in Supabase to enable direct queries (workaround still in place)
+- [x] **RLS POLICY FIX APPLIED (2026-01-07):** Ran `migrations/fix_practice_items_rls.sql` in Supabase
+  - Simplified practice_items RLS policy to `auth.uid() = user_id OR user_id IS NULL`
+  - Updated useSources.js to use direct Supabase queries (removed backend workaround)
+  - All pages tested and working with direct queries
 - [x] **REGRESSION TEST COMPLETE (2026-01-07):** All core functionality verified after migration.py changes:
   - [x] Sources page → 117 Practice Items displayed correctly
   - [x] Study page (no filter) → loads items (1 of 20)
@@ -778,3 +781,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-07: M45 Complete + Auth Testing - RLS policies (46+ table + 4 storage), comprehensive auth testing validated: signup (email confirmation), login (redirect to home), protected routes (data visible), API auth (sources load), upload UI (modal works), logout (redirect to login, routes blocked)
 - 2026-01-07: M46 Complete - Data Migration & Deployment (first_user_migration.py with check_has_orphaned_data/migrate_existing_data_to_user, m46_enforce_auth.sql for NOT NULL constraints, /api/migration/status and /api/migration/trigger endpoints, CORS_ORIGINS env var support). Authentication & Multi-User feature complete (M41-M46).
 - 2026-01-07: RLS/Display Bug Fix - Removed redundant user_id filters from migration.py (lines 36, 56, 94). Full regression test passed: all pages functional, study sessions recording correctly, no regressions.
+- 2026-01-07: RLS Policy Proper Fix - Applied fix_practice_items_rls.sql via Supabase Dashboard. Updated useSources.js to use direct Supabase queries instead of backend workaround. Technical debt reduced.
