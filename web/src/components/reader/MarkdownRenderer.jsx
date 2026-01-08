@@ -34,6 +34,7 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
   const [error, setError] = useState(null)
   const containerRef = useRef(null)
   const headingRefs = useRef({})
+  const articleRef = useRef(null)
 
   // Fetch content from URL if not provided directly
   useEffect(() => {
@@ -128,9 +129,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       </div>
     )
   }
-
-  // Create a ref for the article element (for AnnotationLayer)
-  const articleRef = useRef(null)
 
   return (
     <div

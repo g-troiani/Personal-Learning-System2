@@ -24,9 +24,9 @@ export default function AnnotationLayer({
 
   // Apply highlights to the document
   const applyHighlights = useCallback(() => {
-    if (!containerRef?.current || highlights.length === 0) return
+    if (!containerRef?.current) return
 
-    // Remove existing highlights first
+    // Remove existing highlights first (must always run, even if highlights is empty)
     const existingHighlights = containerRef.current.querySelectorAll('.annotation-highlight')
     existingHighlights.forEach(el => {
       const parent = el.parentNode
@@ -36,12 +36,26 @@ export default function AnnotationLayer({
       parent.removeChild(el)
     })
 
-    // Get all text nodes in the container
+    // If no highlights, we're done after removing existing ones
+    if (highlights.length === 0) return
+
+    // Get all text nodes in the container, excluding non-visible elements like <style> and <script>
     const walker = document.createTreeWalker(
       containerRef.current,
       NodeFilter.SHOW_TEXT,
-      null,
-      false
+      {
+        acceptNode: (node) => {
+          // Skip text nodes inside style, script, and other non-visible elements
+          const parent = node.parentElement
+          if (parent) {
+            const tagName = parent.tagName?.toUpperCase()
+            if (tagName === 'STYLE' || tagName === 'SCRIPT' || tagName === 'NOSCRIPT') {
+              return NodeFilter.FILTER_REJECT
+            }
+          }
+          return NodeFilter.FILTER_ACCEPT
+        }
+      }
     )
 
     const textNodes = []
