@@ -226,6 +226,7 @@ Key lessons learned during implementation:
 **RLS/Display Bug Root Cause Analysis (2026-01-07 research):**
 - **practice_items RLS issue:** M45 policy has complex nested EXISTS that fails silently. Workaround in useSources.js (lines 47-63) fetches via backend API. Fix: Run `migrations/fix_practice_items_rls.sql` to simplify policy.
 - **Study page "No items" bug:** migration.py endpoints (lines 36, 56, 87) double-filter on user_id. KC ownership filter is sufficient; redundant `.eq('user_id', current_user.id)` excludes orphaned items. Fix: Remove redundant filter.
+- **Document Reader "can't read" bug:** api.js hardcoded to port 8000 but backend runs on 8001. All document API calls failed silently. Fix: Update API_BASE to use port 8001.
 - See `NEW FEATURES.md` "Sources View & RLS Fix Research" section for full analysis and diagnostic queries.
 
 
@@ -786,3 +787,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-07: M46 Complete - Data Migration & Deployment (first_user_migration.py with check_has_orphaned_data/migrate_existing_data_to_user, m46_enforce_auth.sql for NOT NULL constraints, /api/migration/status and /api/migration/trigger endpoints, CORS_ORIGINS env var support). Authentication & Multi-User feature complete (M41-M46).
 - 2026-01-07: RLS/Display Bug Fix - Removed redundant user_id filters from migration.py (lines 36, 56, 94). Full regression test passed: all pages functional, study sessions recording correctly, no regressions.
 - 2026-01-07: RLS Policy Proper Fix - Applied fix_practice_items_rls.sql via Supabase Dashboard. Updated useSources.js and Study.jsx to use direct Supabase queries instead of backend workaround. Technical debt reduced. Full study flow verified: question display, answer submission, self-assessment, next question transition.
+- 2026-01-07: API Port Fix - Fixed api.js using wrong port (8000 instead of 8001). Document reader now works correctly. Root cause found via 3 parallel research agents investigating backend, frontend, and storage/RLS.
