@@ -37,58 +37,81 @@ export default function Study() {
     try {
       setLoading(true)
 
-      // Get practice items via backend API (bypasses RLS issue on practice_items)
-      // TODO: Fix RLS policy on practice_items table and revert to direct Supabase query
-      const authSession = await supabase.auth.getSession()
-      const token = authSession?.data?.session?.access_token
-
-      if (!token) {
-        setError('Please log in to study.')
+      // Get current user for session creation
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('Not authenticated')
         setLoading(false)
         return
       }
 
-      const apiUrl = `http://localhost:8001/api/migration/study-items${sourceId ? `?source_id=${sourceId}` : ''}`
-      const response = await fetch(apiUrl, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
+      // Get KCs directly from Supabase (RLS policy fixed)
+      let kcsQuery = supabase
+        .from('knowledge_components')
+        .select('id, name, knowledge_type, source_id')
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch study items')
+      if (sourceId) {
+        kcsQuery = kcsQuery.eq('source_id', sourceId)
       }
 
-      const result = await response.json()
-      const practiceItems = result.items || []
+      const { data: kcsData, error: kcsError } = await kcsQuery
 
-      if (!practiceItems || practiceItems.length === 0) {
+      if (kcsError) {
+        throw new Error('Failed to fetch knowledge components')
+      }
+
+      if (!kcsData || kcsData.length === 0) {
         setError('No items to study. Try adding some documents first!')
         setLoading(false)
         return
       }
 
+      // Get practice items for those KCs (RLS policy fixed)
+      const kcIds = kcsData.map(kc => kc.id)
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('practice_items')
+        .select('*')
+        .in('kc_id', kcIds)
+        .limit(20)
+
+      if (itemsError) {
+        throw new Error('Failed to fetch practice items')
+      }
+
+      if (!itemsData || itemsData.length === 0) {
+        setError('No practice items found. Try adding some documents first!')
+        setLoading(false)
+        return
+      }
+
+      // Attach KC info to each item
+      const kcMap = Object.fromEntries(kcsData.map(kc => [kc.id, kc]))
+      const practiceItems = itemsData.map(item => ({
+        ...item,
+        knowledge_components: kcMap[item.kc_id]
+      }))
+
       // Shuffle items for variety
       const shuffled = [...practiceItems].sort(() => Math.random() - 0.5)
       setItems(shuffled)
 
-      // Create session via backend API (bypasses RLS issue on sessions table)
-      const sessionResponse = await fetch('http://localhost:8001/api/migration/create-session', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      // Create session directly in Supabase (RLS policy allows insert with user_id)
+      const newSessionId = `sess_${Date.now().toString(36)}`
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .insert({
+          id: newSessionId,
+          user_id: user.id,
           session_type: sourceId ? 'source_review' : 'mixed',
-          source_id: sourceId || null
+          started_at: new Date().toISOString()
         })
-      })
 
-      if (!sessionResponse.ok) {
+      if (sessionError) {
+        console.error('Session creation error:', sessionError)
         throw new Error('Failed to create study session')
       }
 
-      const session = await sessionResponse.json()
-      setSessionId(session.id)
+      setSessionId(newSessionId)
       setSessionStartTime(Date.now())
       setItemStartTime(Date.now())
 
