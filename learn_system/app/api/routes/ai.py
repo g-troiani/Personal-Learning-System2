@@ -145,6 +145,7 @@ Instructions:
 async def _stream_llm_response(system_prompt: str, user_message: str) -> AsyncGenerator[str, None]:
     """Stream LLM response tokens using SSE format."""
 
+    # Try Groq first (faster)
     groq_key = os.getenv("GROQ_API_KEY")
     if groq_key:
         try:
@@ -172,11 +173,36 @@ async def _stream_llm_response(system_prompt: str, user_message: str) -> AsyncGe
 
         except Exception as e:
             print(f"Groq streaming error: {e}")
+            # Fall through to try Anthropic
+
+    # Try Anthropic Claude as fallback
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        try:
+            import anthropic
+            claude_client = anthropic.Anthropic(api_key=anthropic_key)
+
+            with claude_client.messages.stream(
+                model="claude-3-haiku-20240307",
+                max_tokens=1024,
+                system=system_prompt,
+                messages=[
+                    {"role": "user", "content": user_message}
+                ]
+            ) as stream:
+                for text in stream.text_stream:
+                    yield f"data: {json.dumps({'token': text})}\n\n"
+
+            yield f"data: {json.dumps({'done': True})}\n\n"
+            return
+
+        except Exception as e:
+            print(f"Anthropic streaming error: {e}")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             return
 
-    # Fallback if no API key
-    yield f"data: {json.dumps({'error': 'AI chat is not configured. Please set GROQ_API_KEY.'})}\n\n"
+    # Fallback if no API keys
+    yield f"data: {json.dumps({'error': 'AI chat is not configured. Please set GROQ_API_KEY or ANTHROPIC_API_KEY.'})}\n\n"
 
 
 async def _call_llm(system_prompt: str, user_message: str) -> str:
