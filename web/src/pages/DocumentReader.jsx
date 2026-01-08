@@ -224,11 +224,11 @@ export default function DocumentReader() {
   }
 
   return (
-    <div className="h-full flex bg-gray-100">
+    <div className="h-full flex bg-blue-50">
       {/* Left section - main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - left part */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-300 bg-gray-50">
+        <div className="flex items-center justify-between p-4 border-b border-gray-300 bg-white">
           <div className="flex items-center gap-3 flex-1">
             <Link
               to="/sources"
@@ -309,7 +309,7 @@ export default function DocumentReader() {
 
         {/* Source Info Footer (hidden in zen mode) */}
         {source && !isZenMode && (
-          <div className="px-4 py-2 border-t border-gray-300 bg-gray-50 text-xs text-gray-500 flex items-center gap-4">
+          <div className="px-4 py-2 border-t border-gray-300 bg-white text-xs text-gray-500 flex items-center gap-4">
             <span>Domain: {source.domain || 'general'}</span>
             <span>|</span>
             <span>{source.word_count?.toLocaleString() || 0} words</span>
@@ -325,7 +325,7 @@ export default function DocumentReader() {
       {!isZenMode && (
         <div className="hidden lg:flex flex-col border-l border-gray-300 h-full min-h-0">
           {/* Header - right part */}
-          <div className="flex-shrink-0 p-4 border-b border-gray-300 bg-gray-50 flex items-center gap-3">
+          <div className="flex-shrink-0 p-4 border-b border-gray-300 bg-white flex items-center gap-3">
             <button
               onClick={toggleZenMode}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors bg-teal-50 border border-teal-300 text-teal-700 hover:bg-teal-100"

@@ -167,7 +167,7 @@ export default function AIChatPanel({
   ]
 
   return (
-    <div className="flex flex-col h-full bg-gray-200">
+    <div className="flex flex-col h-full bg-green-50">
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3 ai-chat-scrollbar">
         {messages.length === 0 ? (
@@ -240,11 +240,10 @@ export default function AIChatPanel({
       </div>
 
       {/* Input area */}
-      <form onSubmit={handleSubmit} className="p-3 border-t border-gray-300">
-        <div className="flex gap-2">
-          <input
+      <form onSubmit={handleSubmit} className="p-3 border-t border-teal-200">
+        <div className="flex gap-2 items-end">
+          <textarea
             ref={inputRef}
-            type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -253,16 +252,17 @@ export default function AIChatPanel({
                 handleSubmit(e)
               }
             }}
-            placeholder="Ask a question..."
-            className="flex-1 px-3 py-2 text-base bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:border-teal-500 focus:outline-none"
+            placeholder="Ask a question... (Enter to send, Shift+Enter for new line)"
+            rows={6}
+            className="flex-1 px-3 py-2 text-base bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:border-teal-500 focus:outline-none resize-none"
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-3 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-end"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-5 h-5" />
           </button>
         </div>
       </form>

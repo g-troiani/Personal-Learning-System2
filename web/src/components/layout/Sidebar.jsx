@@ -89,7 +89,7 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   return (
     <aside
-      className={`h-screen bg-bg-sidebar flex flex-col border-r border-bg-card-border fixed left-0 top-0 transition-all duration-300 ${
+      className={`h-screen bg-amber-50 flex flex-col border-r border-bg-card-border fixed left-0 top-0 transition-all duration-300 ${
         collapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
       }`}
     >

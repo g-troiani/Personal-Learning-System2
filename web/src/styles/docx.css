@@ -10,8 +10,28 @@
 
 /* Wrapper styling from docx-preview */
 .docx-container .docx-wrapper {
-  background: white;
+  background: white !important;
   min-height: 100%;
+}
+
+/* Override ALL docx-preview grey backgrounds aggressively */
+.docx-container .docx-wrapper,
+.docx-container .docx-wrapper *,
+.docx-container .docx-wrapper > section,
+.docx-container .docx-wrapper > section > article,
+.docx-container .docx-wrapper section.docx,
+.docx-container section,
+.docx-container article {
+  background: white !important;
+  background-color: white !important;
+  box-shadow: none !important;
+}
+
+/* Remove page margin/gutter styling */
+.docx-container .docx-wrapper > section {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
 }
 
 /* Ensure proper paragraph spacing */

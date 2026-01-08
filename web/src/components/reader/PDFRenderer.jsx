@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import PDFHighlightLayer from './PDFHighlightLayer'
 
 // Configure PDF.js worker
@@ -22,6 +22,14 @@ import 'react-pdf/dist/Page/TextLayer.css'
  * @param {Array} highlights - Highlight annotations to display
  * @param {Function} onDeleteHighlight - Callback when highlight is deleted
  */
+// Base width for PDF pages
+const BASE_WIDTH = 800
+
+// Zoom levels
+const ZOOM_STEP = 0.1
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 2.0
+
 const PDFRenderer = memo(function PDFRenderer({
   fileUrl,
   onPageChange,
@@ -33,8 +41,25 @@ const PDFRenderer = memo(function PDFRenderer({
   const [numPages, setNumPages] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [zoom, setZoom] = useState(1.0)
   const containerRef = useRef(null)
   const pageRefs = useRef({})
+
+  // Zoom handlers
+  const handleZoomIn = useCallback(() => {
+    setZoom(prev => Math.min(prev + ZOOM_STEP, MAX_ZOOM))
+  }, [])
+
+  const handleZoomOut = useCallback(() => {
+    setZoom(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM))
+  }, [])
+
+  const handleZoomReset = useCallback(() => {
+    setZoom(1.0)
+  }, [])
+
+  // Calculate current page width based on zoom
+  const pageWidth = Math.round(BASE_WIDTH * zoom)
 
   // Handle document load success
   const onDocumentLoadSuccess = useCallback(({ numPages }) => {
@@ -89,13 +114,42 @@ const PDFRenderer = memo(function PDFRenderer({
 
   return (
     <div
-      className="h-full overflow-auto bg-gray-200"
+      className="h-full overflow-auto bg-blue-50 relative"
       ref={containerRef}
       onScroll={handleScroll}
     >
+      {/* Zoom controls - fixed position */}
+      <div className="sticky top-2 left-0 right-0 z-20 flex justify-center pointer-events-none">
+        <div className="flex items-center gap-1 bg-white rounded-lg shadow-md border border-gray-200 px-2 py-1 pointer-events-auto">
+          <button
+            onClick={handleZoomOut}
+            disabled={zoom <= MIN_ZOOM}
+            className="p-1.5 rounded hover:bg-gray-100 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title="Zoom out"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleZoomReset}
+            className="px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded min-w-[60px] transition-colors"
+            title="Reset zoom"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            onClick={handleZoomIn}
+            disabled={zoom >= MAX_ZOOM}
+            className="p-1.5 rounded hover:bg-gray-100 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title="Zoom in"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
       {/* Loading overlay */}
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-blue-50 z-10">
           <div className="flex flex-col items-center gap-3 text-gray-400">
             <Loader2 className="h-8 w-8 animate-spin" />
             <span>Loading PDF...</span>
@@ -133,10 +187,10 @@ const PDFRenderer = memo(function PDFRenderer({
               >
                 <Page
                   pageNumber={pageNum}
-                  width={800}
+                  width={pageWidth}
                   renderTextLayer={true}
                   renderAnnotationLayer={true}
-                  className="shadow-lg bg-white"
+                  className="border border-gray-900 bg-white"
                 />
                 {/* Highlight overlay layer */}
                 <PDFHighlightLayer
