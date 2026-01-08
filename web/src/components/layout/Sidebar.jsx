@@ -115,7 +115,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               <NavLink
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  `flex items-center gap-3 py-2.5 rounded-lg text-base transition-colors ${
                     collapsed ? 'justify-center px-2' : 'px-3'
                   } ${
                     isActive
@@ -135,7 +135,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                   <>
                     <span className="flex-1">{item.label}</span>
                     {item.badge > 0 && (
-                      <span className="bg-accent-alert text-white text-xs font-medium px-2 py-0.5 rounded-full">
+                      <span className="bg-accent-alert text-white text-sm font-medium px-2 py-0.5 rounded-full">
                         {item.badge}
                       </span>
                     )}
@@ -149,7 +149,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         {/* Recent Section - only show when expanded */}
         {!collapsed && recentSources.length > 0 && (
           <div className="mt-8">
-            <h3 className="px-3 text-xs font-medium text-text-muted uppercase tracking-wider mb-2">
+            <h3 className="px-3 text-sm font-medium text-text-muted uppercase tracking-wider mb-2">
               Recent
             </h3>
             <ul className="space-y-1">
@@ -157,7 +157,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                 <li key={source.id}>
                   <NavLink
                     to={`/reader/${source.id}`}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-btn-secondary/50 rounded-lg transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 text-base text-text-secondary hover:bg-btn-secondary/50 rounded-lg transition-colors"
                   >
                     <span>{getSourceEmoji(source.title)}</span>
                     <span className="truncate">{source.title}</span>
@@ -183,7 +183,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           {!collapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-text-primary truncate">
+                <div className="text-base font-medium text-text-primary truncate">
                   {userEmail}
                 </div>
               </div>

@@ -85,7 +85,7 @@ export default function AssistantPanel({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-base font-medium transition-colors border-b-2 -mb-px ${
                 activeTab === tab.id
                   ? 'text-teal-600 border-teal-600'
                   : 'text-gray-500 border-transparent hover:text-gray-700'
@@ -94,7 +94,7 @@ export default function AssistantPanel({
               <tab.icon className="w-4 h-4" />
               <span>{tab.label}</span>
               {tab.id === 'notes' && notes.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-gray-300 text-gray-600">
+                <span className="ml-1 px-1.5 py-0.5 text-sm rounded-full bg-gray-300 text-gray-600">
                   {notes.length}
                 </span>
               )}
