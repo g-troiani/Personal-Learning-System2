@@ -169,7 +169,7 @@ export default function AIChatPanel({
   return (
     <div className="flex flex-col h-full bg-gray-200">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 ai-chat-scrollbar">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 px-4">
             <Sparkles className="w-8 h-8 mb-3 opacity-50" />
@@ -247,6 +247,12 @@ export default function AIChatPanel({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && input.trim() && !isLoading) {
+                e.preventDefault()
+                handleSubmit(e)
+              }
+            }}
             placeholder="Ask a question..."
             className="flex-1 px-3 py-2 text-base bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:border-teal-500 focus:outline-none"
             disabled={isLoading}

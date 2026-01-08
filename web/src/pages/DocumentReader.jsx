@@ -323,9 +323,9 @@ export default function DocumentReader() {
 
       {/* Right panel column - full height with border-l (hidden in zen mode) */}
       {!isZenMode && (
-        <div className="hidden lg:flex flex-col border-l border-gray-300">
+        <div className="hidden lg:flex flex-col border-l border-gray-300 h-full min-h-0">
           {/* Header - right part */}
-          <div className="p-4 border-b border-gray-300 bg-gray-50 flex items-center gap-3">
+          <div className="flex-shrink-0 p-4 border-b border-gray-300 bg-gray-50 flex items-center gap-3">
             <button
               onClick={toggleZenMode}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors bg-teal-50 border border-teal-300 text-teal-700 hover:bg-teal-100"
@@ -344,7 +344,7 @@ export default function DocumentReader() {
           </div>
 
           {/* Assistant Panel */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <AssistantPanel
               sourceId={sourceId}
               source={source}

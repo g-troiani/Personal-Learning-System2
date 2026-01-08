@@ -26,7 +26,7 @@ export default function AssistantPanel({
   initialMessage,
   onClearInitialMessage
 }) {
-  const [activeTab, setActiveTab] = useState('notes')
+  const [activeTab, setActiveTab] = useState('ai')
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Auto-switch to AI tab when initial message is provided
@@ -38,8 +38,8 @@ export default function AssistantPanel({
   }, [initialMessage])
 
   const tabs = [
-    { id: 'notes', label: 'Notes', icon: FileText },
-    { id: 'ai', label: 'AI', icon: MessageSquare },
+    { id: 'ai', label: 'AI Chat', icon: MessageSquare },
+    { id: 'notes', label: 'My Notes', icon: FileText },
     { id: 'kcs', label: 'KCs', icon: Brain }
   ]
 
@@ -77,9 +77,9 @@ export default function AssistantPanel({
   }
 
   return (
-    <div className="w-[36.75rem] border-l border-gray-300 bg-gray-200 flex flex-col">
-      {/* Header with tabs */}
-      <div className="flex items-center justify-between border-b border-gray-300 px-2 bg-gray-100">
+    <div className="w-[36.75rem] border-l border-gray-300 bg-gray-200 flex flex-col h-full">
+      {/* Header with tabs - always fixed at top */}
+      <div className="flex-shrink-0 flex items-center justify-between border-b border-gray-300 px-2 bg-gray-100">
         <div className="flex">
           {tabs.map(tab => (
             <button
@@ -111,7 +111,7 @@ export default function AssistantPanel({
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {activeTab === 'notes' && (
           <NotesList
             notes={notes}
