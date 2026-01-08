@@ -39,7 +39,7 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       spacing: {
-        'sidebar': '240px',
+        'sidebar': '300px',
         'sidebar-collapsed': '64px',
       },
       borderRadius: {
