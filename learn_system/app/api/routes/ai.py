@@ -1,9 +1,11 @@
 """AI-related endpoints - document Q&A chat."""
 
 import os
-from typing import Optional, Dict, Any
+import json
+from typing import Optional, Dict, Any, AsyncGenerator
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ..auth import CurrentUser
@@ -83,6 +85,98 @@ Instructions:
             status_code=500,
             detail=f"Failed to get AI response: {str(e)}"
         )
+
+
+@router.post("/chat/stream")
+async def chat_with_document_stream(request: ChatRequest, current_user: CurrentUser):
+    """
+    Stream chat response with AI about a specific document.
+    Uses Server-Sent Events (SSE) for real-time token streaming.
+    """
+    verify_source_ownership(request.source_id, current_user)
+
+    try:
+        client = get_client()
+
+        # Fetch document content for context
+        result = client.table("content_sources").select(
+            "id, title, content, domain"
+        ).eq("id", request.source_id).single().execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        source = result.data
+        document_content = source.get("content", "")[:8000]
+
+        system_prompt = f"""You are a helpful AI assistant helping a user understand a document.
+
+Document Title: {source.get('title', 'Untitled')}
+Domain: {source.get('domain', 'general')}
+
+Document Content (excerpt):
+{document_content}
+
+Instructions:
+- Answer questions based on the document content above
+- Be concise and helpful
+- If the answer isn't in the document, say so
+- Use quotes from the document when relevant"""
+
+        return StreamingResponse(
+            _stream_llm_response(system_prompt, request.message),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"AI chat stream error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get AI response: {str(e)}"
+        )
+
+
+async def _stream_llm_response(system_prompt: str, user_message: str) -> AsyncGenerator[str, None]:
+    """Stream LLM response tokens using SSE format."""
+
+    groq_key = os.getenv("GROQ_API_KEY")
+    if groq_key:
+        try:
+            from groq import Groq
+            groq_client = Groq(api_key=groq_key)
+
+            stream = groq_client.chat.completions.create(
+                model="llama-3.1-70b-versatile",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                max_tokens=1024,
+                temperature=0.7,
+                stream=True
+            )
+
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    token = chunk.choices[0].delta.content
+                    yield f"data: {json.dumps({'token': token})}\n\n"
+
+            yield f"data: {json.dumps({'done': True})}\n\n"
+            return
+
+        except Exception as e:
+            print(f"Groq streaming error: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            return
+
+    # Fallback if no API key
+    yield f"data: {json.dumps({'error': 'AI chat is not configured. Please set GROQ_API_KEY.'})}\n\n"
 
 
 async def _call_llm(system_prompt: str, user_message: str) -> str:

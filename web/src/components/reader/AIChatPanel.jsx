@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Loader2, Bot, User, AlertCircle, Sparkles } from 'lucide-react'
+import { Send, Bot, User, AlertCircle, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 // API base URL
@@ -63,7 +63,16 @@ export default function AIChatPanel({
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
 
-      const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
+      // Add placeholder for streaming response
+      const assistantMessageIndex = messages.length + 1
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '',
+        timestamp: new Date().toISOString(),
+        isStreaming: true
+      }])
+
+      const response = await fetch(`${API_BASE_URL}/api/ai/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -84,23 +93,68 @@ export default function AIChatPanel({
         throw new Error(errorData.detail || 'Failed to get AI response')
       }
 
-      const data = await response.json()
+      // Handle SSE stream
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let fullContent = ''
 
-      // Add AI response to chat
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.response,
-        timestamp: new Date().toISOString()
-      }])
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+
+              if (data.token) {
+                fullContent += data.token
+                // Update the streaming message
+                setMessages(prev => prev.map((msg, idx) =>
+                  idx === assistantMessageIndex
+                    ? { ...msg, content: fullContent }
+                    : msg
+                ))
+              } else if (data.done) {
+                // Mark streaming as complete
+                setMessages(prev => prev.map((msg, idx) =>
+                  idx === assistantMessageIndex
+                    ? { ...msg, isStreaming: false }
+                    : msg
+                ))
+              } else if (data.error) {
+                throw new Error(data.error)
+              }
+            } catch (parseError) {
+              // Skip invalid JSON lines
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error('AI chat error:', err)
       setError(err.message || 'Failed to get AI response')
-      // Add error message to chat
-      setMessages(prev => [...prev, {
-        role: 'error',
-        content: err.message || 'Failed to get AI response',
-        timestamp: new Date().toISOString()
-      }])
+      // Replace streaming placeholder with error or add error message
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1]
+        if (lastMsg?.isStreaming) {
+          // Replace placeholder with error
+          return prev.slice(0, -1).concat({
+            role: 'error',
+            content: err.message || 'Failed to get AI response',
+            timestamp: new Date().toISOString()
+          })
+        }
+        // Add error message
+        return [...prev, {
+          role: 'error',
+          content: err.message || 'Failed to get AI response',
+          timestamp: new Date().toISOString()
+        }]
+      })
     } finally {
       setIsLoading(false)
     }
@@ -165,7 +219,12 @@ export default function AIChatPanel({
                       : 'bg-white text-gray-700 border border-gray-300'
                   }`}
                 >
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  <p className="whitespace-pre-wrap">
+                    {message.content}
+                    {message.isStreaming && (
+                      <span className="inline-block w-2 h-4 ml-0.5 bg-teal-600 animate-pulse" />
+                    )}
+                  </p>
                 </div>
                 {message.role === 'user' && (
                   <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center flex-shrink-0">
@@ -174,18 +233,6 @@ export default function AIChatPanel({
                 )}
               </div>
             ))}
-
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="flex gap-2 justify-start">
-                <div className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center">
-                  <Bot className="w-3.5 h-3.5 text-teal-600" />
-                </div>
-                <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg">
-                  <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
-                </div>
-              </div>
-            )}
 
             <div ref={messagesEndRef} />
           </>
