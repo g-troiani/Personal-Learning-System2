@@ -113,14 +113,10 @@ const PDFRenderer = memo(function PDFRenderer({
   }
 
   return (
-    <div
-      className="h-full overflow-auto bg-blue-50 relative"
-      ref={containerRef}
-      onScroll={handleScroll}
-    >
-      {/* Zoom controls - fixed position */}
-      <div className="sticky top-2 left-0 right-0 z-20 flex justify-center pointer-events-none">
-        <div className="flex items-center gap-1 bg-white rounded-lg shadow-md border border-gray-200 px-2 py-1 pointer-events-auto">
+    <div className="h-full flex flex-col bg-blue-50">
+      {/* Zoom controls - fixed toolbar above content */}
+      <div className="flex-shrink-0 flex justify-center py-2 bg-blue-50">
+        <div className="flex items-center gap-1 bg-white rounded-lg shadow-md border border-gray-200 px-2 py-1">
           <button
             onClick={handleZoomOut}
             disabled={zoom <= MIN_ZOOM}
@@ -147,25 +143,31 @@ const PDFRenderer = memo(function PDFRenderer({
         </div>
       </div>
 
-      {/* Loading overlay */}
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-blue-50 z-10">
-          <div className="flex flex-col items-center gap-3 text-gray-400">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <span>Loading PDF...</span>
+      {/* Scrollable content area */}
+      <div
+        className="flex-1 overflow-auto relative"
+        ref={containerRef}
+        onScroll={handleScroll}
+      >
+        {/* Loading overlay */}
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-blue-50 z-10">
+            <div className="flex flex-col items-center gap-3 text-gray-400">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span>Loading PDF...</span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Error state */}
-      {error && (
-        <div className="flex items-center justify-center h-full text-red-400">
-          {error}
-        </div>
-      )}
+        {/* Error state */}
+        {error && (
+          <div className="flex items-center justify-center h-full text-red-400">
+            {error}
+          </div>
+        )}
 
-      {/* PDF Document with all pages */}
-      <div className="flex flex-col items-center gap-4 py-4 px-4">
+        {/* PDF Document with all pages */}
+        <div className="flex flex-col items-center gap-4 py-4 px-4">
         <Document
           file={fileUrl}
           onLoadSuccess={onDocumentLoadSuccess}
@@ -206,6 +208,7 @@ const PDFRenderer = memo(function PDFRenderer({
             )
           })}
         </Document>
+        </div>
       </div>
     </div>
   )

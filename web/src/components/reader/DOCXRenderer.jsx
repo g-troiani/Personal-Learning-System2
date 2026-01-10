@@ -120,10 +120,10 @@ const DOCXRenderer = memo(function DOCXRenderer({
   }
 
   return (
-    <div className="h-full overflow-auto bg-blue-50 relative">
-      {/* Zoom controls - fixed position */}
-      <div className="sticky top-2 left-0 right-0 z-20 flex justify-center pointer-events-none">
-        <div className="flex items-center gap-1 bg-white rounded-lg shadow-md border border-gray-200 px-2 py-1 pointer-events-auto">
+    <div className="h-full flex flex-col bg-blue-50">
+      {/* Zoom controls - fixed toolbar above content */}
+      <div className="flex-shrink-0 flex justify-center py-2 bg-blue-50">
+        <div className="flex items-center gap-1 bg-white rounded-lg shadow-md border border-gray-200 px-2 py-1">
           <button
             onClick={handleZoomOut}
             disabled={zoom <= MIN_ZOOM}
@@ -150,32 +150,35 @@ const DOCXRenderer = memo(function DOCXRenderer({
         </div>
       </div>
 
-      {/* Loading overlay - shown on top while rendering */}
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-blue-50 z-10">
-          <div className="flex flex-col items-center gap-3 text-gray-400">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <span>Rendering document...</span>
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-auto relative">
+        {/* Loading overlay - shown on top while rendering */}
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-blue-50 z-10">
+            <div className="flex flex-col items-center gap-3 text-gray-400">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span>Rendering document...</span>
+            </div>
           </div>
+        )}
+
+          <div className="flex justify-center py-6 px-4">
+          <div
+            ref={containerRef}
+            className="docx-container bg-white max-w-4xl w-full origin-top transition-transform duration-150"
+            style={{ transform: `scale(${zoom})` }}
+          />
         </div>
-      )}
 
-      <div className="flex justify-center py-6 px-4">
-        <div
-          ref={containerRef}
-          className="docx-container bg-white max-w-4xl w-full origin-top transition-transform duration-150"
-          style={{ transform: `scale(${zoom})` }}
-        />
+        {/* Annotation layer for highlights - only render after DOCX is loaded */}
+        {rendered && contentRef.current && (
+          <AnnotationLayer
+            highlights={highlights}
+            containerRef={contentRef}
+            onDeleteHighlight={onDeleteHighlight}
+          />
+        )}
       </div>
-
-      {/* Annotation layer for highlights - only render after DOCX is loaded */}
-      {rendered && contentRef.current && (
-        <AnnotationLayer
-          highlights={highlights}
-          containerRef={contentRef}
-          onDeleteHighlight={onDeleteHighlight}
-        />
-      )}
     </div>
   )
 })
