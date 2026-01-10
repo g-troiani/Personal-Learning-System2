@@ -94,9 +94,20 @@ export default function AnnotationLayer({
 
           const span = document.createElement('span')
           span.className = 'annotation-highlight cursor-pointer transition-all hover:brightness-90'
-          span.style.backgroundColor = color || '#FFEB3B'
-          span.style.borderRadius = '2px'
           span.dataset.annotationId = id
+          // Use cssText to set all styles including inherit for text formatting
+          // This ensures bold, italic, underline, etc. are preserved
+          span.style.cssText = `
+            background-color: ${color || '#FFEB3B'};
+            border-radius: 2px;
+            font-weight: inherit;
+            font-style: inherit;
+            text-decoration: inherit;
+            font-family: inherit;
+            font-size: inherit;
+            color: inherit;
+            line-height: inherit;
+          `
 
           // Click handler to show delete option
           span.addEventListener('click', (e) => {
