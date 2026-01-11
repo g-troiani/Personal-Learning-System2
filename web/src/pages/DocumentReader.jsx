@@ -8,9 +8,7 @@ import { useTextSelection } from '../hooks/useTextSelection'
 import { useAnnotations } from '../hooks/useAnnotations'
 import { useReadingProgress } from '../hooks/useReadingProgress'
 import { useZenMode } from '../contexts/ZenModeContext'
-
-// API base URL from environment or default to localhost:8001
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
+import { getSourceStatus, getFileUrl, getPdfUrl, getSections, getContent } from '../lib/api'
 
 export default function DocumentReader() {
   const { sourceId } = useParams()
@@ -143,31 +141,25 @@ export default function DocumentReader() {
       setError(null)
 
       try {
-        // Fetch source status/details
-        const statusRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/status`)
-        if (!statusRes.ok) {
-          throw new Error('Source not found')
-        }
-        const statusData = await statusRes.json()
+        // Fetch source status/details (uses authenticated api.js)
+        const statusData = await getSourceStatus(sourceId)
         setSource(statusData)
 
         // Fetch extracted content for non-PDF files (Markdown, text)
         try {
-          const contentRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/content`)
-          if (contentRes.ok) {
-            const contentData = await contentRes.json()
-            setExtractedContent(contentData.content)
-          }
+          const contentData = await getContent(sourceId)
+          setExtractedContent(contentData.content)
         } catch (e) {
           // Content endpoint may not exist, that's ok - we'll use file URL
           console.log('Content endpoint not available, using file URL')
         }
 
         // Fetch signed URL for the file
-        const fileRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/file-url`)
-        if (fileRes.ok) {
-          const fileData = await fileRes.json()
+        try {
+          const fileData = await getFileUrl(sourceId)
           setFileUrl(fileData.url)
+        } catch (e) {
+          console.log('File URL not available')
         }
 
         // For PPTX sources, also fetch the converted PDF URL
@@ -175,11 +167,8 @@ export default function DocumentReader() {
         const ext = title.toLowerCase().split('.').pop()
         if (ext === 'pptx' || ext === 'ppt') {
           try {
-            const pdfRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/pdf-url`)
-            if (pdfRes.ok) {
-              const pdfData = await pdfRes.json()
-              setConvertedPdfUrl(pdfData.url)
-            }
+            const pdfData = await getPdfUrl(sourceId)
+            setConvertedPdfUrl(pdfData.url)
           } catch (e) {
             // PDF conversion may not be available, continue without it
             console.log('Converted PDF not available for PPTX source')
@@ -187,10 +176,11 @@ export default function DocumentReader() {
         }
 
         // Fetch sections (TOC)
-        const sectionsRes = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/sections`)
-        if (sectionsRes.ok) {
-          const sectionsData = await sectionsRes.json()
+        try {
+          const sectionsData = await getSections(sourceId)
           setSections(sectionsData.sections || [])
+        } catch (e) {
+          console.log('Sections not available')
         }
 
       } catch (err) {
@@ -234,11 +224,11 @@ export default function DocumentReader() {
   }
 
   return (
-    <div className="h-full flex bg-gray-100">
+    <div className="h-full flex bg-blue-50">
       {/* Left section - main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - left part */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-300 bg-gray-50">
+        <div className="flex items-center justify-between p-4 border-b border-gray-300 bg-white">
           <div className="flex items-center gap-3 flex-1">
             <Link
               to="/sources"
@@ -319,7 +309,7 @@ export default function DocumentReader() {
 
         {/* Source Info Footer (hidden in zen mode) */}
         {source && !isZenMode && (
-          <div className="px-4 py-2 border-t border-gray-300 bg-gray-50 text-xs text-gray-500 flex items-center gap-4">
+          <div className="px-4 py-2 border-t border-gray-300 bg-white text-xs text-gray-500 flex items-center gap-4">
             <span>Domain: {source.domain || 'general'}</span>
             <span>|</span>
             <span>{source.word_count?.toLocaleString() || 0} words</span>
@@ -333,9 +323,9 @@ export default function DocumentReader() {
 
       {/* Right panel column - full height with border-l (hidden in zen mode) */}
       {!isZenMode && (
-        <div className="hidden lg:flex flex-col border-l border-gray-300">
+        <div className="hidden lg:flex flex-col border-l border-gray-300 h-full min-h-0">
           {/* Header - right part */}
-          <div className="p-4 border-b border-gray-300 bg-gray-50 flex items-center gap-3">
+          <div className="flex-shrink-0 p-4 border-b border-gray-300 bg-white flex items-center gap-3">
             <button
               onClick={toggleZenMode}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors bg-teal-50 border border-teal-300 text-teal-700 hover:bg-teal-100"
@@ -354,7 +344,7 @@ export default function DocumentReader() {
           </div>
 
           {/* Assistant Panel */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <AssistantPanel
               sourceId={sourceId}
               source={source}

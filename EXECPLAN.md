@@ -19,10 +19,8 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Web UI work → `.claude/memory/milestones/webui_core.md`
    - Upload/processing → `.claude/memory/milestones/sources_feature.md`
    - Performance issues → `.claude/memory/milestones/speed_optimization.md`
-   - Document Reader (M30-M37) → See completed milestones in Progress section
-   - Document Viewer Fidelity (M38) → Complete
-   - PDF Highlighting (M39) → Complete
-   - PPTX Support (M40) → `NEW FEATURES.md` (full implementation plan)
+   - Document Reader (M30-M40) → `.claude/memory/milestones/document_reader.md`
+   - Auth/RLS/Admin (M41-M47) → `.claude/memory/milestones/auth_multiuser.md`
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
 
@@ -56,6 +54,10 @@ The system solves five problems. First, it eliminates the "I don't know what I d
 **PDF Highlighting (M39):** This milestone implements PDF-specific highlighting. Currently, highlights save to the database but don't render in PDFs because the prop isn't passed and the positioning system is incompatible. After M39, users can highlight PDF text and see those highlights persist across sessions using page-based percentage coordinates.
 
 **PowerPoint Support (M40):** This milestone adds PowerPoint (.pptx) document support. After M40, users can upload PowerPoint presentations and view them in the document reader with full visual fidelity. The system extracts text using python-pptx for KC generation, converts PPTX to PDF using LibreOffice + unoserver for display, and reuses the existing PDFRenderer for viewing. Highlights work on the converted PDF.
+
+**Authentication & Multi-User (M41-M46):** These milestones transform the single-user localhost system into a secure multi-user web deployment. After M46, users can sign up with email/password, log in, and have their data completely isolated from other users. The system uses Supabase Auth for authentication, Row-Level Security (RLS) for data isolation, and JWT validation in the FastAPI backend. Existing data is migrated to the first registered user. The architecture supports deployment to Vercel (frontend) + Railway (backend) + Supabase (database).
+
+**Approved Users Whitelist (M47):** This milestone restricts document upload (which triggers expensive Claude and Groq API calls) to a whitelist of approved users. Non-approved users can log in and view existing data but receive a 403 Forbidden error when attempting to upload. Hardcoded admin emails can access an Admin page at `/admin` to manage the whitelist—adding or removing approved users. This prevents runaway API costs from unauthorized usage while preserving read access for all authenticated users.
 
 
 ## Progress
@@ -136,6 +138,30 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M40 Phase 4: Frontend content type detection and routing (2026-01-06)
 - [x] M40 Phase 5: API endpoint for converted PDF URL (2026-01-06)
 
+**Authentication & Multi-User (M41-M46)** - Complete
+- [x] M41-M46 Research: 6 parallel worktrees, consolidated spec in NEW FEATURES.md (2026-01-06)
+- [x] M41: Supabase Auth Configuration - email enabled, Site URL/Redirects configured, JWT=3600s, env vars added (2026-01-06)
+- [x] M42: Database Schema Migration - user_id UUID column on 12 tables, 12 single-column indexes, 8 compound indexes for query patterns (2026-01-06)
+- [x] M43: Backend Auth Middleware - PyJWT, auth package (schemas, jwt_utils, dependencies, ownership), CurrentUser on all routes, CORS expose X-Token-Expiring-Soon (2026-01-06)
+- [x] M44: Frontend Auth Flow - AuthContext, ProtectedRoute, login/signup/reset forms, api.js with auth headers, Sidebar logout (2026-01-07)
+- [x] M45: Row-Level Security Policies - RLS enabled on 14 tables, 46+ table policies, 4 storage policies for documents bucket (2026-01-07)
+- [x] M46: Data Migration & Deployment - first_user_migration.py, m46_enforce_auth.sql, migration API endpoints, CORS env config (2026-01-07)
+
+**RLS/Display Bug Investigation** - Complete (2026-01-07)
+- Root cause: practice_items RLS policy too complex; migration.py had redundant user_id filters
+- Fix: `fix_practice_items_rls.sql` + updated useSources.js/Study.jsx to direct Supabase queries
+- All pages regression tested and verified functional. See `.claude/memory/milestones/auth_multiuser.md` for details.
+
+**Approved Users Whitelist (M47)** - Complete
+- [x] M47 Phase 1: Database migration - approved_users table with RLS (2026-01-11)
+- [x] M47 Phase 2: Backend approval logic - is_user_approved, is_admin, require_approved_user (2026-01-11)
+- [x] M47 Phase 3: Protect upload endpoint - ApprovedUser dependency (2026-01-11)
+- [x] M47 Phase 4: Admin API endpoints - list, add, remove approved users (2026-01-11)
+- [x] M47 Phase 5: Frontend AdminRoute guard and useIsAdmin hook (2026-01-11)
+- [x] M47 Phase 6: Admin page UI - table, add form, remove button (2026-01-11)
+- [x] M47 Phase 7: Upload error handling - user-friendly 403 message (2026-01-11)
+- [x] M47 Phase 8: Integration testing - all flows verified in Chrome (2026-01-11)
+
 
 ## Surprises and Discoveries
 
@@ -163,6 +189,37 @@ Key lessons learned during implementation:
 - Groq model `qwen-qwq-32b` deprecated → use `qwen/qwen3-32b`
 - Groq rate limits can cause stuck processing - retry logic helps but timeouts needed
 - Practice items: 3 per KC consistently (predictable 3:1 ratio)
+
+**Supabase Auth (M41-M46):**
+- Never use API keys as access tokens - use `session.access_token`, not anon key
+- Don't modify auth schema - never add RLS to `auth.users` or modify its columns
+- getSession() is fast but doesn't verify; getUser() verifies with server
+- Service role key bypasses RLS - use only server-side, never expose
+- Email tracking breaks confirmation links - disable tracking in SMTP provider
+- Clock skew causes random auth failures - don't set JWT expiry < 1 hour
+- Foreign keys need `ON DELETE CASCADE` on auth.users references
+
+**M46 Data Migration:**
+- Not all tables have `id` column (kc_state, kc_prerequisites use composite keys) - use `user_id` for count queries
+- Orphaned data can exist in child tables even if parent is migrated - check ALL tables, not just content_sources
+- Auth token stored in localStorage as `sb-{project-ref}-auth-token`
+- Migration endpoint requires service role key (bypasses RLS) to update rows regardless of current user_id
+- CORS origins can be configured via `CORS_ORIGINS` env var (comma-separated list)
+
+**M47 Dependencies:**
+- Pydantic `EmailStr` requires `email-validator` package: `pip install email-validator`
+- Backend won't start without it if any route model uses EmailStr
+
+**Pre-existing Display Bugs (discovered during M46 testing, NOT caused by M46):**
+- Sources page shows "0 Practice Items" despite API returning 117 - frontend display logic issue
+- Study page shows "No items to study" even with 40 new items - frontend item selection logic issue
+- Both issues existed before M46 changes and are unrelated to authentication
+
+**RLS/Display Bug Root Cause Analysis (2026-01-07 research):**
+- **practice_items RLS issue:** M45 policy has complex nested EXISTS that fails silently. Workaround in useSources.js (lines 47-63) fetches via backend API. Fix: Run `migrations/fix_practice_items_rls.sql` to simplify policy.
+- **Study page "No items" bug:** migration.py endpoints (lines 36, 56, 87) double-filter on user_id. KC ownership filter is sufficient; redundant `.eq('user_id', current_user.id)` excludes orphaned items. Fix: Remove redundant filter.
+- **Document Reader "can't read" bug:** api.js hardcoded to port 8000 but backend runs on 8001. All document API calls failed silently. Fix: Update API_BASE to use port 8001.
+- See `NEW FEATURES.md` "Sources View & RLS Fix Research" section for full analysis and diagnostic queries.
 
 
 ## Known Issues and Future Improvements
@@ -241,6 +298,22 @@ Recent decisions only below. See archives for full rationale.
   **Rationale:** (1) Pure Python, no native dependencies. (2) Extracts text from shapes, tables, and speaker notes. (3) Speaker notes are valuable learning material often missed. (4) SmartArt limitation accepted (python-pptx doesn't support it).
   **Date:** 2026-01-06
 
+- **Decision:** Use Supabase Auth for authentication instead of custom JWT implementation
+  **Rationale:** (1) Battle-tested, built-in JWT handling with automatic token refresh. (2) Already using Supabase for database. (3) Email/password first, OAuth can be added later. (4) Built-in password reset, email confirmation flows. (5) Reduces security surface area vs custom implementation.
+  **Date:** 2026-01-06
+
+- **Decision:** Use Row-Level Security (RLS) for data isolation instead of application-level filtering
+  **Rationale:** (1) Database-level enforcement - can't be bypassed by application bugs. (2) Works with direct database access (Supabase client). (3) auth.uid() function provides user context automatically. (4) 48 policies across 11 user-owned tables. (5) Storage policies use same pattern for file isolation.
+  **Date:** 2026-01-06
+
+- **Decision:** Zero-downtime migration with phased approach
+  **Rationale:** (1) Phase 1 adds nullable user_id columns (non-breaking). (2) Phase 2 deploys auth code (backwards compatible). (3) Phase 3 migrates existing data to first user. (4) Phase 4 enforces NOT NULL + RLS (breaking for unauthenticated). (5) Each phase has rollback scripts.
+  **Date:** 2026-01-06
+
+- **Decision:** Deploy to Vercel (frontend) + Railway (backend) + Supabase (database)
+  **Rationale:** (1) Vercel has excellent Vite support with free tier. (2) Railway supports Docker for LibreOffice container. (3) Supabase already in use. (4) API keys (Claude/Groq) only in Railway environment - never exposed to frontend.
+  **Date:** 2026-01-06
+
 
 ## Outcomes and Retrospective
 
@@ -258,7 +331,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through forty milestones. M1-M40 are complete.
+Implementation proceeds through forty-seven milestones. M1-M47 are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -277,6 +350,10 @@ Implementation proceeds through forty milestones. M1-M40 are complete.
 **PDF Highlighting (Complete):** M39: Page-based PDF highlighting with percentage coordinates.
 
 **PowerPoint Support (Complete):** M40: PPTX document support with LibreOffice conversion. Upload PowerPoint presentations, view as PDF, highlight text, generate KCs from slides.
+
+**Authentication & Multi-User (Complete):** M41: Supabase Auth configuration. M42: Database schema migration. M43: Backend auth middleware. M44: Frontend auth flow. M45: RLS policies. M46: Data migration. See `.claude/memory/milestones/auth_multiuser.md`.
+
+**Approved Users Whitelist (Complete):** M47: Restricted document upload to approved users. Database migration for approved_users table with deny-all RLS, backend approval logic (ApprovedUser dependency) and admin endpoints, frontend AdminRoute guard with useIsAdmin hook, Admin page for managing whitelist, upload error handling for 403.
 
 
 ## CLI Usage Reference
@@ -337,7 +414,7 @@ External memory in `.claude/memory/` (16 files):
 
 | Category | Files |
 |----------|-------|
-| `milestones/` | cli_foundation.md, webui_core.md, sources_feature.md, speed_optimization.md, agent_memory.md, document_reader.md |
+| `milestones/` | cli_foundation.md, webui_core.md, sources_feature.md, speed_optimization.md, agent_memory.md, document_reader.md, auth_multiuser.md |
 | `decisions/` | architecture.md, technology.md, patterns.md, memory_system.md |
 | `schemas/` | database.md, api.md, components.md |
 | `reference/` | research.md, context.md, retrospective.md |
@@ -363,46 +440,9 @@ See `.claude/memory/INDEX.md` for full summaries and cross-references.
 
 ## Milestones
 
-### CLI Milestones 1-8 (Complete)
+All completed milestones are archived in `.claude/memory/milestones/`. See Progress section for dates.
 
-All CLI milestones are complete. See the **Progress** section for detailed implementation notes and the **Outcomes and Retrospective** section for what's working.
-
-- **M1:** Project foundation, database schema, CLI skeleton
-- **M2:** Document ingestion (PDF, DOCX, Markdown extraction)
-- **M3:** KC extraction via LLM with chunking and deduplication
-- **M4:** Practice item generation with type-specific templates
-- **M5:** Interactive study loop with session management
-- **M6:** SM-2 spaced repetition and mastery tracking
-- **M7:** Todo dashboard and source-filtered review
-- **M8:** Technique bundle tracking for self-experimentation
-
-### Web UI Milestones 9-15 (Complete)
-
-All Web UI milestones are complete. See the **Progress** section for detailed implementation notes.
-
-- **M9:** Foundation (React/Vite/Tailwind setup, Sidebar, Layout, SupabaseContext)
-- **M10:** Home dashboard (greeting, overdue alert, search, quick actions, source cards)
-- **M11:** Study session (question card, answer input, self-assessment, session summary)
-- **M12:** Calendar (month navigation, calendar grid, schedule form)
-- **M13:** Due for Review (sections by urgency, source items, action buttons)
-- **M14:** Progress (stat cards, mastery by source, weekly chart, streak)
-- **M15:** Analytics (insight cards, technique comparison, calibration analysis, items needing attention)
-
-### Sources Feature Milestones 16-20 (Complete)
-
-**Full specs:** `.claude/memory/milestones/sources_feature.md`
-
-M16-M20 implemented Sources page with document upload, FastAPI backend, real-time processing progress, delete/detail panels. Complete with all features working.
-
-
-### Speed Optimization Milestones 21-23 (Complete)
-
-**Full specs:** `.claude/memory/milestones/speed_optimization.md`
-
-M21-M23 reduced processing time from 60-165s to 15-40s (~4x speedup). Groq (Qwen3 32B) for item generation, ThreadPoolExecutor (5 workers) for parallel processing, retry logic with exponential backoff.
-
-
-### Agent Memory System Milestones 24-29 (Complete)
+### Agent Memory System Milestones
 
 These milestones implement a tiered memory system to manage EXECPLAN complexity. The pattern adapts MemGPT's "LLM as Operating System" architecture for file-based Claude Code: core memory (always loaded) plus external memory (retrieved on demand). After completion, EXECPLAN.md shrinks from ~1500 lines to ~400 lines of active content while preserving full historical access.
 
@@ -428,22 +468,23 @@ These milestones implement a tiered memory system to manage EXECPLAN complexity.
     │  schemas/             │  reference/                     │
     └─────────────────────────────────────────────────────────┘
 
-- **M24:** Create memory directory structure
-- **M25:** Extract completed milestones to archive
-- **M26:** Extract decisions and schemas
-- **M27:** Extract reference material
-- **M28:** Slim EXECPLAN to active content only
-- **M29:** Update CLAUDE.md with memory access instructions
+**Cleanup Loop (OPERATIONAL - repeat after each milestone):**
+
+    Work → Archive → Slim → Repeat
+
+After completing ANY milestone:
+1. Archive detailed implementation notes to `.claude/memory/milestones/`
+2. Extract new decisions to `decisions/*.md`
+3. Update schemas if structure changed
+4. Slim EXECPLAN.md - replace archived content with one-liner + link
+5. Update INDEX.md if new files created
+
+Target: Keep EXECPLAN.md under ~650 lines. If it grows larger, archive completed work immediately.
 
 
-### Milestones 24-27 (Complete)
+### Slim EXECPLAN to Active Content Only (OPERATIONAL POLICY - DO NOT DELETE)
 
-M24-M27 created `.claude/memory/` directory structure with 14 files. See `.claude/memory/milestones/agent_memory.md` for details.
-
-
-### Milestone 28: Slim EXECPLAN to Active Content Only (OPERATIONAL POLICY - DO NOT DELETE)
-
-At the end of this milestone, EXECPLAN.md is under 500 lines containing only active work content.
+EXECPLAN.md should contain only active work content. Target: ~500-650 lines.
 
 **Sections to keep (with target lines):**
 - Purpose and Big Picture (20)
@@ -474,7 +515,7 @@ At the end of this milestone, EXECPLAN.md is under 500 lines containing only act
 **Verification:** EXECPLAN.md under 500 lines. `wc -l EXECPLAN.md` returns < 500. All content still accessible via memory files.
 
 
-### Milestone 29: Memory Access Protocols (OPERATIONAL GUIDANCE - DO NOT DELETE)
+### Memory Access Protocols (OPERATIONAL POLICY - DO NOT DELETE)
 
 This section defines how to use the memory system. These protocols are ACTIVE and must be followed by every session.
 
@@ -603,323 +644,262 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 **Verification:** CLAUDE.md contains Memory System section with both proactive and reactive protocols. New session starting a milestone reads relevant archives before implementation.
 
 
-### Document Reader Feature Milestones 30-38 (In Progress)
+### Document Reader Feature M30-M40 (Complete)
 
-These milestones implement an AlphaXiv-style document reader that enables users to read uploaded documents before practice. The core flow becomes: upload → read/study → practice (source always one click away).
+**Full specs:** `.claude/memory/milestones/document_reader.md`
 
-**Full specs:** `NEW FEATURES.md` (root directory)
-
-**Architecture:** The reader reuses the existing Sidebar and Layout components. A conditional Table of Contents section appears in the sidebar only when viewing `/reader/:sourceId`. The document view includes a collapsible right-side Assistant panel for notes and AI chat.
-
-    ┌─────────────────────────────────────────────────────────────────┐
-    │  ← Back   📖 Title   [PDF|Blog]   [Zen]   [Start Practice]      │
-    ├────────────┬────────────────────────────────────────────────────┤
-    │  SIDEBAR   │   DOCUMENT AREA          │   ASSISTANT PANEL      │
-    │  (existing)│                          │   (collapsible)        │
-    │            │   [PDF/Markdown/Text]    │                        │
-    │  Home      │                          │   [Notes | AI | KCs]   │
-    │  Calendar  │   Selection → Tooltip    │                        │
-    │  ...       │   • Ask AI               │   Chat with AI...      │
-    │            │   • Highlight            │                        │
-    │  Recent    │   • Copy                 │                        │
-    │            │                          │                        │
-    │  ▼ CONTENTS│ ← Only in /reader/:id   │                        │
-    │  (teal)    │                          │                        │
-    │  • Ch 1    │                          │                        │
-    └────────────┴────────────────────────────────────────────────────┘
+AlphaXiv-style document reader. Flow: upload → read/study → practice. Supports PDF, DOCX (docx-preview), PPTX (LibreOffice→PDF), Markdown, text. Features: sidebar TOC, text selection, highlights (character-based for text, page-based % coords for PDF), AI chat, notes, reading progress, zen mode.
 
 
-### Milestones 30-37: Document Reader Implementation (Complete)
+### Authentication & Multi-User Feature M41-M46 (Complete)
 
-**Full implementation details:** `.claude/memory/milestones/document_reader.md`
+**Full specs:** `.claude/memory/milestones/auth_multiuser.md`
 
-M30-M37 implemented all Document Reader components: database tables (reading_progress, annotations, document_sections), Supabase Storage integration, PDF/Markdown/Text renderers, sidebar TOC, text selection with highlights, assistant panel (notes, AI chat, KCs), reading progress tracking, and zen mode.
-
-**Key files created:**
-- `web/src/pages/DocumentReader.jsx` - main reader page
-- `web/src/components/reader/` - PDFRenderer, MarkdownRenderer, TextRenderer, SelectionTooltip, AnnotationLayer, AssistantPanel
-- `web/src/hooks/` - useDocumentSections, useTextSelection, useAnnotations, useReadingProgress
-- `learn_system/app/api/server.py` - /api/sources/{id}/file-url, /sections, /content, /api/ai/chat endpoints
+Supabase Auth, email/password, JWT validation, 46+ RLS policies, data migration, deployment config (Vercel + Railway + Supabase). See memory archive for implementation details.
 
 
-### Milestone 38: Document Viewer Fidelity (COMPLETE)
+### Approved Users Whitelist Feature M47 (Pending)
 
-At the end of this milestone, DOCX files render with full visual fidelity—headings, tables, images, colors, and formatting are preserved instead of displaying as plain text.
+At the end of this milestone, document upload is restricted to approved users. Non-approved users receive 403 Forbidden when attempting upload. Admins can manage the whitelist via `/admin` page.
 
-**The Problem:**
+**Admin Emails (Hardcoded):**
+- gianmariatroiani@gmail.com
+- gtroiani@equilibriaconsulting.net
 
-Currently, DOCX files are extracted as plain text via `python-docx` and displayed with line numbers in `TextRenderer.jsx`. Users see "Chapter 1" instead of styled headings, lose all tables, images, bold/italic, colors, and formatting. The code path is:
+**Architecture:**
 
-    ReaderContent.jsx line 17: if (ext === 'docx') return 'text'
-    → TextRenderer.jsx renders plain monospace text
+    ┌─────────────────────────────────────────────────────────────────────────────┐
+    │  UPLOAD REQUEST FLOW                                                         │
+    ├─────────────────────────────────────────────────────────────────────────────┤
+    │  1. User clicks Upload → POST /api/sources/upload                           │
+    │  2. JWT validated (existing auth middleware)                                │
+    │  3. NEW: require_approved_user() checks approved_users table                │
+    │  4. If not approved → 403 Forbidden "Account not approved for uploads"      │
+    │  5. If approved → proceed to upload, LLM processing starts                  │
+    └─────────────────────────────────────────────────────────────────────────────┘
 
-**The Solution:**
+**M47 Phase 1: Database Migration**
 
-Use `docx-preview` library to render DOCX files with high fidelity directly in the browser. This is a client-side solution requiring no server changes—works with Netlify + Supabase architecture.
+New file: `migrations/m47_approved_users.sql`
 
-**Full specs:** `NEW FEATURES.md` (root directory) contains complete implementation plan with code examples, database migrations, and testing checklist.
+```sql
+-- approved_users table: whitelist for costly API operations
+CREATE TABLE IF NOT EXISTS public.approved_users (
+    email TEXT PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    approved_by TEXT NOT NULL,
+    approved_at TIMESTAMPTZ DEFAULT NOW(),
+    notes TEXT
+);
 
-**Dependencies:**
+-- Enable RLS with deny-all (service role bypasses)
+ALTER TABLE public.approved_users ENABLE ROW LEVEL SECURITY;
 
-    cd web && npm install docx-preview
-    # JSZip is a peer dependency, installed automatically
+-- No SELECT/INSERT/UPDATE/DELETE policies = deny all for anon/authenticated
+-- Service role key (used by backend) bypasses RLS
 
-**Work:**
+-- Seed admin emails as initial approved users
+INSERT INTO public.approved_users (email, approved_by, notes)
+VALUES
+    ('gianmariatroiani@gmail.com', 'system', 'Initial admin'),
+    ('gtroiani@equilibriaconsulting.net', 'system', 'Initial admin')
+ON CONFLICT (email) DO NOTHING;
+```
 
-1. Create `DOCXRenderer.jsx` component in `web/src/components/reader/`:
-   - Fetch DOCX blob from Supabase Storage signed URL
-   - Call `renderAsync(blob, containerRef.current, options)` from docx-preview
-   - Handle loading and error states
-   - Apply CSS scoping for docx-preview output
+Verification: Run in Supabase SQL editor. `SELECT * FROM approved_users` shows 2 rows.
 
-2. Add DOCX-specific styles in `web/src/styles/docx.css`:
-   - Scope styles to `.docx-container`
-   - Ensure tables have visible borders
-   - Make images responsive
+**M47 Phase 2: Backend Approval Logic**
 
-3. Update `ReaderContent.jsx` to route DOCX to new renderer:
-   - Change line 17: `if (ext === 'docx' || ext === 'doc') return 'docx'`
-   - Add case in switch for 'docx' rendering DOCXRenderer
-   - Pass fileUrl from Supabase Storage
+New file: `learn_system/app/api/auth/approval.py`
 
-4. Verify original DOCX files are stored in Supabase Storage:
-   - Check upload endpoint stores files (should be from M30)
-   - Confirm `/api/sources/{id}/file-url` returns signed URL
+```python
+from typing import Annotated
+from fastapi import Depends, HTTPException, status
+from .dependencies import get_current_user
+from .schemas import AuthenticatedUser
+import os
 
-5. Test annotation compatibility:
-   - Verify text selection works on rendered DOCX
-   - Confirm highlights save to database
-   - Check existing AnnotationLayer renders on DOCX content
+ADMIN_EMAILS = [
+    "gianmariatroiani@gmail.com",
+    "gtroiani@equilibriaconsulting.net",
+]
 
-**Code Example - DOCXRenderer.jsx:**
+def is_admin(email: str) -> bool:
+    return email.lower() in [e.lower() for e in ADMIN_EMAILS]
 
-    import { useState, useEffect, useRef, memo } from 'react'
-    import { renderAsync } from 'docx-preview'
-    import { Loader2 } from 'lucide-react'
+async def is_user_approved(email: str, supabase_client) -> bool:
+    # Use service role client to bypass RLS
+    result = supabase_client.table("approved_users").select("email").eq("email", email.lower()).execute()
+    return len(result.data) > 0
 
-    const DOCXRenderer = memo(function DOCXRenderer({ fileUrl }) {
-      const containerRef = useRef(null)
-      const [loading, setLoading] = useState(true)
-      const [error, setError] = useState(null)
-
-      useEffect(() => {
-        if (!fileUrl) {
-          setError('No document URL provided')
-          setLoading(false)
-          return
-        }
-
-        async function render() {
-          setLoading(true)
-          try {
-            const response = await fetch(fileUrl)
-            const arrayBuffer = await response.arrayBuffer()
-            await renderAsync(arrayBuffer, containerRef.current, {
-              inWrapper: true,
-              ignoreWidth: false,
-              breakPages: false,
-              useBase64URL: true,
-              className: 'docx-wrapper'
-            })
-            setLoading(false)
-          } catch (err) {
-            console.error('DOCX render error:', err)
-            setError('Failed to render document')
-            setLoading(false)
-          }
-        }
-        render()
-      }, [fileUrl])
-
-      if (loading) {
-        return (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-          </div>
+async def require_approved_user(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
+    # Admins are always approved
+    if is_admin(current_user.email):
+        return current_user
+    # Check approved_users table (requires service role client)
+    from ...config import get_service_supabase
+    client = get_service_supabase()
+    if not await is_user_approved(current_user.email, client):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is not approved for document uploads. Please contact an administrator."
         )
-      }
+    return current_user
 
-      if (error) {
-        return (
-          <div className="flex items-center justify-center h-full text-red-400">
-            {error}
-          </div>
+async def require_admin(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
+    if not is_admin(current_user.email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
         )
-      }
+    return current_user
 
-      return (
-        <div className="h-full overflow-auto bg-white">
-          <div ref={containerRef} className="docx-container mx-auto max-w-4xl p-8" />
-        </div>
-      )
-    })
+# Type aliases for dependency injection
+ApprovedUser = Annotated[AuthenticatedUser, Depends(require_approved_user)]
+AdminUser = Annotated[AuthenticatedUser, Depends(require_admin)]
+```
 
-    export default DOCXRenderer
+Modify: `learn_system/app/api/auth/__init__.py` - add exports for `is_admin`, `is_user_approved`, `require_approved_user`, `require_admin`, `ApprovedUser`, `AdminUser`
 
-**Verification:**
+Verification: Import works, no syntax errors.
 
-1. Upload a DOCX file with headings (H1, H2, H3), tables, images, and formatted text
-2. Navigate to `/reader/:sourceId`
-3. Observe:
-   - Headings display with proper hierarchy and sizing
-   - Tables render with borders and structure
-   - Images display inline
-   - Bold, italic, colors are preserved
-   - Text selection works for highlighting
-4. Create a highlight on DOCX content
-5. Refresh page - highlight persists
-6. Check browser console for errors - should be none
+**M47 Phase 3: Protect Upload Endpoint**
 
-**Fallback:**
+Modify: `learn_system/app/api/routes/sources.py`
 
-If docx-preview fidelity is insufficient for specific documents, consider implementing server-side LibreOffice PDF conversion as documented in `NEW FEATURES.md`. This would require:
-- LibreOffice installation on backend server
-- Conversion during upload pipeline
-- Storing converted PDF alongside original DOCX
-- Using existing PDFRenderer for display
+Change upload_source signature from `CurrentUser` to `ApprovedUser`:
 
+```python
+from ..auth import ApprovedUser  # Add to imports
 
-### Milestone 39: PDF Highlighting (COMPLETE)
+# Change:
+async def upload_source(current_user: CurrentUser, ...):
+# To:
+async def upload_source(current_user: ApprovedUser, ...):
+```
 
-At the end of this milestone, users can highlight text in PDFs and see those highlights persist across sessions.
+Verification: Non-approved user upload returns 403. Approved user upload succeeds.
 
-**The Problem:**
+**M47 Phase 4: Admin API Endpoints**
 
-PDF highlighting is not implemented. The UI exists (SelectionTooltip, useTextSelection, useAnnotations), highlights save to database, but:
-1. `ReaderContent.jsx` does NOT pass `highlights` prop to `PDFRenderer`
-2. `PDFRenderer.jsx` has NO highlight rendering logic
-3. Offset-based positioning is incompatible with PDF's multi-page structure
+New file: `learn_system/app/api/routes/admin.py`
 
-**The Solution:**
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/admin/check-admin` | GET | CurrentUser | Returns `{is_admin: bool}` |
+| `/api/admin/approved-users` | GET | AdminUser | List all approved users |
+| `/api/admin/approved-users` | POST | AdminUser | Add approved user `{email, notes?}` |
+| `/api/admin/approved-users/{email}` | DELETE | AdminUser | Remove approved user |
 
-Implement page-based highlighting with percentage coordinates. Create `PDFHighlightLayer` component that renders absolute-positioned overlays per page.
+Modify: `learn_system/app/api/server.py` - import and include admin router
 
-**Full specs:** `NEW FEATURES.md` (root directory) contains complete implementation plan with 6 phases, code examples, schema migration, and testing checklist.
+Verification: Endpoints accessible. Non-admin gets 403 on list/add/remove.
 
-**Work:**
+**M47 Phase 5: Frontend AdminRoute Guard**
 
-1. Wire up existing props (5 min) - Pass highlights to PDFRenderer in ReaderContent.jsx
-2. Database schema (10 min) - Add `position_type`, `pdf_rects` columns to annotations
-3. PDF selection capture (2 hrs) - Detect PDF pages, capture pageNumber and percentage-based pdfRect
-4. PDFRenderer updates (30 min) - Accept highlights prop, add data-page-number attributes
-5. PDFHighlightLayer (2 hrs) - Create per-page highlight overlay component
-6. useAnnotations update (1 hr) - Handle PDF position type in createHighlight
+New file: `web/src/components/auth/AdminRoute.jsx`
 
-**Verification:**
+```jsx
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
-1. Select text on page 1 of a PDF
-2. Click Highlight in tooltip
-3. Yellow highlight appears at correct position
-4. Refresh page - highlight persists
-5. Navigate to different page, return - highlight still visible
-6. Click highlight to delete - highlight removed
+const ADMIN_EMAILS = [
+    'gianmariatroiani@gmail.com',
+    'gtroiani@equilibriaconsulting.net',
+];
 
-**Known Limitations:**
+export function useIsAdmin() {
+    const { user } = useAuth();
+    return user && ADMIN_EMAILS.includes(user.email?.toLowerCase());
+}
 
-- No cross-page selection (react-pdf limitation)
-- No rotation support (deferred)
+export default function AdminRoute({ children }) {
+    const { user, loading } = useAuth();
+    const isAdmin = useIsAdmin();
 
+    if (loading) return <div>Loading...</div>;
+    if (!user) return <Navigate to="/login" replace />;
+    if (!isAdmin) return <Navigate to="/" replace />;
 
-### Milestone 40: PowerPoint Support (COMPLETE)
+    return children;
+}
+```
 
-At the end of this milestone, users can upload PowerPoint (.pptx) presentations and view them in the document reader with full visual fidelity. The system extracts text for KC generation, converts PPTX to PDF for display, and highlighting works on the converted PDF.
+Verification: Non-admin navigating to /admin redirects to home.
 
-**The Problem:**
+**M47 Phase 6: Admin Page UI**
 
-Currently, the system only supports PDF, DOCX, Markdown, and plain text documents. PowerPoint presentations are a common format for educational content but cannot be uploaded or viewed.
+New file: `web/src/pages/Admin.jsx`
 
-**The Solution:**
+- Table showing approved users (email, approved_by, approved_at, notes)
+- Form to add new approved user (email input + optional notes textarea)
+- Remove button for each row (with confirmation dialog)
+- Loading and error states
+- Uses `listApprovedUsers()`, `addApprovedUser()`, `removeApprovedUser()` from api.js
 
-Use a server-side conversion approach:
-1. **Text extraction:** python-pptx extracts text from slides, tables, and speaker notes for KC generation
-2. **PDF conversion:** LibreOffice + unoserver converts PPTX to PDF for viewing
-3. **Display:** Existing PDFRenderer displays the converted PDF
-4. **Highlighting:** Existing PDF highlighting works on converted output
+Modify: `web/src/App.jsx` - add route `/admin` wrapped in AdminRoute
+Modify: `web/src/components/layout/Sidebar.jsx` - conditionally render Admin link with Shield icon when `useIsAdmin()` returns true
 
-**CRITICAL WARNING:** Do NOT use pptx2html library. It is abandoned (8 years), has an unpatched XSS vulnerability, and lacks essential features.
+Verification: Admin sees /admin in sidebar, can view and manage users.
 
-**Full specs:** `NEW FEATURES.md` (root directory) contains complete implementation plan with code examples, architecture diagram, and testing checklist.
+**M47 Phase 7: Upload Error Handling**
 
-**Dependencies:**
+Modify: `web/src/pages/Sources.jsx` (or upload modal component)
 
-    # Backend
-    pip install python-pptx>=1.0.0
+Handle 403 response with user-friendly message:
 
-    # Docker (for unoserver)
-    docker pull libreofficedocker/libreoffice-unoserver:3.19
+```jsx
+if (error.message?.includes('not approved')) {
+    setUploadError('Your account is not approved for document uploads. Please contact an administrator.');
+} else {
+    setUploadError(error.message || 'Upload failed');
+}
+```
 
-**Work:**
+Verification: Non-approved user sees clear message, not generic error.
 
-Phase 1: Backend text extraction
-1. Add `python-pptx>=1.0.0` to `requirements.txt`
-2. Create `extract_pptx()` function in `extractors.py` that extracts:
-   - Slide titles
-   - Body text from all shapes
-   - Table content
-   - Speaker notes
-3. Add `.pptx`, `.ppt` to `ALLOWED_EXTENSIONS` in `sources.py`
-4. Update extractor dispatch table
+**M47 Phase 8: Integration Testing**
 
-Phase 2: PPTX→PDF conversion
-1. Add unoserver container to `docker-compose.yml`:
+1. **Non-approved user flow:**
+   - Create new account (not in approved_users)
+   - Login succeeds, can view existing data
+   - Upload attempt returns 403 with clear message
+   - Cannot access /admin (redirects to home)
 
-       services:
-         libreoffice:
-           image: libreofficedocker/libreoffice-unoserver:3.19
-           ports:
-             - "2004:2004"
-           restart: unless-stopped
+2. **Approved user flow:**
+   - Login as approved user
+   - Upload succeeds, LLM processing starts
+   - Cannot access /admin if not admin
 
-2. Create `learn_system/app/services/conversion.py` with `convert_pptx_to_pdf()` function
-3. Update processing pipeline to convert PPTX after text extraction
-4. Store converted PDF in Supabase Storage alongside original PPTX
+3. **Admin flow:**
+   - Login as admin email
+   - Can access /admin page
+   - Can add new approved user
+   - Can remove approved user
+   - Changes reflect immediately in database
 
-Phase 3: Database schema
-1. Create `migrations/m40_pptx_support.sql`:
+4. **Build verification:**
+   ```bash
+   cd web && npm run build  # Frontend builds without errors
+   cd ../learn_system && python -c "from app.api.auth import ApprovedUser"  # Imports work
+   ```
 
-       ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS slide_count INTEGER;
-       ALTER TABLE content_sources ADD COLUMN IF NOT EXISTS converted_pdf_path TEXT;
-       CREATE INDEX IF NOT EXISTS idx_content_sources_content_type ON content_sources(content_type);
+**Files Changed Summary:**
 
-2. Apply migration in Supabase SQL Editor
-
-Phase 4: Frontend content type detection
-1. Update `getContentType()` in `ReaderContent.jsx`:
-   - Add: `if (ext === 'pptx' || ext === 'ppt') return 'pptx'`
-   - Add MIME type check for presentation types
-2. Add PPTX case in `renderContent()` switch to use PDFRenderer with converted PDF URL
-
-Phase 5: API endpoint for converted PDF
-1. Add `/api/sources/{id}/pdf-url` endpoint in `sources.py`
-2. Return signed URL for converted PDF (stored in `converted_pdf_path`)
-3. Handle case where conversion is not complete (return 404)
-
-**Verification:**
-
-1. Upload a PPTX file with multiple slides, tables, and speaker notes
-2. Observe processing status shows extraction and conversion steps
-3. Navigate to `/reader/:sourceId`
-4. Observe:
-   - Presentation displays as PDF with all slides
-   - Slide navigation works (using existing PDF pagination)
-   - Text selection works
-   - Highlights persist across sessions
-5. Check that KCs were extracted from slide content
-6. Practice items reference presentation content correctly
-
-**Known Limitations:**
-
-- Animations/transitions lost (slides become static in PDF)
-- SmartArt text may not extract (python-pptx limitation)
-- Conversion latency 2-5 seconds per presentation
-- Legacy .ppt files may require LibreOffice conversion fallback
-
-**Fallback (if Docker unavailable):**
-
-If unoserver Docker is not available in the deployment environment:
-1. Use local LibreOffice installation: `brew install libreoffice` (macOS) or `apt install libreoffice` (Linux)
-2. Use `convert_pptx_to_pdf_local()` function with `soffice --headless --convert-to pdf`
-3. Consider PPTXjs for client-side rendering as alternative (adds ~500KB to bundle)
+| File | Change |
+|------|--------|
+| `migrations/m47_approved_users.sql` | NEW - database schema |
+| `learn_system/app/api/auth/approval.py` | NEW - approval logic |
+| `learn_system/app/api/auth/__init__.py` | MODIFY - add exports |
+| `learn_system/app/api/routes/sources.py` | MODIFY - protect upload |
+| `learn_system/app/api/routes/admin.py` | NEW - admin endpoints |
+| `learn_system/app/api/server.py` | MODIFY - add admin router |
+| `web/src/components/auth/AdminRoute.jsx` | NEW - route guard |
+| `web/src/pages/Admin.jsx` | NEW - admin page |
+| `web/src/lib/api.js` | MODIFY - add admin API functions |
+| `web/src/App.jsx` | MODIFY - add admin route |
+| `web/src/components/layout/Sidebar.jsx` | MODIFY - conditional admin link |
+| `web/src/pages/Sources.jsx` | MODIFY - 403 error handling |
 
 
 ## Web UI Reference
@@ -948,3 +928,12 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-06: M38 Complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview, text selection, highlights)
 - 2026-01-06: M39 Complete - PDF Highlighting (page-based percentage coordinates, PDFHighlightLayer component)
 - 2026-01-06: M40 Complete - PowerPoint Support (PPTX with LibreOffice conversion, python-pptx text extraction, converted PDF viewing)
+- 2026-01-06: M41-M46 Research Complete - Authentication & Multi-User (6 parallel worktrees, consolidated spec, Supabase Auth, RLS, JWT middleware, frontend auth flow, deployment strategy)
+- 2026-01-07: M41-M44 Complete - Supabase Auth config, database schema migration (user_id on 12 tables, 20 indexes), backend auth middleware (JWT validation, ownership checks), frontend auth flow (AuthContext, ProtectedRoute, login/signup/reset forms, logout)
+- 2026-01-07: M45 Complete + Auth Testing - RLS policies (46+ table + 4 storage), comprehensive auth testing validated: signup (email confirmation), login (redirect to home), protected routes (data visible), API auth (sources load), upload UI (modal works), logout (redirect to login, routes blocked)
+- 2026-01-07: M46 Complete - Data Migration & Deployment (first_user_migration.py with check_has_orphaned_data/migrate_existing_data_to_user, m46_enforce_auth.sql for NOT NULL constraints, /api/migration/status and /api/migration/trigger endpoints, CORS_ORIGINS env var support). Authentication & Multi-User feature complete (M41-M46).
+- 2026-01-07: RLS/Display Bug Fix - Removed redundant user_id filters from migration.py (lines 36, 56, 94). Full regression test passed: all pages functional, study sessions recording correctly, no regressions.
+- 2026-01-07: RLS Policy Proper Fix - Applied fix_practice_items_rls.sql via Supabase Dashboard. Updated useSources.js and Study.jsx to use direct Supabase queries instead of backend workaround. Technical debt reduced. Full study flow verified: question display, answer submission, self-assessment, next question transition.
+- 2026-01-07: API Port Fix - Fixed api.js using wrong port (8000 instead of 8001). Document reader now works correctly. Root cause found via 3 parallel research agents investigating backend, frontend, and storage/RLS.
+- 2026-01-11: M47 Spec Added - Approved Users Whitelist feature integrated into EXECPLAN. Restricts document upload to whitelisted users, admin page for management. 8 implementation phases defined.
+- 2026-01-11: M47 Complete - Approved Users Whitelist feature fully implemented and tested. Database migration (approved_users table with RLS), backend approval logic (ApprovedUser dependency), protected upload endpoint, admin API endpoints (list/add/remove), AdminRoute guard with useIsAdmin hook, Admin page UI (table, add form, remove with confirmation), 403 error handling for non-approved uploads. Integration testing verified: admin link visibility, admin page CRUD operations, upload zone access for approved users. Required `pip install email-validator` for Pydantic EmailStr validation.

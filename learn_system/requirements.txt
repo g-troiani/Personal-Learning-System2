@@ -12,3 +12,7 @@ python-multipart>=0.0.6
 groq>=0.4
 # PPTX support (M40)
 python-pptx>=1.0.0
+# Authentication (M43)
+PyJWT>=2.8.0
+requests
+cryptography>=3.4.0

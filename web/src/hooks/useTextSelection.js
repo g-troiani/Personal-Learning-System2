@@ -1,6 +1,27 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 /**
+ * Find the closest annotation container (article, pre, .docx-container) from a node.
+ * This ensures offset calculations match what AnnotationLayer uses.
+ */
+function findAnnotationContainer(node) {
+  let current = node
+  while (current && current !== document.body) {
+    if (current.nodeType === Node.ELEMENT_NODE) {
+      const element = current
+      // Check for known annotation container types
+      if (element.tagName === 'ARTICLE' ||
+          element.tagName === 'PRE' ||
+          element.classList?.contains('docx-container')) {
+        return element
+      }
+    }
+    current = current.parentNode
+  }
+  return null
+}
+
+/**
  * Custom hook to detect and manage text selection in the document reader
  *
  * Returns:
@@ -74,12 +95,63 @@ export function useTextSelection(containerRef) {
       }
     }
 
-    // Non-PDF selection - use existing offset-based logic
-    const preSelectionRange = range.cloneRange()
-    preSelectionRange.selectNodeContents(containerRef?.current || document.body)
-    preSelectionRange.setEnd(range.startContainer, range.startOffset)
-    const startOffset = preSelectionRange.toString().length
-    const endOffset = startOffset + text.length
+    // Non-PDF selection - use TreeWalker to calculate offsets
+    // This must match how AnnotationLayer calculates offsets for proper rendering
+    // Use the annotation container (article, pre, docx-container) not the outer wrapper
+    const annotationContainer = findAnnotationContainer(range.startContainer)
+    const container = annotationContainer || containerRef?.current || document.body
+    const walker = document.createTreeWalker(
+      container,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode: (node) => {
+          // Skip text nodes inside style, script, and other non-visible elements
+          // This must match the filter in AnnotationLayer
+          const parent = node.parentElement
+          if (parent) {
+            const tagName = parent.tagName?.toUpperCase()
+            if (tagName === 'STYLE' || tagName === 'SCRIPT' || tagName === 'NOSCRIPT') {
+              return NodeFilter.FILTER_REJECT
+            }
+          }
+          return NodeFilter.FILTER_ACCEPT
+        }
+      }
+    )
+
+    let currentOffset = 0
+    let startOffset = 0
+    let endOffset = 0
+    let node
+    let foundStart = false
+    let foundEnd = false
+
+    while ((node = walker.nextNode()) && !foundEnd) {
+      const nodeLength = node.textContent.length
+
+      // Check if this node contains the selection start
+      if (!foundStart && node === range.startContainer) {
+        startOffset = currentOffset + range.startOffset
+        foundStart = true
+      }
+
+      // Check if this node contains the selection end
+      if (!foundEnd && node === range.endContainer) {
+        endOffset = currentOffset + range.endOffset
+        foundEnd = true
+      }
+
+      currentOffset += nodeLength
+    }
+
+    // Fallback if we couldn't find the nodes (shouldn't happen but just in case)
+    if (!foundStart || !foundEnd) {
+      const preSelectionRange = range.cloneRange()
+      preSelectionRange.selectNodeContents(container)
+      preSelectionRange.setEnd(range.startContainer, range.startOffset)
+      startOffset = preSelectionRange.toString().length
+      endOffset = startOffset + text.length
+    }
 
     return {
       text,

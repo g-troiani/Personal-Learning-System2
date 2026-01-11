@@ -38,7 +38,7 @@ export default function NotesList({ notes = [], onCreateNote, onDeleteNote }) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-200">
+    <div className="flex flex-col h-full bg-green-50">
       {/* Header with add button */}
       <div className="p-3 border-b border-gray-300">
         {!isEditing ? (

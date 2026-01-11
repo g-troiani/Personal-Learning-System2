@@ -10,8 +10,41 @@
 
 /* Wrapper styling from docx-preview */
 .docx-container .docx-wrapper {
-  background: white;
+  background: white !important;
   min-height: 100%;
+}
+
+/* Override ALL docx-preview grey backgrounds aggressively */
+/* IMPORTANT: Exclude .annotation-highlight to preserve highlight colors */
+.docx-container .docx-wrapper,
+.docx-container .docx-wrapper *:not(.annotation-highlight),
+.docx-container .docx-wrapper > section,
+.docx-container .docx-wrapper > section > article,
+.docx-container .docx-wrapper section.docx,
+.docx-container section,
+.docx-container article {
+  background: white !important;
+  background-color: white !important;
+  box-shadow: none !important;
+}
+
+/* Annotation highlight styling - must override the white background */
+.docx-container .annotation-highlight {
+  background-color: #FFEB3B !important;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.docx-container .annotation-highlight:hover {
+  filter: brightness(0.9);
+}
+
+/* Remove page margin/gutter styling */
+.docx-container .docx-wrapper > section {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
 }
 
 /* Ensure proper paragraph spacing */

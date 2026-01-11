@@ -37,43 +37,81 @@ export default function Study() {
     try {
       setLoading(true)
 
-      // Get practice items with their KC info
-      let query = supabase
-        .from('practice_items')
-        .select('*, knowledge_components!inner(id, name, knowledge_type, source_id)')
-
-      if (sourceId) {
-        query = query.eq('knowledge_components.source_id', sourceId)
+      // Get current user for session creation
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('Not authenticated')
+        setLoading(false)
+        return
       }
 
-      const { data: practiceItems, error: itemsError } = await query.limit(20)
+      // Get KCs directly from Supabase (RLS policy fixed)
+      let kcsQuery = supabase
+        .from('knowledge_components')
+        .select('id, name, knowledge_type, source_id')
 
-      if (itemsError) throw itemsError
+      if (sourceId) {
+        kcsQuery = kcsQuery.eq('source_id', sourceId)
+      }
 
-      if (!practiceItems || practiceItems.length === 0) {
+      const { data: kcsData, error: kcsError } = await kcsQuery
+
+      if (kcsError) {
+        throw new Error('Failed to fetch knowledge components')
+      }
+
+      if (!kcsData || kcsData.length === 0) {
         setError('No items to study. Try adding some documents first!')
         setLoading(false)
         return
       }
 
+      // Get practice items for those KCs (RLS policy fixed)
+      const kcIds = kcsData.map(kc => kc.id)
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('practice_items')
+        .select('*')
+        .in('kc_id', kcIds)
+        .limit(20)
+
+      if (itemsError) {
+        throw new Error('Failed to fetch practice items')
+      }
+
+      if (!itemsData || itemsData.length === 0) {
+        setError('No practice items found. Try adding some documents first!')
+        setLoading(false)
+        return
+      }
+
+      // Attach KC info to each item
+      const kcMap = Object.fromEntries(kcsData.map(kc => [kc.id, kc]))
+      const practiceItems = itemsData.map(item => ({
+        ...item,
+        knowledge_components: kcMap[item.kc_id]
+      }))
+
       // Shuffle items for variety
       const shuffled = [...practiceItems].sort(() => Math.random() - 0.5)
       setItems(shuffled)
 
-      // Create session
-      const { data: session, error: sessionError } = await supabase
+      // Create session directly in Supabase (RLS policy allows insert with user_id)
+      const newSessionId = `sess_${Date.now().toString(36)}`
+      const { error: sessionError } = await supabase
         .from('sessions')
         .insert({
-          id: `sess_${Date.now().toString(36)}`,
+          id: newSessionId,
+          user_id: user.id,
           session_type: sourceId ? 'source_review' : 'mixed',
-          started_at: new Date().toISOString(),
+          started_at: new Date().toISOString()
         })
-        .select()
-        .single()
 
-      if (sessionError) throw sessionError
+      if (sessionError) {
+        console.error('Session creation error:', sessionError)
+        throw new Error('Failed to create study session')
+      }
 
-      setSessionId(session.id)
+      setSessionId(newSessionId)
       setSessionStartTime(Date.now())
       setItemStartTime(Date.now())
 

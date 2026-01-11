@@ -110,3 +110,27 @@ body {
 .duration-300 {
   animation-duration: 300ms;
 }
+
+/* Custom scrollbar styles for AI chat panel */
+.ai-chat-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #9CA3AF #E5E7EB;
+}
+
+.ai-chat-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.ai-chat-scrollbar::-webkit-scrollbar-track {
+  background: #E5E7EB;
+  border-radius: 4px;
+}
+
+.ai-chat-scrollbar::-webkit-scrollbar-thumb {
+  background: #9CA3AF;
+  border-radius: 4px;
+}
+
+.ai-chat-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Loader2, Bot, User, AlertCircle, Sparkles } from 'lucide-react'
+import { Send, Bot, User, AlertCircle, Sparkles } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 
 // API base URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
@@ -58,10 +59,24 @@ export default function AIChatPanel({
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      // Add placeholder for streaming response
+      const assistantMessageIndex = messages.length + 1
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '',
+        timestamp: new Date().toISOString(),
+        isStreaming: true
+      }])
+
+      const response = await fetch(`${API_BASE_URL}/api/ai/chat/stream`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
         },
         body: JSON.stringify({
           source_id: sourceId,
@@ -78,23 +93,68 @@ export default function AIChatPanel({
         throw new Error(errorData.detail || 'Failed to get AI response')
       }
 
-      const data = await response.json()
+      // Handle SSE stream
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let fullContent = ''
 
-      // Add AI response to chat
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: data.response,
-        timestamp: new Date().toISOString()
-      }])
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+
+              if (data.token) {
+                fullContent += data.token
+                // Update the streaming message
+                setMessages(prev => prev.map((msg, idx) =>
+                  idx === assistantMessageIndex
+                    ? { ...msg, content: fullContent }
+                    : msg
+                ))
+              } else if (data.done) {
+                // Mark streaming as complete
+                setMessages(prev => prev.map((msg, idx) =>
+                  idx === assistantMessageIndex
+                    ? { ...msg, isStreaming: false }
+                    : msg
+                ))
+              } else if (data.error) {
+                throw new Error(data.error)
+              }
+            } catch (parseError) {
+              // Skip invalid JSON lines
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error('AI chat error:', err)
       setError(err.message || 'Failed to get AI response')
-      // Add error message to chat
-      setMessages(prev => [...prev, {
-        role: 'error',
-        content: err.message || 'Failed to get AI response',
-        timestamp: new Date().toISOString()
-      }])
+      // Replace streaming placeholder with error or add error message
+      setMessages(prev => {
+        const lastMsg = prev[prev.length - 1]
+        if (lastMsg?.isStreaming) {
+          // Replace placeholder with error
+          return prev.slice(0, -1).concat({
+            role: 'error',
+            content: err.message || 'Failed to get AI response',
+            timestamp: new Date().toISOString()
+          })
+        }
+        // Add error message
+        return [...prev, {
+          role: 'error',
+          content: err.message || 'Failed to get AI response',
+          timestamp: new Date().toISOString()
+        }]
+      })
     } finally {
       setIsLoading(false)
     }
@@ -107,14 +167,14 @@ export default function AIChatPanel({
   ]
 
   return (
-    <div className="flex flex-col h-full bg-gray-200">
+    <div className="flex flex-col h-full bg-green-50">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 ai-chat-scrollbar">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500 px-4">
             <Sparkles className="w-8 h-8 mb-3 opacity-50" />
-            <p className="text-sm text-center font-medium">Ask AI about this document</p>
-            <p className="text-xs text-center mt-1 text-gray-400">
+            <p className="text-base text-center font-medium">Ask AI about this document</p>
+            <p className="text-sm text-center mt-1 text-gray-400">
               Get explanations, summaries, or answers to your questions
             </p>
 
@@ -124,7 +184,7 @@ export default function AIChatPanel({
                 <button
                   key={idx}
                   onClick={() => setInput(question)}
-                  className="w-full text-left px-3 py-2 text-xs text-gray-500 hover:text-gray-700 bg-white hover:bg-gray-100 rounded-lg transition-colors border border-gray-300"
+                  className="w-full text-left px-3 py-2 text-sm text-gray-500 hover:text-gray-700 bg-white hover:bg-gray-100 rounded-lg transition-colors border border-gray-300"
                 >
                   {question}
                 </button>
@@ -151,7 +211,7 @@ export default function AIChatPanel({
                   </div>
                 )}
                 <div
-                  className={`max-w-[85%] px-3 py-2 rounded-lg text-sm ${
+                  className={`max-w-[85%] px-3 py-2 rounded-lg text-base ${
                     message.role === 'user'
                       ? 'bg-teal-600 text-white'
                       : message.role === 'error'
@@ -159,7 +219,12 @@ export default function AIChatPanel({
                       : 'bg-white text-gray-700 border border-gray-300'
                   }`}
                 >
-                  <p className="whitespace-pre-wrap">{message.content}</p>
+                  <p className="whitespace-pre-wrap">
+                    {message.content}
+                    {message.isStreaming && (
+                      <span className="inline-block w-2 h-4 ml-0.5 bg-teal-600 animate-pulse" />
+                    )}
+                  </p>
                 </div>
                 {message.role === 'user' && (
                   <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center flex-shrink-0">
@@ -169,41 +234,35 @@ export default function AIChatPanel({
               </div>
             ))}
 
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="flex gap-2 justify-start">
-                <div className="w-6 h-6 rounded-full bg-teal-100 flex items-center justify-center">
-                  <Bot className="w-3.5 h-3.5 text-teal-600" />
-                </div>
-                <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg">
-                  <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
-                </div>
-              </div>
-            )}
-
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
 
       {/* Input area */}
-      <form onSubmit={handleSubmit} className="p-3 border-t border-gray-300">
-        <div className="flex gap-2">
-          <input
+      <form onSubmit={handleSubmit} className="p-3 border-t border-teal-200">
+        <div className="flex gap-2 items-end">
+          <textarea
             ref={inputRef}
-            type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question..."
-            className="flex-1 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:border-teal-500 focus:outline-none"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && input.trim() && !isLoading) {
+                e.preventDefault()
+                handleSubmit(e)
+              }
+            }}
+            placeholder="Ask a question... (Enter to send, Shift+Enter for new line)"
+            rows={6}
+            className="flex-1 px-3 py-2 text-base bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:border-teal-500 focus:outline-none resize-none"
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="px-3 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-3 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed self-end"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-5 h-5" />
           </button>
         </div>
       </form>

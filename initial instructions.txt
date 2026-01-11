@@ -68,7 +68,7 @@ contradicting and the user journey makes sense. so until the task is successful 
   9) # RESEARCH FOR NEW FEATURE
   Let's do some research. Do not change anything in the code for now, just output the crisp and distilled fruit of the research in NEW FEATURES.md. 
   In the future, this research and specs will be then integrated in EXECPLAN.md. 
-  Spin up 5 git work trees to research how to best implement the SOURCES view as right now it just contains a placeholder. 
+  Spin up 10 git work trees to research how to best implement the SOURCES view as right now it just contains a placeholder. 
   Then, integrate the result of each research in the context of building a view that is cohesive with the rest of the system that is built so far.
   What are the UI considerations? How the logic should work? And just general engineering and design consideration to
   implement the sources tab. What would be required to upload something? How would it translate from upload to practice
@@ -84,15 +84,14 @@ contradicting and the user journey makes sense. so until the task is successful 
 
 
 
-
-
-
-
+#####################################################
 
 
  10)   # REVIEW & CLEANING EXECPLAN.md
-  Review the additions to EXECPLAN.md. Also, make sure we don't keep in EXECPLAN.md outdated or superfloud information to make
-  the document crisp. Consider if the information is still active content 
+Review the additions to EXECPLAN.md. Also, make sure we don't keep in EXECPLAN.md outdated or superfloud information to make the document crisp. 
+It's imperative you don't not delete the operational policy, guidance or instructions. Update the memory when appropriate and move operational policies out of milestones if necessary. 
+Before you are done, check you didn't delete any section that was used as operational guidance or instructions (eg MEMORY ACCESS PROTOCOLS, Slim EXECPLAN to Active Content Only. etc). 
+Check you didn't delete any section that was used as operational guidance or instructions even if you think you don't need to.
 
 
 
@@ -205,7 +204,7 @@ RESEARCH_TARGET that matches the architecture and conventions already present in
 
 
 
-# IMPROVE THE PROMPT 
+# IMPROVE A PROMPT FOR A TARGET FEATURE
 step 1) 
 consider this prompt : 
 
@@ -256,3 +255,12 @@ before starting practice questions, treating it as a study phase before assessme
  refer back to the original material at any point during practice. Think of it as separating the workflow into: upload → read/study → practice, with the source always one click away for reference. Leverage the research provided in RESEARCH DONE." 
 
  RESEARCH DONE = @ALPHAXIV RESEARCH.docx
+
+
+
+
+ STEPS: 
+ 1 - review & clean EXECPLAN.md
+ 2 - Research feature
+ 3 - implement feature in execplan
+ 4 - implement execplan

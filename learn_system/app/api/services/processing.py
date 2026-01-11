@@ -9,7 +9,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Optional, Dict, Any, Callable
 
-from ...database.connection import get_client
+from ...database.connection import get_client, get_user_client
 from ...database.queries import generate_id
 from ...ingestion.extractors import extract_text, get_file_metadata
 from ...ingestion.kc_extractor import extract_and_store_kcs
@@ -223,21 +223,33 @@ class ProcessingPipeline:
         return result
 
 
-def create_pending_source(filename: str, domain: str = "general") -> str:
+def create_pending_source(
+    filename: str,
+    domain: str = "general",
+    user_id: Optional[str] = None,
+    access_token: Optional[str] = None
+) -> str:
     """
     Create a pending source entry in the database.
 
     Args:
         filename: Original filename
         domain: Knowledge domain
+        user_id: Optional user UUID for ownership
+        access_token: User's JWT access token (required if user_id is set, for RLS)
 
     Returns:
         source_id: The created source ID
     """
     source_id = generate_id("src")
-    client = get_client()
 
-    client.table("content_sources").insert({
+    # Use user-authenticated client if we have a token (required for RLS)
+    if access_token:
+        client = get_user_client(access_token)
+    else:
+        client = get_client()
+
+    insert_data = {
         "id": source_id,
         "title": filename,
         "content": "",  # Will be filled during processing
@@ -247,7 +259,13 @@ def create_pending_source(filename: str, domain: str = "general") -> str:
         "processing_progress": 0,
         "processing_step": "Waiting to process...",
         "ingested_at": datetime.utcnow().isoformat()
-    }).execute()
+    }
+
+    # Add user_id if provided
+    if user_id:
+        insert_data["user_id"] = user_id
+
+    client.table("content_sources").insert(insert_data).execute()
 
     return source_id
 

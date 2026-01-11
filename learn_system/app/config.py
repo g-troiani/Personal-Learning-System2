@@ -14,7 +14,11 @@ load_dotenv(env_path)
 
 # Database configuration (Supabase)
 SUPABASE_URL: str = os.getenv('SUPABASE_URL', '')
-SUPABASE_KEY: str = os.getenv('SUPABASE_KEY', '')
+# Use legacy JWT service_role key for backend (bypasses RLS - backend validates JWT separately)
+# Priority: Legacy JWT key > new secret key > anon key
+SUPABASE_KEY: str = os.getenv('SUPABASE_SERVICE_ROLE_JWT',
+                              os.getenv('SUPABASE_SERVICE_ROLE_KEY',
+                                       os.getenv('SUPABASE_KEY', '')))
 
 # LLM configuration
 # Claude for high-reasoning tasks (KC extraction)
@@ -41,10 +45,13 @@ def get_supabase_url() -> str:
 
 
 def get_supabase_key() -> str:
-    """Returns Supabase API key."""
-    key = os.getenv('SUPABASE_KEY', SUPABASE_KEY)
-    if not key:
-        raise ValueError("SUPABASE_KEY environment variable is not set")
+    """Returns Supabase API key (service role for backend to bypass RLS)."""
+    # Priority: service role JWT > service role key > anon key
+    key = os.getenv('SUPABASE_SERVICE_ROLE_JWT') or \
+          os.getenv('SUPABASE_SERVICE_ROLE_KEY') or \
+          os.getenv('SUPABASE_KEY', '')
+    if not key or key.startswith('PASTE_'):
+        raise ValueError("SUPABASE_SERVICE_ROLE_KEY environment variable is not set")
     return key
 
 

@@ -71,7 +71,7 @@ export default function KCsPanel({ sourceId }) {
   const typeColors = {
     factual: 'text-blue-600 bg-blue-100',
     conceptual: 'text-purple-600 bg-purple-100',
-    procedural: 'text-green-600 bg-green-100',
+    procedural: 'text-green-600 bg-green-50',
     metacognitive: 'text-amber-600 bg-amber-100',
     other: 'text-gray-600 bg-gray-200'
   }
@@ -106,7 +106,7 @@ export default function KCsPanel({ sourceId }) {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-gray-200">
+    <div className="h-full overflow-y-auto bg-green-50">
       <div className="p-3">
         {/* Summary */}
         <div className="mb-4 p-2 bg-white rounded-lg border border-gray-300">

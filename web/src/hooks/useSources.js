@@ -43,12 +43,14 @@ export function useSources() {
 
       if (kcsError) throw kcsError
 
-      // Fetch practice items
+      // Fetch practice items directly (RLS policy fixed to allow user_id = auth.uid() OR user_id IS NULL)
       const { data: itemsData, error: itemsError } = await supabase
         .from('practice_items')
         .select('id, kc_id')
 
-      if (itemsError) throw itemsError
+      if (itemsError) {
+        console.error('Failed to fetch practice items:', itemsError)
+      }
 
       // Fetch KC states
       const { data: statesData, error: statesError } = await supabase

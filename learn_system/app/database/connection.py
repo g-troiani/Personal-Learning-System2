@@ -4,6 +4,7 @@ from typing import Optional
 from supabase import create_client, Client
 from pathlib import Path
 from ..config import get_supabase_url, get_supabase_key
+import os
 
 _client: Optional[Client] = None
 
@@ -14,6 +15,33 @@ def get_client() -> Client:
     if _client is None:
         _client = create_client(get_supabase_url(), get_supabase_key())
     return _client
+
+
+def get_user_client(access_token: str) -> Client:
+    """
+    Create a Supabase client authenticated as a specific user.
+
+    This is needed for operations that must pass RLS policies that check auth.uid().
+    The client uses the anon key but sets the user's access token in the Authorization header.
+
+    Args:
+        access_token: The user's JWT access token
+
+    Returns:
+        Supabase client authenticated as the user
+    """
+    url = get_supabase_url()
+    # Use anon key (publishable key) - the access token provides user context for RLS
+    anon_key = os.getenv('VITE_SUPABASE_PUBLISHABLE_KEY', os.getenv('SUPABASE_KEY', ''))
+
+    # Create a new client and set the user's access token
+    client = create_client(url, anon_key)
+
+    # Set the access token for this client's postgrest requests
+    # This makes auth.uid() return the user's ID in RLS policies
+    client.postgrest.auth(access_token)
+
+    return client
 
 
 def init_database() -> bool:

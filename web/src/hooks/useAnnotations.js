@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSupabase } from '../contexts/SupabaseContext'
+import { useAuth } from '../contexts/AuthContext'
 
 /**
  * Custom hook to manage annotations (highlights, notes) for a document
@@ -12,6 +13,7 @@ import { useSupabase } from '../contexts/SupabaseContext'
  */
 export function useAnnotations(sourceId) {
   const { supabase } = useSupabase()
+  const { user } = useAuth()
   const [annotations, setAnnotations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -117,10 +119,11 @@ export function useAnnotations(sourceId) {
 
   // Create a new highlight annotation
   const createHighlight = useCallback(async (selection, color = '#FFEB3B') => {
-    if (!sourceId || !supabase || !selection) return null
+    if (!sourceId || !supabase || !selection || !user) return null
 
     const newAnnotation = {
       source_id: sourceId,
+      user_id: user.id,
       annotation_type: 'highlight',
       selected_text: selection.text.substring(0, 500), // Limit text length
       color
@@ -164,14 +167,15 @@ export function useAnnotations(sourceId) {
       setError(err.message)
       return null
     }
-  }, [sourceId, supabase, sortAnnotations])
+  }, [sourceId, supabase, user, sortAnnotations])
 
   // Create a note annotation
   const createNote = useCallback(async (selection, noteText) => {
-    if (!sourceId || !supabase) return null
+    if (!sourceId || !supabase || !user) return null
 
     const newAnnotation = {
       source_id: sourceId,
+      user_id: user.id,
       annotation_type: 'note',
       start_offset: selection?.startOffset || 0,
       end_offset: selection?.endOffset || 0,
@@ -195,7 +199,7 @@ export function useAnnotations(sourceId) {
       setError(err.message)
       return null
     }
-  }, [sourceId, supabase, sortAnnotations])
+  }, [sourceId, supabase, user, sortAnnotations])
 
   // Update an annotation (color or note text)
   const updateAnnotation = useCallback(async (annotationId, updates) => {

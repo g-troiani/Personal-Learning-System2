@@ -1,7 +1,12 @@
-import { useState, useEffect, useRef, memo } from 'react'
+import { useState, useEffect, useRef, memo, useCallback } from 'react'
 import { renderAsync } from 'docx-preview'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ZoomIn, ZoomOut } from 'lucide-react'
 import AnnotationLayer from './AnnotationLayer'
+
+// Zoom levels
+const ZOOM_STEP = 0.1
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 2.0
 
 // Import DOCX-specific styles
 import '../../styles/docx.css'
@@ -25,6 +30,20 @@ const DOCXRenderer = memo(function DOCXRenderer({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [rendered, setRendered] = useState(false)
+  const [zoom, setZoom] = useState(1.0)
+
+  // Zoom handlers
+  const handleZoomIn = useCallback(() => {
+    setZoom(prev => Math.min(prev + ZOOM_STEP, MAX_ZOOM))
+  }, [])
+
+  const handleZoomOut = useCallback(() => {
+    setZoom(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM))
+  }, [])
+
+  const handleZoomReset = useCallback(() => {
+    setZoom(1.0)
+  }, [])
 
   useEffect(() => {
     if (!fileUrl) {
@@ -54,13 +73,15 @@ const DOCXRenderer = memo(function DOCXRenderer({
         containerRef.current.innerHTML = ''
 
         await renderAsync(arrayBuffer, containerRef.current, containerRef.current, {
-          inWrapper: true,
+          inWrapper: false,
           ignoreWidth: false,
           ignoreHeight: false,
           ignoreFonts: false,
           breakPages: false,
           useBase64URL: true,
-          className: 'docx-wrapper'
+          className: 'docx-wrapper',
+          renderHeaders: false,
+          renderFooters: false
         })
 
         if (cancelled) return
@@ -99,32 +120,65 @@ const DOCXRenderer = memo(function DOCXRenderer({
   }
 
   return (
-    <div className="h-full overflow-auto bg-gray-100 relative">
-      {/* Loading overlay - shown on top while rendering */}
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
-          <div className="flex flex-col items-center gap-3 text-gray-400">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <span>Rendering document...</span>
-          </div>
+    <div className="h-full flex flex-col bg-blue-50">
+      {/* Zoom controls - fixed toolbar above content */}
+      <div className="flex-shrink-0 flex justify-center py-2 bg-blue-50">
+        <div className="flex items-center gap-1 bg-white rounded-lg shadow-md border border-gray-200 px-2 py-1">
+          <button
+            onClick={handleZoomOut}
+            disabled={zoom <= MIN_ZOOM}
+            className="p-1.5 rounded hover:bg-gray-100 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title="Zoom out"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleZoomReset}
+            className="px-2 py-1 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded min-w-[60px] transition-colors"
+            title="Reset zoom"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            onClick={handleZoomIn}
+            disabled={zoom >= MAX_ZOOM}
+            className="p-1.5 rounded hover:bg-gray-100 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title="Zoom in"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
         </div>
-      )}
-
-      <div className="flex justify-center py-6 px-4">
-        <div
-          ref={containerRef}
-          className="docx-container bg-white shadow-lg rounded-lg max-w-4xl w-full"
-        />
       </div>
 
-      {/* Annotation layer for highlights - only render after DOCX is loaded */}
-      {rendered && contentRef.current && (
-        <AnnotationLayer
-          highlights={highlights}
-          containerRef={contentRef}
-          onDeleteHighlight={onDeleteHighlight}
-        />
-      )}
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-auto relative">
+        {/* Loading overlay - shown on top while rendering */}
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-blue-50 z-10">
+            <div className="flex flex-col items-center gap-3 text-gray-400">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span>Rendering document...</span>
+            </div>
+          </div>
+        )}
+
+          <div className="flex justify-center py-6 px-4">
+          <div
+            ref={containerRef}
+            className="docx-container bg-white max-w-4xl w-full origin-top transition-transform duration-150"
+            style={{ transform: `scale(${zoom})` }}
+          />
+        </div>
+
+        {/* Annotation layer for highlights - only render after DOCX is loaded */}
+        {rendered && contentRef.current && (
+          <AnnotationLayer
+            highlights={highlights}
+            containerRef={contentRef}
+            onDeleteHighlight={onDeleteHighlight}
+          />
+        )}
+      </div>
     </div>
   )
 })

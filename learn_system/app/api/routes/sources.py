@@ -24,7 +24,9 @@ from ..services.processing import (
     retry_processing,
     delete_source
 )
-from ...database.connection import get_client
+from ..auth import CurrentUser, ApprovedUser
+from ..auth.ownership import verify_source_ownership
+from ...database.connection import get_client, get_user_client
 
 
 # Response models for new endpoints
@@ -69,16 +71,27 @@ def validate_file(file: UploadFile) -> Optional[str]:
     return None
 
 
-async def process_document_background(source_id: str, file_path: str, domain: str):
-    """Background task to process the uploaded document."""
-    pipeline = ProcessingPipeline(source_id)
-    pipeline.process_file(file_path, domain)
+def process_document_background(source_id: str, file_path: str, domain: str):
+    """Background task to process the uploaded document.
 
-    # Clean up temp file
+    Note: This is a synchronous function (not async) so FastAPI runs it
+    in a thread pool, which is appropriate for blocking I/O operations.
+    """
     try:
-        os.remove(file_path)
-    except Exception:
-        pass
+        print(f"[Background] Starting processing for {source_id}")
+        pipeline = ProcessingPipeline(source_id)
+        result = pipeline.process_file(file_path, domain)
+        print(f"[Background] Completed processing for {source_id}: {result}")
+    except Exception as e:
+        print(f"[Background] ERROR processing {source_id}: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Clean up temp file
+        try:
+            os.remove(file_path)
+        except Exception:
+            pass
 
 
 def upload_to_storage(source_id: str, content: bytes, filename: str) -> str:
@@ -109,6 +122,7 @@ def upload_to_storage(source_id: str, content: bytes, filename: str) -> str:
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_source(
+    current_user: ApprovedUser,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     domain: str = Form(default="general")
@@ -119,7 +133,10 @@ async def upload_source(
     The document will be processed in the background. Use the status endpoint
     to check processing progress. File is stored in Supabase Storage for later viewing.
 
+    Requires approved user status (403 Forbidden if not approved).
+
     Args:
+        current_user: Approved user (from JWT + approval check)
         file: The document file to upload
         domain: Knowledge domain for categorization (default: general)
 
@@ -147,15 +164,20 @@ async def upload_source(
     original_filename = file.filename or "untitled"
     mime_type = mimetypes.guess_type(original_filename)[0] or "application/octet-stream"
 
-    # Create pending source entry
-    source_id = create_pending_source(original_filename, domain)
+    # Create pending source entry with user_id and access token for RLS
+    source_id = create_pending_source(
+        original_filename,
+        domain,
+        user_id=current_user.id,
+        access_token=current_user.access_token
+    )
 
     # Upload to Supabase Storage
     try:
         storage_path = upload_to_storage(source_id, content, original_filename)
 
-        # Update source with storage metadata
-        db_client = get_client()
+        # Update source with storage metadata (use user client for RLS)
+        db_client = get_user_client(current_user.access_token)
         db_client.table("content_sources").update({
             "storage_path": storage_path,
             "original_filename": original_filename,
@@ -185,16 +207,18 @@ async def upload_source(
 
 
 @router.get("/{source_id}/status", response_model=ProcessingStatusResponse)
-async def get_status(source_id: str):
+async def get_status(source_id: str, current_user: CurrentUser):
     """
     Get the processing status of a source.
 
     Args:
         source_id: The source ID to check
+        current_user: Authenticated user (from JWT)
 
     Returns:
         ProcessingStatusResponse with current status and progress
     """
+    verify_source_ownership(source_id, current_user)
     status = get_source_status(source_id)
 
     if not status:
@@ -253,7 +277,7 @@ async def reprocess_from_storage(source_id: str, storage_path: str, domain: str)
 
 
 @router.post("/{source_id}/retry", response_model=RetryResponse)
-async def retry_source(source_id: str, background_tasks: BackgroundTasks):
+async def retry_source(source_id: str, current_user: CurrentUser, background_tasks: BackgroundTasks):
     """
     Retry processing for a failed source.
 
@@ -261,10 +285,12 @@ async def retry_source(source_id: str, background_tasks: BackgroundTasks):
 
     Args:
         source_id: The source ID to retry
+        current_user: Authenticated user (from JWT)
 
     Returns:
         RetryResponse with new status
     """
+    verify_source_ownership(source_id, current_user)
     client = get_client()
 
     # Get source info including storage path
@@ -307,7 +333,7 @@ async def retry_source(source_id: str, background_tasks: BackgroundTasks):
 
 
 @router.delete("/{source_id}", response_model=DeleteResponse)
-async def delete_source_endpoint(source_id: str):
+async def delete_source_endpoint(source_id: str, current_user: CurrentUser):
     """
     Delete a source and all its associated data.
 
@@ -320,10 +346,12 @@ async def delete_source_endpoint(source_id: str):
 
     Args:
         source_id: The source ID to delete
+        current_user: Authenticated user (from JWT)
 
     Returns:
         DeleteResponse with success status
     """
+    verify_source_ownership(source_id, current_user)
     status = get_source_status(source_id)
 
     if not status:
@@ -341,17 +369,19 @@ async def delete_source_endpoint(source_id: str):
 
 
 @router.get("/{source_id}/file-url", response_model=FileUrlResponse)
-async def get_file_url(source_id: str, expires_in: int = 3600):
+async def get_file_url(source_id: str, current_user: CurrentUser, expires_in: int = 3600):
     """
     Get a signed URL for accessing the source document.
 
     Args:
         source_id: The source ID
+        current_user: Authenticated user (from JWT)
         expires_in: URL expiry time in seconds (default: 3600 = 1 hour)
 
     Returns:
         FileUrlResponse with signed URL
     """
+    verify_source_ownership(source_id, current_user)
     client = get_client()
 
     # Get storage path from source
@@ -387,17 +417,19 @@ class ConvertedPdfUrlResponse(BaseModel):
 
 
 @router.get("/{source_id}/pdf-url", response_model=ConvertedPdfUrlResponse)
-async def get_converted_pdf_url(source_id: str, expires_in: int = 3600):
+async def get_converted_pdf_url(source_id: str, current_user: CurrentUser, expires_in: int = 3600):
     """
     Get a signed URL for the converted PDF (for PPTX sources).
 
     Args:
         source_id: The source ID
+        current_user: Authenticated user (from JWT)
         expires_in: URL expiry time in seconds (default: 3600)
 
     Returns:
         ConvertedPdfUrlResponse with signed URL
     """
+    verify_source_ownership(source_id, current_user)
     client = get_client()
 
     result = client.table("content_sources").select(
@@ -427,16 +459,18 @@ async def get_converted_pdf_url(source_id: str, expires_in: int = 3600):
 
 
 @router.get("/{source_id}/sections", response_model=SectionsResponse)
-async def get_sections(source_id: str):
+async def get_sections(source_id: str, current_user: CurrentUser):
     """
     Get the table of contents (document sections) for a source.
 
     Args:
         source_id: The source ID
+        current_user: Authenticated user (from JWT)
 
     Returns:
         SectionsResponse with list of sections
     """
+    verify_source_ownership(source_id, current_user)
     client = get_client()
 
     # Verify source exists
@@ -465,7 +499,7 @@ async def get_sections(source_id: str):
 
 
 @router.get("/{source_id}/content", response_model=ContentResponse)
-async def get_content(source_id: str):
+async def get_content(source_id: str, current_user: CurrentUser):
     """
     Get the extracted text content for a source.
 
@@ -474,10 +508,12 @@ async def get_content(source_id: str):
 
     Args:
         source_id: The source ID
+        current_user: Authenticated user (from JWT)
 
     Returns:
         ContentResponse with the extracted text content
     """
+    verify_source_ownership(source_id, current_user)
     client = get_client()
 
     # Get content from source

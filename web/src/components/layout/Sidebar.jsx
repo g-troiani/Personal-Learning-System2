@@ -8,10 +8,14 @@ import {
   BarChart2,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LogOut,
+  Shield
 } from 'lucide-react'
 import { useSupabase } from '../../contexts/SupabaseContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useDocumentSections } from '../../hooks/useDocumentSections'
+import { useIsAdmin } from '../auth/AdminRoute'
 import TableOfContentsSection from '../reader/TableOfContentsSection'
 
 // Emoji mapping for sources (can be customized per source)
@@ -38,8 +42,21 @@ function getSourceEmoji(title) {
 
 export default function Sidebar({ collapsed, onToggle }) {
   const { getRecentSources, getDueCounts, sources } = useSupabase()
+  const { user, signOut } = useAuth()
+  const isAdmin = useIsAdmin()
   const [recentSources, setRecentSources] = useState([])
   const [dueCount, setDueCount] = useState(0)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  // Get user display info
+  const userEmail = user?.email || 'User'
+  const userInitial = userEmail.charAt(0).toUpperCase()
+
+  const handleSignOut = async () => {
+    setIsLoggingOut(true)
+    await signOut()
+    // Redirect happens automatically via AuthContext
+  }
 
   // Detect if we're on the document reader route
   const location = useLocation()
@@ -71,11 +88,13 @@ export default function Sidebar({ collapsed, onToggle }) {
     { to: '/sources', icon: BookOpen, label: 'Sources' },
     { to: '/progress', icon: BarChart2, label: 'Progress' },
     { to: '/analytics', icon: Settings, label: 'Analytics' },
+    // Admin link (only shown for admin users)
+    ...(isAdmin ? [{ to: '/admin', icon: Shield, label: 'Admin' }] : []),
   ]
 
   return (
     <aside
-      className={`h-screen bg-bg-sidebar flex flex-col border-r border-bg-card-border fixed left-0 top-0 transition-all duration-300 ${
+      className={`h-screen bg-amber-50 flex flex-col border-r border-bg-card-border fixed left-0 top-0 transition-all duration-300 ${
         collapsed ? 'w-sidebar-collapsed' : 'w-sidebar'
       }`}
     >
@@ -101,7 +120,7 @@ export default function Sidebar({ collapsed, onToggle }) {
               <NavLink
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  `flex items-center gap-3 py-2.5 rounded-lg text-base transition-colors ${
                     collapsed ? 'justify-center px-2' : 'px-3'
                   } ${
                     isActive
@@ -121,7 +140,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                   <>
                     <span className="flex-1">{item.label}</span>
                     {item.badge > 0 && (
-                      <span className="bg-accent-alert text-white text-xs font-medium px-2 py-0.5 rounded-full">
+                      <span className="bg-accent-alert text-white text-sm font-medium px-2 py-0.5 rounded-full">
                         {item.badge}
                       </span>
                     )}
@@ -135,7 +154,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         {/* Recent Section - only show when expanded */}
         {!collapsed && recentSources.length > 0 && (
           <div className="mt-8">
-            <h3 className="px-3 text-xs font-medium text-text-muted uppercase tracking-wider mb-2">
+            <h3 className="px-3 text-sm font-medium text-text-muted uppercase tracking-wider mb-2">
               Recent
             </h3>
             <ul className="space-y-1">
@@ -143,7 +162,7 @@ export default function Sidebar({ collapsed, onToggle }) {
                 <li key={source.id}>
                   <NavLink
                     to={`/reader/${source.id}`}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:bg-btn-secondary/50 rounded-lg transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 text-base text-text-secondary hover:bg-btn-secondary/50 rounded-lg transition-colors"
                   >
                     <span>{getSourceEmoji(source.title)}</span>
                     <span className="truncate">{source.title}</span>
@@ -163,16 +182,37 @@ export default function Sidebar({ collapsed, onToggle }) {
       {/* User Profile */}
       <div className="p-4 border-t border-bg-card-border">
         <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
-          <div className="w-9 h-9 rounded-full bg-text-muted/20 flex items-center justify-center text-text-secondary font-medium">
-            G
+          <div className="w-9 h-9 rounded-full bg-accent-primary/20 flex items-center justify-center text-accent-primary font-medium">
+            {userInitial}
           </div>
           {!collapsed && (
-            <div>
-              <div className="text-sm font-medium text-text-primary">Gian</div>
-              <div className="text-xs text-text-muted">Pro plan</div>
-            </div>
+            <>
+              <div className="flex-1 min-w-0">
+                <div className="text-base font-medium text-text-primary truncate">
+                  {userEmail}
+                </div>
+              </div>
+              <button
+                onClick={handleSignOut}
+                disabled={isLoggingOut}
+                className="p-1.5 rounded-lg hover:bg-btn-secondary text-text-secondary hover:text-accent-alert transition-colors"
+                title="Sign out"
+              >
+                <LogOut size={18} />
+              </button>
+            </>
           )}
         </div>
+        {collapsed && (
+          <button
+            onClick={handleSignOut}
+            disabled={isLoggingOut}
+            className="mt-2 w-full p-1.5 rounded-lg hover:bg-btn-secondary text-text-secondary hover:text-accent-alert transition-colors flex justify-center"
+            title="Sign out"
+          >
+            <LogOut size={18} />
+          </button>
+        )}
       </div>
     </aside>
   )

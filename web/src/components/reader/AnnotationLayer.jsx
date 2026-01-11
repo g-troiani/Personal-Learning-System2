@@ -24,9 +24,9 @@ export default function AnnotationLayer({
 
   // Apply highlights to the document
   const applyHighlights = useCallback(() => {
-    if (!containerRef?.current || highlights.length === 0) return
+    if (!containerRef?.current) return
 
-    // Remove existing highlights first
+    // Remove existing highlights first (must always run, even if highlights is empty)
     const existingHighlights = containerRef.current.querySelectorAll('.annotation-highlight')
     existingHighlights.forEach(el => {
       const parent = el.parentNode
@@ -36,12 +36,26 @@ export default function AnnotationLayer({
       parent.removeChild(el)
     })
 
-    // Get all text nodes in the container
+    // If no highlights, we're done after removing existing ones
+    if (highlights.length === 0) return
+
+    // Get all text nodes in the container, excluding non-visible elements like <style> and <script>
     const walker = document.createTreeWalker(
       containerRef.current,
       NodeFilter.SHOW_TEXT,
-      null,
-      false
+      {
+        acceptNode: (node) => {
+          // Skip text nodes inside style, script, and other non-visible elements
+          const parent = node.parentElement
+          if (parent) {
+            const tagName = parent.tagName?.toUpperCase()
+            if (tagName === 'STYLE' || tagName === 'SCRIPT' || tagName === 'NOSCRIPT') {
+              return NodeFilter.FILTER_REJECT
+            }
+          }
+          return NodeFilter.FILTER_ACCEPT
+        }
+      }
     )
 
     const textNodes = []
@@ -80,9 +94,20 @@ export default function AnnotationLayer({
 
           const span = document.createElement('span')
           span.className = 'annotation-highlight cursor-pointer transition-all hover:brightness-90'
-          span.style.backgroundColor = color || '#FFEB3B'
-          span.style.borderRadius = '2px'
           span.dataset.annotationId = id
+          // Use cssText to set all styles including inherit for text formatting
+          // This ensures bold, italic, underline, etc. are preserved
+          span.style.cssText = `
+            background-color: ${color || '#FFEB3B'};
+            border-radius: 2px;
+            font-weight: inherit;
+            font-style: inherit;
+            text-decoration: inherit;
+            font-family: inherit;
+            font-size: inherit;
+            color: inherit;
+            line-height: inherit;
+          `
 
           // Click handler to show delete option
           span.addEventListener('click', (e) => {

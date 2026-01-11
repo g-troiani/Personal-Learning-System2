@@ -12,6 +12,7 @@ export default {
         // Background colors
         'bg-main': '#FAF9F7',
         'bg-sidebar': '#F5F4F2',
+        'bg-ai-panel': '#D4EDDA',
         'bg-card': '#FFFFFF',
         'bg-card-border': '#E5E4E2',
 
@@ -39,7 +40,7 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       spacing: {
-        'sidebar': '240px',
+        'sidebar': '300px',
         'sidebar-collapsed': '64px',
       },
       borderRadius: {
