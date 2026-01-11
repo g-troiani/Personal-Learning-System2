@@ -20,6 +20,7 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Upload/processing → `.claude/memory/milestones/sources_feature.md`
    - Performance issues → `.claude/memory/milestones/speed_optimization.md`
    - Document Reader (M30-M40) → `.claude/memory/milestones/document_reader.md`
+   - Auth/RLS/Admin (M41-M47) → `.claude/memory/milestones/auth_multiuser.md`
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
 
@@ -55,6 +56,8 @@ The system solves five problems. First, it eliminates the "I don't know what I d
 **PowerPoint Support (M40):** This milestone adds PowerPoint (.pptx) document support. After M40, users can upload PowerPoint presentations and view them in the document reader with full visual fidelity. The system extracts text using python-pptx for KC generation, converts PPTX to PDF using LibreOffice + unoserver for display, and reuses the existing PDFRenderer for viewing. Highlights work on the converted PDF.
 
 **Authentication & Multi-User (M41-M46):** These milestones transform the single-user localhost system into a secure multi-user web deployment. After M46, users can sign up with email/password, log in, and have their data completely isolated from other users. The system uses Supabase Auth for authentication, Row-Level Security (RLS) for data isolation, and JWT validation in the FastAPI backend. Existing data is migrated to the first registered user. The architecture supports deployment to Vercel (frontend) + Railway (backend) + Supabase (database).
+
+**Approved Users Whitelist (M47):** This milestone restricts document upload (which triggers expensive Claude and Groq API calls) to a whitelist of approved users. Non-approved users can log in and view existing data but receive a 403 Forbidden error when attempting to upload. Hardcoded admin emails can access an Admin page at `/admin` to manage the whitelist—adding or removing approved users. This prevents runaway API costs from unauthorized usage while preserving read access for all authenticated users.
 
 
 ## Progress
@@ -148,6 +151,16 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - Root cause: practice_items RLS policy too complex; migration.py had redundant user_id filters
 - Fix: `fix_practice_items_rls.sql` + updated useSources.js/Study.jsx to direct Supabase queries
 - All pages regression tested and verified functional. See `.claude/memory/milestones/auth_multiuser.md` for details.
+
+**Approved Users Whitelist (M47)** - Pending
+- [ ] M47 Phase 1: Database migration - approved_users table with RLS
+- [ ] M47 Phase 2: Backend approval logic - is_user_approved, is_admin, require_approved_user
+- [ ] M47 Phase 3: Protect upload endpoint - ApprovedUser dependency
+- [ ] M47 Phase 4: Admin API endpoints - list, add, remove approved users
+- [ ] M47 Phase 5: Frontend AdminRoute guard and useIsAdmin hook
+- [ ] M47 Phase 6: Admin page UI - table, add form, remove button
+- [ ] M47 Phase 7: Upload error handling - user-friendly 403 message
+- [ ] M47 Phase 8: Integration testing - approved/non-approved/admin flows
 
 
 ## Surprises and Discoveries
@@ -314,7 +327,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through forty-six milestones. All milestones (M1-M46) are complete.
+Implementation proceeds through forty-seven milestones. M1-M46 are complete. M47 implements the approved users whitelist.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -335,6 +348,8 @@ Implementation proceeds through forty-six milestones. All milestones (M1-M46) ar
 **PowerPoint Support (Complete):** M40: PPTX document support with LibreOffice conversion. Upload PowerPoint presentations, view as PDF, highlight text, generate KCs from slides.
 
 **Authentication & Multi-User (Complete):** M41: Supabase Auth configuration. M42: Database schema migration. M43: Backend auth middleware. M44: Frontend auth flow. M45: RLS policies. M46: Data migration. See `.claude/memory/milestones/auth_multiuser.md`.
+
+**Approved Users Whitelist (Pending):** M47: Restrict document upload to approved users. Database migration for approved_users table, backend approval logic and admin endpoints, frontend AdminRoute guard and Admin page, upload error handling for 403.
 
 
 ## CLI Usage Reference
@@ -395,7 +410,7 @@ External memory in `.claude/memory/` (16 files):
 
 | Category | Files |
 |----------|-------|
-| `milestones/` | cli_foundation.md, webui_core.md, sources_feature.md, speed_optimization.md, agent_memory.md, document_reader.md |
+| `milestones/` | cli_foundation.md, webui_core.md, sources_feature.md, speed_optimization.md, agent_memory.md, document_reader.md, auth_multiuser.md |
 | `decisions/` | architecture.md, technology.md, patterns.md, memory_system.md |
 | `schemas/` | database.md, api.md, components.md |
 | `reference/` | research.md, context.md, retrospective.md |
@@ -639,6 +654,250 @@ AlphaXiv-style document reader. Flow: upload → read/study → practice. Suppor
 Supabase Auth, email/password, JWT validation, 46+ RLS policies, data migration, deployment config (Vercel + Railway + Supabase). See memory archive for implementation details.
 
 
+### Approved Users Whitelist Feature M47 (Pending)
+
+At the end of this milestone, document upload is restricted to approved users. Non-approved users receive 403 Forbidden when attempting upload. Admins can manage the whitelist via `/admin` page.
+
+**Admin Emails (Hardcoded):**
+- gianmariatroiani@gmail.com
+- gtroiani@equilibriaconsulting.net
+
+**Architecture:**
+
+    ┌─────────────────────────────────────────────────────────────────────────────┐
+    │  UPLOAD REQUEST FLOW                                                         │
+    ├─────────────────────────────────────────────────────────────────────────────┤
+    │  1. User clicks Upload → POST /api/sources/upload                           │
+    │  2. JWT validated (existing auth middleware)                                │
+    │  3. NEW: require_approved_user() checks approved_users table                │
+    │  4. If not approved → 403 Forbidden "Account not approved for uploads"      │
+    │  5. If approved → proceed to upload, LLM processing starts                  │
+    └─────────────────────────────────────────────────────────────────────────────┘
+
+**M47 Phase 1: Database Migration**
+
+New file: `migrations/m47_approved_users.sql`
+
+```sql
+-- approved_users table: whitelist for costly API operations
+CREATE TABLE IF NOT EXISTS public.approved_users (
+    email TEXT PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    approved_by TEXT NOT NULL,
+    approved_at TIMESTAMPTZ DEFAULT NOW(),
+    notes TEXT
+);
+
+-- Enable RLS with deny-all (service role bypasses)
+ALTER TABLE public.approved_users ENABLE ROW LEVEL SECURITY;
+
+-- No SELECT/INSERT/UPDATE/DELETE policies = deny all for anon/authenticated
+-- Service role key (used by backend) bypasses RLS
+
+-- Seed admin emails as initial approved users
+INSERT INTO public.approved_users (email, approved_by, notes)
+VALUES
+    ('gianmariatroiani@gmail.com', 'system', 'Initial admin'),
+    ('gtroiani@equilibriaconsulting.net', 'system', 'Initial admin')
+ON CONFLICT (email) DO NOTHING;
+```
+
+Verification: Run in Supabase SQL editor. `SELECT * FROM approved_users` shows 2 rows.
+
+**M47 Phase 2: Backend Approval Logic**
+
+New file: `learn_system/app/api/auth/approval.py`
+
+```python
+from typing import Annotated
+from fastapi import Depends, HTTPException, status
+from .dependencies import get_current_user
+from .schemas import AuthenticatedUser
+import os
+
+ADMIN_EMAILS = [
+    "gianmariatroiani@gmail.com",
+    "gtroiani@equilibriaconsulting.net",
+]
+
+def is_admin(email: str) -> bool:
+    return email.lower() in [e.lower() for e in ADMIN_EMAILS]
+
+async def is_user_approved(email: str, supabase_client) -> bool:
+    # Use service role client to bypass RLS
+    result = supabase_client.table("approved_users").select("email").eq("email", email.lower()).execute()
+    return len(result.data) > 0
+
+async def require_approved_user(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
+    # Admins are always approved
+    if is_admin(current_user.email):
+        return current_user
+    # Check approved_users table (requires service role client)
+    from ...config import get_service_supabase
+    client = get_service_supabase()
+    if not await is_user_approved(current_user.email, client):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is not approved for document uploads. Please contact an administrator."
+        )
+    return current_user
+
+async def require_admin(current_user: AuthenticatedUser = Depends(get_current_user)) -> AuthenticatedUser:
+    if not is_admin(current_user.email):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+# Type aliases for dependency injection
+ApprovedUser = Annotated[AuthenticatedUser, Depends(require_approved_user)]
+AdminUser = Annotated[AuthenticatedUser, Depends(require_admin)]
+```
+
+Modify: `learn_system/app/api/auth/__init__.py` - add exports for `is_admin`, `is_user_approved`, `require_approved_user`, `require_admin`, `ApprovedUser`, `AdminUser`
+
+Verification: Import works, no syntax errors.
+
+**M47 Phase 3: Protect Upload Endpoint**
+
+Modify: `learn_system/app/api/routes/sources.py`
+
+Change upload_source signature from `CurrentUser` to `ApprovedUser`:
+
+```python
+from ..auth import ApprovedUser  # Add to imports
+
+# Change:
+async def upload_source(current_user: CurrentUser, ...):
+# To:
+async def upload_source(current_user: ApprovedUser, ...):
+```
+
+Verification: Non-approved user upload returns 403. Approved user upload succeeds.
+
+**M47 Phase 4: Admin API Endpoints**
+
+New file: `learn_system/app/api/routes/admin.py`
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/admin/check-admin` | GET | CurrentUser | Returns `{is_admin: bool}` |
+| `/api/admin/approved-users` | GET | AdminUser | List all approved users |
+| `/api/admin/approved-users` | POST | AdminUser | Add approved user `{email, notes?}` |
+| `/api/admin/approved-users/{email}` | DELETE | AdminUser | Remove approved user |
+
+Modify: `learn_system/app/api/server.py` - import and include admin router
+
+Verification: Endpoints accessible. Non-admin gets 403 on list/add/remove.
+
+**M47 Phase 5: Frontend AdminRoute Guard**
+
+New file: `web/src/components/auth/AdminRoute.jsx`
+
+```jsx
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+
+const ADMIN_EMAILS = [
+    'gianmariatroiani@gmail.com',
+    'gtroiani@equilibriaconsulting.net',
+];
+
+export function useIsAdmin() {
+    const { user } = useAuth();
+    return user && ADMIN_EMAILS.includes(user.email?.toLowerCase());
+}
+
+export default function AdminRoute({ children }) {
+    const { user, loading } = useAuth();
+    const isAdmin = useIsAdmin();
+
+    if (loading) return <div>Loading...</div>;
+    if (!user) return <Navigate to="/login" replace />;
+    if (!isAdmin) return <Navigate to="/" replace />;
+
+    return children;
+}
+```
+
+Verification: Non-admin navigating to /admin redirects to home.
+
+**M47 Phase 6: Admin Page UI**
+
+New file: `web/src/pages/Admin.jsx`
+
+- Table showing approved users (email, approved_by, approved_at, notes)
+- Form to add new approved user (email input + optional notes textarea)
+- Remove button for each row (with confirmation dialog)
+- Loading and error states
+- Uses `listApprovedUsers()`, `addApprovedUser()`, `removeApprovedUser()` from api.js
+
+Modify: `web/src/App.jsx` - add route `/admin` wrapped in AdminRoute
+Modify: `web/src/components/layout/Sidebar.jsx` - conditionally render Admin link with Shield icon when `useIsAdmin()` returns true
+
+Verification: Admin sees /admin in sidebar, can view and manage users.
+
+**M47 Phase 7: Upload Error Handling**
+
+Modify: `web/src/pages/Sources.jsx` (or upload modal component)
+
+Handle 403 response with user-friendly message:
+
+```jsx
+if (error.message?.includes('not approved')) {
+    setUploadError('Your account is not approved for document uploads. Please contact an administrator.');
+} else {
+    setUploadError(error.message || 'Upload failed');
+}
+```
+
+Verification: Non-approved user sees clear message, not generic error.
+
+**M47 Phase 8: Integration Testing**
+
+1. **Non-approved user flow:**
+   - Create new account (not in approved_users)
+   - Login succeeds, can view existing data
+   - Upload attempt returns 403 with clear message
+   - Cannot access /admin (redirects to home)
+
+2. **Approved user flow:**
+   - Login as approved user
+   - Upload succeeds, LLM processing starts
+   - Cannot access /admin if not admin
+
+3. **Admin flow:**
+   - Login as admin email
+   - Can access /admin page
+   - Can add new approved user
+   - Can remove approved user
+   - Changes reflect immediately in database
+
+4. **Build verification:**
+   ```bash
+   cd web && npm run build  # Frontend builds without errors
+   cd ../learn_system && python -c "from app.api.auth import ApprovedUser"  # Imports work
+   ```
+
+**Files Changed Summary:**
+
+| File | Change |
+|------|--------|
+| `migrations/m47_approved_users.sql` | NEW - database schema |
+| `learn_system/app/api/auth/approval.py` | NEW - approval logic |
+| `learn_system/app/api/auth/__init__.py` | MODIFY - add exports |
+| `learn_system/app/api/routes/sources.py` | MODIFY - protect upload |
+| `learn_system/app/api/routes/admin.py` | NEW - admin endpoints |
+| `learn_system/app/api/server.py` | MODIFY - add admin router |
+| `web/src/components/auth/AdminRoute.jsx` | NEW - route guard |
+| `web/src/pages/Admin.jsx` | NEW - admin page |
+| `web/src/lib/api.js` | MODIFY - add admin API functions |
+| `web/src/App.jsx` | MODIFY - add admin route |
+| `web/src/components/layout/Sidebar.jsx` | MODIFY - conditional admin link |
+| `web/src/pages/Sources.jsx` | MODIFY - 403 error handling |
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -672,3 +931,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-07: RLS/Display Bug Fix - Removed redundant user_id filters from migration.py (lines 36, 56, 94). Full regression test passed: all pages functional, study sessions recording correctly, no regressions.
 - 2026-01-07: RLS Policy Proper Fix - Applied fix_practice_items_rls.sql via Supabase Dashboard. Updated useSources.js and Study.jsx to use direct Supabase queries instead of backend workaround. Technical debt reduced. Full study flow verified: question display, answer submission, self-assessment, next question transition.
 - 2026-01-07: API Port Fix - Fixed api.js using wrong port (8000 instead of 8001). Document reader now works correctly. Root cause found via 3 parallel research agents investigating backend, frontend, and storage/RLS.
+- 2026-01-11: M47 Spec Added - Approved Users Whitelist feature integrated into EXECPLAN. Restricts document upload to whitelisted users, admin page for management. 8 implementation phases defined.
