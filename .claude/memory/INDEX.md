@@ -1,13 +1,13 @@
 # Memory System Index
 
-**Last Updated:** 2026-01-07
-**Total Files:** 16
+**Last Updated:** 2026-01-11
+**Total Files:** 17
 
 ## Quick Navigation
 
 | Category | Files | Key Topics |
 |----------|-------|------------|
-| Milestones | 6 | M1-M40 implementation history |
+| Milestones | 7 | M1-M46 implementation history |
 | Decisions | 4 | Architecture, technology, patterns, memory system |
 | Schemas | 3 | Database, API, React components |
 | Reference | 3 | Research, context, retrospectives |
@@ -24,6 +24,7 @@
 | `speed_optimization.md` | M21-M23 | Groq integration, parallel processing, retry logic, bug fixes |
 | `agent_memory.md` | M24-M29 | Memory system, tiered architecture, scout subagents, EXECPLAN slimming |
 | `document_reader.md` | M30-M40 | PDF/Markdown/DOCX/PPTX rendering, TOC, highlights, AI chat, notes, zen mode, progress, docx-preview, PDF highlighting, LibreOffice conversion |
+| `auth_multiuser.md` | M41-M46 | Supabase Auth, JWT validation, RLS policies, data migration, deployment config, auth context, protected routes |
 
 ### decisions/
 

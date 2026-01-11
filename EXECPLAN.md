@@ -144,35 +144,10 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M45: Row-Level Security Policies - RLS enabled on 14 tables, 46+ table policies, 4 storage policies for documents bucket (2026-01-07)
 - [x] M46: Data Migration & Deployment - first_user_migration.py, m46_enforce_auth.sql, migration API endpoints, CORS env config (2026-01-07)
 
-**RLS/Display Bug Investigation** - Complete
-- [x] RLS/Sources Research: 10 parallel agents, root cause analysis in NEW FEATURES.md (2026-01-07)
-  - Identified practice_items RLS issue (complex nested EXISTS fails, fix in fix_practice_items_rls.sql)
-  - Identified Study page bug (redundant user_id filter in migration.py)
-  - Confirmed Sources view fully implemented (M16-M20, no placeholder)
-  - Verified .env files correctly gitignored (no security issue)
-- [x] Apply Study page fix - removed redundant `.eq('user_id')` from migration.py (2026-01-07)
-  - Line 36: practice-items-count endpoint - now queries via KC ownership only
-  - Line 56: all-practice-items endpoint - now queries via KC IDs first
-  - Line 94: study-items endpoint - now queries via KC ownership only
-- [x] Verified: Sources page shows 117 Practice Items correctly
-- [x] Verified: Study page loads items (1 of 20) correctly
-- [x] **RLS POLICY FIX APPLIED (2026-01-07):** Ran `migrations/fix_practice_items_rls.sql` in Supabase
-  - Simplified practice_items RLS policy to `auth.uid() = user_id OR user_id IS NULL`
-  - Updated useSources.js to use direct Supabase queries (removed backend workaround)
-  - Updated Study.jsx to use direct Supabase queries (removed backend API calls)
-    - Fetches KCs and practice items directly from Supabase
-    - Creates sessions with user_id from auth.getUser()
-    - Full study flow tested: question display, answer submission, self-assessment, KC state updates
-  - All pages tested and working with direct queries
-- [x] **REGRESSION TEST COMPLETE (2026-01-07):** All core functionality verified after migration.py changes:
-  - [x] Sources page → 117 Practice Items displayed correctly
-  - [x] Study page (no filter) → loads items (1 of 20)
-  - [x] Study page with source filter → loads items correctly
-  - [x] Due for Review page → 40 items shown (39 after practice)
-  - [x] Progress page → mastery by source, weekly chart working (mastery 0%→1% after practice)
-  - [x] Analytics page → insights, technique bundles, calibration sections all load
-  - [x] Study session → completed 1 item, recorded attempt, session stats correct (60% score, 1m56s)
-  - [x] No regressions detected - all pages functional
+**RLS/Display Bug Investigation** - Complete (2026-01-07)
+- Root cause: practice_items RLS policy too complex; migration.py had redundant user_id filters
+- Fix: `fix_practice_items_rls.sql` + updated useSources.js/Study.jsx to direct Supabase queries
+- All pages regression tested and verified functional. See `.claude/memory/milestones/auth_multiuser.md` for details.
 
 
 ## Surprises and Discoveries
@@ -339,7 +314,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through forty-six milestones. M1-M40 are complete. M41-M46 implement authentication and multi-user support.
+Implementation proceeds through forty-six milestones. All milestones (M1-M46) are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -359,7 +334,7 @@ Implementation proceeds through forty-six milestones. M1-M40 are complete. M41-M
 
 **PowerPoint Support (Complete):** M40: PPTX document support with LibreOffice conversion. Upload PowerPoint presentations, view as PDF, highlight text, generate KCs from slides.
 
-**Authentication & Multi-User (Pending):** M41: Supabase Auth configuration (email provider, JWT settings). M42: Database schema migration (user_id columns, indexes). M43: Backend auth middleware (JWT validation, ownership checks). M44: Frontend auth flow (AuthContext, ProtectedRoute, login/signup forms). M45: Row-Level Security policies (48 RLS policies, storage policies). M46: Data migration and deployment (first user migration, go-live).
+**Authentication & Multi-User (Complete):** M41: Supabase Auth configuration. M42: Database schema migration. M43: Backend auth middleware. M44: Frontend auth flow. M45: RLS policies. M46: Data migration. See `.claude/memory/milestones/auth_multiuser.md`.
 
 
 ## CLI Usage Reference
@@ -474,16 +449,23 @@ These milestones implement a tiered memory system to manage EXECPLAN complexity.
     │  schemas/             │  reference/                     │
     └─────────────────────────────────────────────────────────┘
 
-- Extract completed milestones to archive
-- Extract decisions and schemas
-- Extract reference material
-- Slim EXECPLAN to active content only
-- Update CLAUDE.md with memory access instructions
+**Cleanup Loop (OPERATIONAL - repeat after each milestone):**
+
+    Work → Archive → Slim → Repeat
+
+After completing ANY milestone:
+1. Archive detailed implementation notes to `.claude/memory/milestones/`
+2. Extract new decisions to `decisions/*.md`
+3. Update schemas if structure changed
+4. Slim EXECPLAN.md - replace archived content with one-liner + link
+5. Update INDEX.md if new files created
+
+Target: Keep EXECPLAN.md under ~650 lines. If it grows larger, archive completed work immediately.
 
 
 ### Slim EXECPLAN to Active Content Only (OPERATIONAL POLICY - DO NOT DELETE)
 
-At the end of this milestone, EXECPLAN.md is under 500 lines containing only active work content.
+EXECPLAN.md should contain only active work content. Target: ~500-650 lines.
 
 **Sections to keep (with target lines):**
 - Purpose and Big Picture (20)
@@ -650,109 +632,11 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 AlphaXiv-style document reader. Flow: upload → read/study → practice. Supports PDF, DOCX (docx-preview), PPTX (LibreOffice→PDF), Markdown, text. Features: sidebar TOC, text selection, highlights (character-based for text, page-based % coords for PDF), AI chat, notes, reading progress, zen mode.
 
 
-### Authentication & Multi-User Feature M41-M46 (Pending)
+### Authentication & Multi-User Feature M41-M46 (Complete)
 
-**Full specs:** `NEW FEATURES.md` (Authentication & Multi-User Implementation Plan)
+**Full specs:** `.claude/memory/milestones/auth_multiuser.md`
 
-Transform single-user localhost system into secure multi-user web deployment.
-
-**Architecture:**
-
-    ┌─────────────────────────────────────────────────────────────────────────────┐
-    │  FRONTEND (React + Vite)                                                     │
-    │  ├─ AuthContext manages session state                                        │
-    │  ├─ ProtectedRoute guards authenticated pages                               │
-    │  └─ Auth header attached to all API calls                                   │
-    ├─────────────────────────────────────────────────────────────────────────────┤
-    │  BACKEND (FastAPI)                                                           │
-    │  ├─ Auth middleware validates JWT from Authorization header                 │
-    │  ├─ get_current_user() dependency injects user into endpoints               │
-    │  └─ API keys (Claude/Groq) kept server-side only                            │
-    ├─────────────────────────────────────────────────────────────────────────────┤
-    │  DATABASE (Supabase PostgreSQL)                                              │
-    │  ├─ auth.users managed by Supabase Auth                                     │
-    │  ├─ user_id FK on all user-owned tables                                     │
-    │  └─ RLS policies enforce data isolation                                     │
-    └─────────────────────────────────────────────────────────────────────────────┘
-
-**M41: Supabase Auth Configuration**
-At the end of this milestone, Supabase Auth is configured for email/password authentication with JWT settings, email templates, and environment variables.
-
-Work:
-1. Enable email provider in Supabase Dashboard (Auth > Providers > Email)
-2. Configure Site URL: `http://localhost:5173` (dev)
-3. Configure Redirect URLs: `http://localhost:5173/**`
-4. Set JWT expiry to 3600 seconds (1 hour)
-5. Add `SUPABASE_JWT_SECRET` to backend environment
-6. Add `SUPABASE_SERVICE_ROLE_KEY` to backend environment
-
-Verification: Auth endpoints accessible at Supabase project URL. Environment variables set in backend.
-
-**M42: Database Schema Migration**
-At the end of this milestone, all user-owned tables have nullable user_id columns with indexes, preserving backwards compatibility.
-
-Work:
-1. Create `migrations/m42_auth_schema.sql`
-2. Add user_id UUID column to: content_sources, knowledge_components, kc_state, kc_prerequisites, kc_subskills, practice_items, sessions, attempts, kc_technique_history, retention_tests, learning_goals
-3. Create indexes on user_id columns
-4. Create compound indexes for common queries
-5. Run migration on Supabase
-
-Verification: `SELECT column_name FROM information_schema.columns WHERE table_name='content_sources' AND column_name='user_id'` returns row.
-
-**M43: Backend Auth Middleware**
-At the end of this milestone, all API endpoints require valid JWT and return 401 for unauthenticated requests.
-
-Work:
-1. Add `PyJWT>=2.8.0` to requirements.txt
-2. Create `learn_system/app/api/auth/` package with: `__init__.py`, `schemas.py`, `exceptions.py`, `jwt_utils.py`, `dependencies.py`, `ownership.py`
-3. Implement `get_current_user()` FastAPI dependency
-4. Add `CurrentUser` dependency to all routes in `sources.py` and `ai.py`
-5. Update `processing.py` to include user_id when creating sources
-6. Configure CORS to expose `X-Token-Expiring-Soon` header
-
-Verification: `curl http://localhost:8001/api/sources` returns 401. With valid token, returns 200.
-
-**M44: Frontend Auth Flow**
-At the end of this milestone, users can sign up, log in, reset password, and access protected routes.
-
-Work:
-1. Create `web/src/contexts/AuthContext.jsx` with signIn, signUp, signOut, resetPassword
-2. Create `web/src/components/auth/ProtectedRoute.jsx`
-3. Create `web/src/components/auth/LoginForm.jsx`, `SignupForm.jsx`, `ForgotPasswordForm.jsx`, `ResetPasswordForm.jsx`
-4. Create `web/src/pages/Login.jsx`, `Signup.jsx`, `ForgotPassword.jsx`, `ResetPassword.jsx`
-5. Update `App.jsx` with AuthProvider and protected routes
-6. Update `web/src/lib/api.js` to include auth headers and handle 401
-7. Add logout button to Sidebar
-
-Verification: Navigate to `/` unauthenticated → redirects to `/login`. Sign up → create account. Sign in → access app.
-
-**M45: Row-Level Security Policies**
-At the end of this milestone, RLS policies enforce data isolation at database level.
-
-Work:
-1. Create `migrations/m45_rls_policies.sql`
-2. Enable RLS on all user-owned tables
-3. Create SELECT/INSERT/UPDATE/DELETE policies for each table using `auth.uid() = user_id`
-4. Create storage policies for documents bucket with path `documents/{user_id}/*`
-5. technique_bundles: users can view system bundles (user_id IS NULL) + own bundles
-6. Run migration on Supabase
-
-Verification: User A cannot SELECT rows where user_id != their UUID. Direct SQL test in Supabase.
-
-**M46: Data Migration & Deployment**
-At the end of this milestone, system is deployed with first user owning all existing data.
-
-Work:
-1. Create `learn_system/app/auth/first_user_migration.py` with `migrate_existing_data_to_user()` and `check_is_first_user()`
-2. Create `migrations/m46_enforce_auth.sql` to add NOT NULL constraints (run after first user registers)
-3. Set up Vercel project for frontend with environment variables
-4. Set up Railway project for backend with environment variables
-5. Configure production CORS origins
-6. Deploy and verify first user registration triggers data migration
-7. Run m46_enforce_auth.sql after data migrated
-
-Verification: Sign up as first user → all existing sources appear in list. Second user → sees empty source list.
+Supabase Auth, email/password, JWT validation, 46+ RLS policies, data migration, deployment config (Vercel + Railway + Supabase). See memory archive for implementation details.
 
 
 ## Web UI Reference
