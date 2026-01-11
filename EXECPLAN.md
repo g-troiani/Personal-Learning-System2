@@ -152,15 +152,15 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - Fix: `fix_practice_items_rls.sql` + updated useSources.js/Study.jsx to direct Supabase queries
 - All pages regression tested and verified functional. See `.claude/memory/milestones/auth_multiuser.md` for details.
 
-**Approved Users Whitelist (M47)** - Pending
-- [ ] M47 Phase 1: Database migration - approved_users table with RLS
-- [ ] M47 Phase 2: Backend approval logic - is_user_approved, is_admin, require_approved_user
-- [ ] M47 Phase 3: Protect upload endpoint - ApprovedUser dependency
-- [ ] M47 Phase 4: Admin API endpoints - list, add, remove approved users
-- [ ] M47 Phase 5: Frontend AdminRoute guard and useIsAdmin hook
-- [ ] M47 Phase 6: Admin page UI - table, add form, remove button
-- [ ] M47 Phase 7: Upload error handling - user-friendly 403 message
-- [ ] M47 Phase 8: Integration testing - approved/non-approved/admin flows
+**Approved Users Whitelist (M47)** - Complete
+- [x] M47 Phase 1: Database migration - approved_users table with RLS (2026-01-11)
+- [x] M47 Phase 2: Backend approval logic - is_user_approved, is_admin, require_approved_user (2026-01-11)
+- [x] M47 Phase 3: Protect upload endpoint - ApprovedUser dependency (2026-01-11)
+- [x] M47 Phase 4: Admin API endpoints - list, add, remove approved users (2026-01-11)
+- [x] M47 Phase 5: Frontend AdminRoute guard and useIsAdmin hook (2026-01-11)
+- [x] M47 Phase 6: Admin page UI - table, add form, remove button (2026-01-11)
+- [x] M47 Phase 7: Upload error handling - user-friendly 403 message (2026-01-11)
+- [x] M47 Phase 8: Integration testing - all flows verified in Chrome (2026-01-11)
 
 
 ## Surprises and Discoveries
@@ -205,6 +205,10 @@ Key lessons learned during implementation:
 - Auth token stored in localStorage as `sb-{project-ref}-auth-token`
 - Migration endpoint requires service role key (bypasses RLS) to update rows regardless of current user_id
 - CORS origins can be configured via `CORS_ORIGINS` env var (comma-separated list)
+
+**M47 Dependencies:**
+- Pydantic `EmailStr` requires `email-validator` package: `pip install email-validator`
+- Backend won't start without it if any route model uses EmailStr
 
 **Pre-existing Display Bugs (discovered during M46 testing, NOT caused by M46):**
 - Sources page shows "0 Practice Items" despite API returning 117 - frontend display logic issue
@@ -327,7 +331,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through forty-seven milestones. M1-M46 are complete. M47 implements the approved users whitelist.
+Implementation proceeds through forty-seven milestones. M1-M47 are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -349,7 +353,7 @@ Implementation proceeds through forty-seven milestones. M1-M46 are complete. M47
 
 **Authentication & Multi-User (Complete):** M41: Supabase Auth configuration. M42: Database schema migration. M43: Backend auth middleware. M44: Frontend auth flow. M45: RLS policies. M46: Data migration. See `.claude/memory/milestones/auth_multiuser.md`.
 
-**Approved Users Whitelist (Pending):** M47: Restrict document upload to approved users. Database migration for approved_users table, backend approval logic and admin endpoints, frontend AdminRoute guard and Admin page, upload error handling for 403.
+**Approved Users Whitelist (Complete):** M47: Restricted document upload to approved users. Database migration for approved_users table with deny-all RLS, backend approval logic (ApprovedUser dependency) and admin endpoints, frontend AdminRoute guard with useIsAdmin hook, Admin page for managing whitelist, upload error handling for 403.
 
 
 ## CLI Usage Reference
@@ -932,3 +936,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-07: RLS Policy Proper Fix - Applied fix_practice_items_rls.sql via Supabase Dashboard. Updated useSources.js and Study.jsx to use direct Supabase queries instead of backend workaround. Technical debt reduced. Full study flow verified: question display, answer submission, self-assessment, next question transition.
 - 2026-01-07: API Port Fix - Fixed api.js using wrong port (8000 instead of 8001). Document reader now works correctly. Root cause found via 3 parallel research agents investigating backend, frontend, and storage/RLS.
 - 2026-01-11: M47 Spec Added - Approved Users Whitelist feature integrated into EXECPLAN. Restricts document upload to whitelisted users, admin page for management. 8 implementation phases defined.
+- 2026-01-11: M47 Complete - Approved Users Whitelist feature fully implemented and tested. Database migration (approved_users table with RLS), backend approval logic (ApprovedUser dependency), protected upload endpoint, admin API endpoints (list/add/remove), AdminRoute guard with useIsAdmin hook, Admin page UI (table, add form, remove with confirmation), 403 error handling for non-approved uploads. Integration testing verified: admin link visibility, admin page CRUD operations, upload zone access for approved users. Required `pip install email-validator` for Pydantic EmailStr validation.

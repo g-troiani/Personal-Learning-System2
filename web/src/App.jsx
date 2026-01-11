@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { SupabaseProvider } from './contexts/SupabaseContext'
 import { ZenModeProvider } from './contexts/ZenModeContext'
 import { ProtectedRoute } from './components/auth'
+import AdminRoute from './components/auth/AdminRoute'
 import Layout from './components/layout/Layout'
 import Home from './pages/Home'
 import Calendar from './pages/Calendar'
@@ -12,6 +13,7 @@ import Progress from './pages/Progress'
 import Analytics from './pages/Analytics'
 import Study from './pages/Study'
 import DocumentReader from './pages/DocumentReader'
+import Admin from './pages/Admin'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
@@ -54,6 +56,12 @@ function App() {
                 <ProtectedRoute>
                   <Study />
                 </ProtectedRoute>
+              } />
+              {/* Admin route (admin-only) */}
+              <Route path="/admin" element={
+                <AdminRoute>
+                  <Admin />
+                </AdminRoute>
               } />
             </Routes>
           </BrowserRouter>

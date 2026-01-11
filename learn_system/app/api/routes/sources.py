@@ -24,7 +24,7 @@ from ..services.processing import (
     retry_processing,
     delete_source
 )
-from ..auth import CurrentUser
+from ..auth import CurrentUser, ApprovedUser
 from ..auth.ownership import verify_source_ownership
 from ...database.connection import get_client, get_user_client
 
@@ -122,7 +122,7 @@ def upload_to_storage(source_id: str, content: bytes, filename: str) -> str:
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_source(
-    current_user: CurrentUser,
+    current_user: ApprovedUser,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     domain: str = Form(default="general")
@@ -133,8 +133,10 @@ async def upload_source(
     The document will be processed in the background. Use the status endpoint
     to check processing progress. File is stored in Supabase Storage for later viewing.
 
+    Requires approved user status (403 Forbidden if not approved).
+
     Args:
-        current_user: Authenticated user (from JWT)
+        current_user: Approved user (from JWT + approval check)
         file: The document file to upload
         domain: Knowledge domain for categorization (default: general)
 

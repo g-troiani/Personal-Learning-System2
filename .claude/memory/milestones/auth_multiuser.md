@@ -1,7 +1,7 @@
-# Authentication & Multi-User Feature - M41-M46
+# Authentication & Multi-User Feature - M41-M47
 
-**Status:** Complete (2026-01-07)
-**Purpose:** Transform single-user localhost system into secure multi-user web deployment
+**Status:** Complete (2026-01-11)
+**Purpose:** Transform single-user localhost system into secure multi-user web deployment with approved user whitelist
 
 ## Overview
 
@@ -138,6 +138,64 @@ Implements Supabase Auth for email/password authentication, Row-Level Security (
 
 **Verification:** Sign up as first user → all existing sources appear. Second user → sees empty source list.
 
+### M47: Approved Users Whitelist (2026-01-11)
+
+**Goal:** Restrict document upload (expensive LLM API calls) to whitelisted users. Admin page for managing whitelist.
+
+**Work Completed:**
+1. Created `migrations/m47_approved_users.sql`:
+   - `approved_users` table (email PK, user_id FK, approved_by, approved_at, notes)
+   - RLS enabled with deny-all (no policies = service role only)
+   - Seeded with admin emails
+2. Created `learn_system/app/api/auth/approval.py`:
+   - `ADMIN_EMAILS` hardcoded list
+   - `is_admin()` - checks if email is admin
+   - `is_user_approved()` - queries approved_users table
+   - `require_approved_user()` - dependency for protected endpoints
+   - `require_admin()` - dependency for admin-only endpoints
+   - `ApprovedUser`, `AdminUser` type aliases for dependency injection
+3. Protected upload endpoint in `sources.py` with `ApprovedUser` dependency
+4. Created `learn_system/app/api/routes/admin.py`:
+   - `GET /api/admin/check-admin` - returns {is_admin: bool}
+   - `GET /api/admin/approved-users` - list all (AdminUser)
+   - `POST /api/admin/approved-users` - add user (AdminUser)
+   - `DELETE /api/admin/approved-users/{email}` - remove user (AdminUser)
+5. Created `web/src/components/auth/AdminRoute.jsx`:
+   - `useIsAdmin()` hook checks user.email against ADMIN_EMAILS
+   - `AdminRoute` component redirects non-admins to home
+6. Created `web/src/pages/Admin.jsx`:
+   - Table showing approved users with email, approved_by, date, notes
+   - Add form with email + optional notes
+   - Remove button with confirmation dialog
+   - System admins show "Admin user" label (not removable)
+7. Added admin API functions to `api.js`
+8. Added `/admin` route to `App.jsx` wrapped in AdminRoute
+9. Added conditional Admin link in Sidebar with Shield icon
+10. Updated `UploadZone.jsx` to show friendly 403 message
+
+**Admin Emails (Hardcoded):**
+- gianmariatroiani@gmail.com
+- gtroiani@equilibriaconsulting.net
+
+**Key Files:**
+- `migrations/m47_approved_users.sql`
+- `learn_system/app/api/auth/approval.py`
+- `learn_system/app/api/routes/admin.py`
+- `web/src/components/auth/AdminRoute.jsx`
+- `web/src/pages/Admin.jsx`
+- `web/src/components/sources/UploadZone.jsx`
+
+**Integration Testing Verified:**
+1. Admin user flow: sees Admin link → /admin loads → can add/remove users
+2. Non-admin user flow: no Admin link → /admin redirects to home
+3. Non-approved user: upload returns 403 "Account not approved"
+4. After adding to approved_users: upload succeeds (200)
+5. Admin API protection: non-admin → 403 "Admin access required"
+
+**Dependency:** Pydantic `EmailStr` requires `pip install email-validator`
+
+**Verification:** Non-approved upload → 403. Admin can add user → user can now upload.
+
 ## Key Decisions
 
 | Decision | Rationale | Date |
@@ -146,6 +204,8 @@ Implements Supabase Auth for email/password authentication, Row-Level Security (
 | RLS over application-level filtering | Database-level enforcement, can't bypass with app bugs | 2026-01-06 |
 | Zero-downtime phased migration | Nullable columns first, auth code, data migration, then NOT NULL | 2026-01-06 |
 | Vercel + Railway + Supabase deployment | Excellent Vite support, Docker for LibreOffice, existing DB | 2026-01-06 |
+| Hardcoded admin list over DB role | Faster checks, no DB query, admins rarely change | 2026-01-11 |
+| Deny-all RLS on approved_users | Service role bypasses, keeps whitelist hidden from users | 2026-01-11 |
 
 ## Key Files
 

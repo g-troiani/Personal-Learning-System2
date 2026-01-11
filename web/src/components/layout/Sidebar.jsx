@@ -9,11 +9,13 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  LogOut
+  LogOut,
+  Shield
 } from 'lucide-react'
 import { useSupabase } from '../../contexts/SupabaseContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useDocumentSections } from '../../hooks/useDocumentSections'
+import { useIsAdmin } from '../auth/AdminRoute'
 import TableOfContentsSection from '../reader/TableOfContentsSection'
 
 // Emoji mapping for sources (can be customized per source)
@@ -41,6 +43,7 @@ function getSourceEmoji(title) {
 export default function Sidebar({ collapsed, onToggle }) {
   const { getRecentSources, getDueCounts, sources } = useSupabase()
   const { user, signOut } = useAuth()
+  const isAdmin = useIsAdmin()
   const [recentSources, setRecentSources] = useState([])
   const [dueCount, setDueCount] = useState(0)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -85,6 +88,8 @@ export default function Sidebar({ collapsed, onToggle }) {
     { to: '/sources', icon: BookOpen, label: 'Sources' },
     { to: '/progress', icon: BarChart2, label: 'Progress' },
     { to: '/analytics', icon: Settings, label: 'Analytics' },
+    // Admin link (only shown for admin users)
+    ...(isAdmin ? [{ to: '/admin', icon: Shield, label: 'Admin' }] : []),
   ]
 
   return (

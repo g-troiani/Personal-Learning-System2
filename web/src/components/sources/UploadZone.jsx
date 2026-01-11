@@ -195,7 +195,12 @@ export default function UploadZone({ onUpload, onClose, onComplete, isExpanded =
     } catch (err) {
       console.error('Upload error:', err)
       setState(STATES.ERROR)
-      setError(err.message || 'Failed to upload file. Please try again.')
+      // Provide user-friendly message for 403 (not approved) error
+      if (err.message?.includes('not approved')) {
+        setError('Your account is not approved for document uploads. Please contact an administrator to request access.')
+      } else {
+        setError(err.message || 'Failed to upload file. Please try again.')
+      }
     }
   }, [selectedFile, onUpload])
 

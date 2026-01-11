@@ -208,6 +208,74 @@ export async function chatWithDocument(sourceId, message, context = null) {
   return response.json()
 }
 
+// ============================================================================
+// Admin API Functions (M47)
+// ============================================================================
+
+/**
+ * Check if the current user is an admin.
+ */
+export async function checkIsAdmin() {
+  const response = await authFetch(`${API_BASE}/admin/check-admin`)
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to check admin status')
+  }
+
+  return response.json()
+}
+
+/**
+ * List all approved users. Admin only.
+ */
+export async function listApprovedUsers() {
+  const response = await authFetch(`${API_BASE}/admin/approved-users`)
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to list approved users')
+  }
+
+  return response.json()
+}
+
+/**
+ * Add a user to the approved list. Admin only.
+ */
+export async function addApprovedUser(email, notes = null) {
+  const response = await authFetch(`${API_BASE}/admin/approved-users`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, notes }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to add approved user')
+  }
+
+  return response.json()
+}
+
+/**
+ * Remove a user from the approved list. Admin only.
+ */
+export async function removeApprovedUser(email) {
+  const response = await authFetch(`${API_BASE}/admin/approved-users/${encodeURIComponent(email)}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to remove approved user')
+  }
+
+  return response.json()
+}
+
 export default {
   uploadSource,
   getSourceStatus,
@@ -218,4 +286,9 @@ export default {
   getSections,
   getContent,
   chatWithDocument,
+  // Admin functions (M47)
+  checkIsAdmin,
+  listApprovedUsers,
+  addApprovedUser,
+  removeApprovedUser,
 }

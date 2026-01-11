@@ -4,7 +4,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import health, sources, ai, migration
+from .routes import health, sources, ai, migration, admin
 
 
 def get_cors_origins() -> list:
@@ -66,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(sources.router, prefix="/api/sources", tags=["sources"])
     app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
     app.include_router(migration.router, prefix="/api/migration", tags=["migration"])
+    app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
     return app
 
