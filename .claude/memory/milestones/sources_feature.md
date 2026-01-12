@@ -1,7 +1,28 @@
 # Sources Feature Milestones Archive
 
-**Last Updated:** 2026-01-04
+**Last Updated:** 2026-01-11
 **Summary:** Implementation details for M16-M20 (file upload, FastAPI backend, real-time processing)
+
+## Critical Gotchas
+
+**Environment Configuration:**
+- Single `.env` file in project root serves both Python (no `export` prefix) and Vite (`VITE_` prefix required)
+- Shell env vars override `.env` files - run `env | grep VITE_` to diagnose connection issues
+- API server must run on port 8001 to match frontend: `uvicorn app.api.server:app --port 8001`
+
+**Supabase Keys:**
+- **CRITICAL:** JS client requires legacy anon key (starts with `eyJhbG...`), NOT the new `sb_publishable_` format
+- To get legacy key: Supabase Dashboard → Settings → API Keys → "Legacy anon, service_role API keys" tab
+- Python library v2.27.0+ required for newer key formats
+
+**LLM APIs:**
+- Groq model `qwen-qwq-32b` deprecated → use `qwen/qwen3-32b`
+- Groq rate limits can cause stuck processing - retry logic helps but timeouts needed
+- Practice items: 3 per KC consistently (predictable 3:1 ratio)
+
+**Python 3.9 Compatibility:**
+- Use `Optional[X]` instead of `X | None`, `List[Dict]` instead of `list[dict]`
+- Timestamp parsing needs try-except for variable microsecond precision
 
 ## Quick Reference
 
