@@ -552,12 +552,14 @@ sentry_sdk.init(
 
 ```
 Frontend:     Netlify Free Tier ($0)
-Backend:      AWS EC2 t3.micro ($0-8/mo) or t3.small ($15/mo)
+Backend:      AWS EC2 t3.micro ($0 - free tier for 12 months)
 Database:     Supabase Free Tier ($0)
 LLM:          Groq Free + Claude (capped at $10/mo)
 ```
 
-**Estimated Total: $10-25/month**
+**Start with t3.micro** - it's free for the first 12 months (750 hours/month). Only upgrade to t3.small ($15/mo) once you have enough users to justify the cost.
+
+**Estimated Total: $1-10/month initially (mostly Claude API)**
 
 ### Scaling Triggers
 
@@ -584,9 +586,9 @@ The same EC2 instance can host:
 
 This plan moves the Personal Learning System from localhost to production with:
 - **Frontend:** Netlify (free tier)
-- **Backend:** AWS EC2 ($8-15/month)
+- **Backend:** AWS EC2 t3.micro (free tier for 12 months, then $8/mo)
 - **Database:** Supabase (already cloud-hosted)
-- **Estimated cost:** $10-25/month for 1-5 users
+- **Estimated cost:** $1-10/month initially (mostly Claude API costs)
 - **Bonus:** Same EC2 can host other company services
 
 ## Phase 1: AWS EC2 Setup
@@ -597,12 +599,14 @@ This plan moves the Personal Learning System from localhost to production with:
 2. Settings:
    - **Name:** `learning-system-prod`
    - **AMI:** Ubuntu Server 24.04 LTS
-   - **Instance type:** t3.micro (free tier) or t3.small ($15/mo for better perf)
+   - **Instance type:** t3.micro (free tier - start here, upgrade later if needed)
    - **Key pair:** Create new or use existing
    - **Security group:** Allow SSH (22), HTTP (80), HTTPS (443)
    - **Storage:** 20GB gp3
 
 3. Note the public IP or assign an Elastic IP
+
+> **Cost note:** t3.micro is free for 750 hours/month for the first 12 months. This is enough to run 24/7. Only upgrade to t3.small ($15/mo) if you hit CPU/memory limits with more users.
 
 ### 1.2 Initial Server Setup
 
