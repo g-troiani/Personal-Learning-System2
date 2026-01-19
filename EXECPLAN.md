@@ -162,6 +162,14 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M47 Phase 7: Upload error handling - user-friendly 403 message (2026-01-11)
 - [x] M47 Phase 8: Integration testing - all flows verified in Chrome (2026-01-11)
 
+**Persistent Zoom Preference (M48)** - Complete
+- [x] M48 Phase 1: Database migration - user_preferences table with RLS (2026-01-18)
+- [x] M48 Phase 2: useZoomPreference hook - load/save with 500ms debounce (2026-01-18)
+- [x] M48 Phase 3: Lift zoom state to ReaderContent.jsx (2026-01-18)
+- [x] M48 Phase 4: Update PDFRenderer and DOCXRenderer to accept zoom props (2026-01-18)
+- [x] M48 Phase 5: Bug fix - SupabaseContext missing session; added auth state tracking (2026-01-18)
+- [x] M48 Testing: Verified zoom persists across page refresh (130% → 150% → refresh → 150%) (2026-01-18)
+
 
 ## Surprises and Discoveries
 
@@ -209,6 +217,12 @@ Key lessons learned during implementation:
 **M47 Dependencies:**
 - Pydantic `EmailStr` requires `email-validator` package: `pip install email-validator`
 - Backend won't start without it if any route model uses EmailStr
+
+**M48 SupabaseContext Missing Session:**
+- SupabaseContext.jsx didn't track or expose auth session state
+- Hooks like useZoomPreference that need `session.user.id` silently failed (userId was undefined)
+- Fix: Added `const [session, setSession] = useState(null)` + auth listener + expose `session` in context value
+- Pattern: Any hook needing user ID must get it from `useSupabase()` context's session, not localStorage
 
 **RLS/Display Bug (FIXED 2026-01-07):**
 - Root cause: complex RLS policy + redundant user_id filters + wrong API port
@@ -292,6 +306,8 @@ Implementation proceeds through forty-seven milestones. M1-M47 are complete.
 **Authentication & Multi-User (Complete):** M41: Supabase Auth configuration. M42: Database schema migration. M43: Backend auth middleware. M44: Frontend auth flow. M45: RLS policies. M46: Data migration. See `.claude/memory/milestones/auth_multiuser.md`.
 
 **Approved Users Whitelist (Complete):** M47: Restricted document upload to approved users. Database migration for approved_users table with deny-all RLS, backend approval logic (ApprovedUser dependency) and admin endpoints, frontend AdminRoute guard with useIsAdmin hook, Admin page for managing whitelist, upload error handling for 403.
+
+**Persistent Zoom Preference (Complete):** M48: Remember user's zoom level in document reader across sessions. Database-backed per-user preferences.
 
 
 ## CLI Usage Reference
@@ -612,6 +628,49 @@ Supabase Auth, email/password, JWT validation, 46+ RLS policies, data migration,
 Restricts document upload to whitelisted users. Non-approved users get 403 Forbidden. Admins manage whitelist via `/admin` page. Hardcoded admin emails: gianmariatroiani@gmail.com, gtroiani@equilibriaconsulting.net. Key components: approved_users table with deny-all RLS, ApprovedUser dependency for protected endpoints, AdminRoute guard, Admin page UI.
 
 
+### Persistent Zoom Preference M48 (Complete)
+
+**Goal:** User's zoom level in the document reader persists across sessions and page refreshes. When a user sets zoom to 150% in PDFRenderer or DOCXRenderer, that preference is saved and restored next time they open any document.
+
+**Current State:**
+- PDFRenderer.jsx:44 has `const [zoom, setZoom] = useState(1.0)` - resets to 100% on every render
+- DOCXRenderer.jsx:33 has identical local zoom state
+- Both have ZOOM_STEP=0.1, MIN_ZOOM=0.5, MAX_ZOOM=2.0
+
+**Implementation Plan:**
+
+| Phase | Task | Details |
+|-------|------|---------|
+| 1 | Database migration | Create `user_preferences` table with user_id, key, value, updated_at. RLS policy: users can only access own prefs. |
+| 2 | useZoomPreference hook | Load zoom on mount, save on change (debounced 500ms). Uses Supabase client. |
+| 3 | Lift zoom state | Move zoom state from renderers to ReaderContent.jsx. Pass zoom + setZoom as props. |
+| 4 | Update renderers | PDFRenderer and DOCXRenderer accept zoom as prop instead of local state. Keep zoom controls UI. |
+
+**Database Schema:**
+```sql
+CREATE TABLE user_preferences (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  preference_key TEXT NOT NULL,
+  preference_value JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, preference_key)
+);
+
+-- RLS: Users can only access their own preferences
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own preferences" ON user_preferences
+  FOR ALL USING (auth.uid() = user_id);
+```
+
+**Files to Modify:**
+- `migrations/m48_user_preferences.sql` - Create table
+- `web/src/hooks/useZoomPreference.js` - New hook
+- `web/src/components/reader/ReaderContent.jsx` - Lift zoom state
+- `web/src/components/reader/PDFRenderer.jsx` - Accept zoom prop
+- `web/src/components/reader/DOCXRenderer.jsx` - Accept zoom prop
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -647,3 +706,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-07: API Port Fix - Fixed api.js using wrong port (8000 instead of 8001). Document reader now works correctly. Root cause found via 3 parallel research agents investigating backend, frontend, and storage/RLS.
 - 2026-01-11: M47 Spec Added - Approved Users Whitelist feature integrated into EXECPLAN. Restricts document upload to whitelisted users, admin page for management. 8 implementation phases defined.
 - 2026-01-11: M47 Complete - Approved Users Whitelist feature fully implemented and tested. Database migration (approved_users table with RLS), backend approval logic (ApprovedUser dependency), protected upload endpoint, admin API endpoints (list/add/remove), AdminRoute guard with useIsAdmin hook, Admin page UI (table, add form, remove with confirmation), 403 error handling for non-approved uploads. Integration testing verified: admin link visibility, admin page CRUD operations, upload zone access for approved users. Required `pip install email-validator` for Pydantic EmailStr validation.
+- 2026-01-18: M48 Complete - Persistent Zoom Preference. User's zoom level in document reader now persists across sessions. Created user_preferences table with RLS, useZoomPreference hook with debounced saves, lifted zoom state from PDFRenderer/DOCXRenderer to ReaderContent.

@@ -1,6 +1,6 @@
 # Memory System Index
 
-**Last Updated:** 2026-01-11
+**Last Updated:** 2026-01-18
 **Total Files:** 17
 
 ## Quick Navigation
@@ -23,7 +23,7 @@
 | `sources_feature.md` | M16-M20 | File upload, FastAPI backend, real-time processing, delete/detail panels |
 | `speed_optimization.md` | M21-M23 | Groq integration, parallel processing, retry logic, bug fixes |
 | `agent_memory.md` | M24-M29 | Memory system, tiered architecture, scout subagents, EXECPLAN slimming |
-| `document_reader.md` | M30-M40 | PDF/Markdown/DOCX/PPTX rendering, TOC, highlights, AI chat, notes, zen mode, progress, docx-preview, PDF highlighting, LibreOffice conversion |
+| `document_reader.md` | M30-M40, M48 | PDF/Markdown/DOCX/PPTX rendering, TOC, highlights, AI chat, notes, zen mode, progress, docx-preview, PDF highlighting, LibreOffice conversion, persistent zoom preference |
 | `auth_multiuser.md` | M41-M46 | Supabase Auth, JWT validation, RLS policies, data migration, deployment config, auth context, protected routes |
 
 ### decisions/

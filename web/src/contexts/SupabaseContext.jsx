@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 const SupabaseContext = createContext(null)
 
 export function SupabaseProvider({ children }) {
+  const [session, setSession] = useState(null)
   const [sources, setSources] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -11,6 +12,23 @@ export function SupabaseProvider({ children }) {
   // Upload queue state (preparation for M17)
   // Each item: { id, file, status: 'pending'|'uploading'|'processing'|'complete'|'error', progress: 0-100, error: string|null }
   const [uploadQueue, setUploadQueue] = useState([])
+
+  // Initialize auth session and listen for changes
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+    })
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session)
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   // Add file to upload queue
   const addToUploadQueue = (file) => {
@@ -259,6 +277,7 @@ export function SupabaseProvider({ children }) {
 
   const value = {
     supabase,
+    session,
     sources,
     loading,
     error,

@@ -21,6 +21,8 @@ import 'react-pdf/dist/Page/TextLayer.css'
  * @param {number} initialPage - Page number to scroll to initially (default: 1)
  * @param {Array} highlights - Highlight annotations to display
  * @param {Function} onDeleteHighlight - Callback when highlight is deleted
+ * @param {number} zoom - Current zoom level (0.5-2.0), controlled by parent
+ * @param {Function} onZoomChange - Callback when zoom changes
  */
 // Base width for PDF pages
 const BASE_WIDTH = 800
@@ -36,27 +38,34 @@ const PDFRenderer = memo(function PDFRenderer({
   onScroll,
   initialPage = 1,
   highlights = [],
-  onDeleteHighlight
+  onDeleteHighlight,
+  zoom = 1.0,
+  onZoomChange
 }) {
   const [numPages, setNumPages] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [zoom, setZoom] = useState(1.0)
   const containerRef = useRef(null)
   const pageRefs = useRef({})
 
-  // Zoom handlers
+  // Zoom handlers - call parent callback if provided
   const handleZoomIn = useCallback(() => {
-    setZoom(prev => Math.min(prev + ZOOM_STEP, MAX_ZOOM))
-  }, [])
+    if (onZoomChange) {
+      onZoomChange(prev => Math.min(prev + ZOOM_STEP, MAX_ZOOM))
+    }
+  }, [onZoomChange])
 
   const handleZoomOut = useCallback(() => {
-    setZoom(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM))
-  }, [])
+    if (onZoomChange) {
+      onZoomChange(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM))
+    }
+  }, [onZoomChange])
 
   const handleZoomReset = useCallback(() => {
-    setZoom(1.0)
-  }, [])
+    if (onZoomChange) {
+      onZoomChange(1.0)
+    }
+  }, [onZoomChange])
 
   // Calculate current page width based on zoom
   const pageWidth = Math.round(BASE_WIDTH * zoom)

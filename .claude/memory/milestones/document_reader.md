@@ -1,6 +1,6 @@
-# Document Reader Feature - M30-M40
+# Document Reader Feature - M30-M40, M48
 
-**Status:** Complete (2026-01-06)
+**Status:** Complete (2026-01-18)
 **Purpose:** AlphaXiv-style document reader for reading uploads before practice
 
 ## Overview
@@ -285,3 +285,68 @@ Extended `content_sources` with:
 Extended `annotations` with (M39):
 - position_type: 'character' or 'pdf_page'
 - pdf_rects: JSONB array of {pageNumber, x, y, width, height} for PDF highlights
+
+## M48: Persistent Zoom Preference (2026-01-18)
+
+**Goal:** User's zoom level persists across sessions. Set zoom to 150%, close browser, come back - still 150%.
+
+**Implementation:**
+
+| Phase | Task | Files |
+|-------|------|-------|
+| 1 | Database migration | `migrations/m48_user_preferences.sql` - user_preferences table with RLS |
+| 2 | useZoomPreference hook | `web/src/hooks/useZoomPreference.js` - load/save with 500ms debounce |
+| 3 | Lift zoom state | `web/src/components/reader/ReaderContent.jsx` - calls hook, passes to renderers |
+| 4 | Update renderers | `PDFRenderer.jsx`, `DOCXRenderer.jsx` - accept zoom/onZoomChange props |
+
+**Database Schema:**
+```sql
+CREATE TABLE user_preferences (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  preference_key TEXT NOT NULL,
+  preference_value JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, preference_key)
+);
+-- RLS: Users can only access their own preferences
+```
+
+**Key Files:**
+- `migrations/m48_user_preferences.sql` - Table with RLS
+- `web/src/hooks/useZoomPreference.js` - Loads zoom on mount, debounced saves
+- `web/src/components/reader/ReaderContent.jsx:76` - Calls useZoomPreference hook
+- `web/src/components/reader/PDFRenderer.jsx:42-43` - Accepts zoom/onZoomChange props
+- `web/src/components/reader/DOCXRenderer.jsx:29-30` - Same
+- `web/src/contexts/SupabaseContext.jsx` - Added session tracking (Phase 5 fix)
+
+**Phase 5 Bug Fix (Critical):**
+- Issue: useZoomPreference hook expected `session` from useSupabase() but SupabaseContext didn't provide it
+- Symptom: Zoom changes didn't save/load (userId was undefined, hook returned early)
+- Fix: Added session state tracking to SupabaseContext:
+  ```javascript
+  const [session, setSession] = useState(null)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session))
+    return () => subscription.unsubscribe()
+  }, [])
+  // Add to context value: session
+  ```
+
+**Hooks Updated:**
+| Hook | Change |
+|------|--------|
+| `useZoomPreference` | New - manages zoom state with DB persistence |
+
+**Components Modified:**
+| Component | Change |
+|-----------|--------|
+| `ReaderContent` | Calls useZoomPreference, passes zoom/onZoomChange to renderers |
+| `PDFRenderer` | Removed local zoom useState, accepts props, handlers call onZoomChange |
+| `DOCXRenderer` | Same as PDFRenderer |
+
+**Database Tables Added:**
+| Table | Purpose |
+|-------|---------|
+| `user_preferences` | Key-value store for per-user settings (zoom, future prefs) |

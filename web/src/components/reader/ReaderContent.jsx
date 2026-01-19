@@ -4,6 +4,7 @@ import PDFRenderer from './PDFRenderer'
 import MarkdownRenderer from './MarkdownRenderer'
 import TextRenderer from './TextRenderer'
 import DOCXRenderer from './DOCXRenderer'
+import { useZoomPreference } from '../../hooks/useZoomPreference'
 
 /**
  * Content type detection based on mime type and filename
@@ -71,6 +72,9 @@ const ReaderContent = memo(function ReaderContent({
   const scrollContainerRef = useRef(null)
   const hasRestoredPosition = useRef(false)
 
+  // Persist zoom preference across sessions
+  const { zoom, setZoom } = useZoomPreference()
+
   // Determine content type FIRST (other hooks depend on this)
   const contentType = useMemo(() => {
     return getContentType(source?.mime_type, source?.title)
@@ -115,6 +119,8 @@ const ReaderContent = memo(function ReaderContent({
             initialPage={initialPage}
             highlights={highlights}
             onDeleteHighlight={onDeleteHighlight}
+            zoom={zoom}
+            onZoomChange={setZoom}
           />
         )
 
@@ -145,6 +151,8 @@ const ReaderContent = memo(function ReaderContent({
             fileUrl={fileUrl}
             highlights={highlights}
             onDeleteHighlight={onDeleteHighlight}
+            zoom={zoom}
+            onZoomChange={setZoom}
           />
         )
 
@@ -170,6 +178,8 @@ const ReaderContent = memo(function ReaderContent({
               initialPage={initialPage}
               highlights={highlights}
               onDeleteHighlight={onDeleteHighlight}
+              zoom={zoom}
+              onZoomChange={setZoom}
             />
           )
         }
