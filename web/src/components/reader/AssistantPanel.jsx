@@ -77,7 +77,7 @@ export default function AssistantPanel({
   }
 
   return (
-    <div className="w-[36.75rem] border-l border-gray-300 bg-green-50 flex flex-col h-full">
+    <div className="w-[30.625rem] border-l border-gray-300 bg-green-50 flex flex-col h-full">
       {/* Header with tabs - always fixed at top */}
       <div className="flex-shrink-0 flex items-center justify-between border-b border-gray-300 px-2 bg-white">
         <div className="flex">
