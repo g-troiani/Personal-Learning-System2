@@ -642,120 +642,16 @@ Restricts document upload to whitelisted users. Non-approved users get 403 Forbi
 
 ### Persistent Zoom Preference M48 (Complete)
 
-**Goal:** User's zoom level in the document reader persists across sessions and page refreshes. When a user sets zoom to 150% in PDFRenderer or DOCXRenderer, that preference is saved and restored next time they open any document.
+**Full specs:** `.claude/memory/milestones/document_reader.md`
 
-**Current State:**
-- PDFRenderer.jsx:44 has `const [zoom, setZoom] = useState(1.0)` - resets to 100% on every render
-- DOCXRenderer.jsx:33 has identical local zoom state
-- Both have ZOOM_STEP=0.1, MIN_ZOOM=0.5, MAX_ZOOM=2.0
-
-**Implementation Plan:**
-
-| Phase | Task | Details |
-|-------|------|---------|
-| 1 | Database migration | Create `user_preferences` table with user_id, key, value, updated_at. RLS policy: users can only access own prefs. |
-| 2 | useZoomPreference hook | Load zoom on mount, save on change (debounced 500ms). Uses Supabase client. |
-| 3 | Lift zoom state | Move zoom state from renderers to ReaderContent.jsx. Pass zoom + setZoom as props. |
-| 4 | Update renderers | PDFRenderer and DOCXRenderer accept zoom as prop instead of local state. Keep zoom controls UI. |
-
-**Database Schema:**
-```sql
-CREATE TABLE user_preferences (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  preference_key TEXT NOT NULL,
-  preference_value JSONB NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(user_id, preference_key)
-);
-
--- RLS: Users can only access their own preferences
-ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can manage own preferences" ON user_preferences
-  FOR ALL USING (auth.uid() = user_id);
-```
-
-**Files to Modify:**
-- `migrations/m48_user_preferences.sql` - Create table
-- `web/src/hooks/useZoomPreference.js` - New hook
-- `web/src/components/reader/ReaderContent.jsx` - Lift zoom state
-- `web/src/components/reader/PDFRenderer.jsx` - Accept zoom prop
-- `web/src/components/reader/DOCXRenderer.jsx` - Accept zoom prop
+User's zoom level persists across sessions. Database-backed user_preferences table with RLS, useZoomPreference hook with debounced saves, zoom state lifted from renderers to ReaderContent.jsx.
 
 
-### Source-Grounded Practice Items M49 (Next)
+### Source-Grounded Practice Items M49 (Complete)
 
-**Goal:** After this milestone, practice items will be grounded in the actual source document rather than generated from the LLM's general knowledge. When a user uploads a document and generates practice items, each item will test only concepts explicitly stated in the source material. The `source_excerpt` field (which already exists in the database but is always NULL) will be populated with the verbatim text that each KC comes from.
+**Full specs:** `.claude/memory/milestones/sources_feature.md`
 
-**Problem Being Solved:** Currently, practice items test concepts not present in the source document. The LLM fills gaps with general domain knowledge, creating items that require knowledge the user has no way of having learned from the material. For example, an item might ask "What are the three types of attention?" when the source only mentions self-attention—the user cannot answer this from reading the document.
-
-**Important Nuance:** Grounding does NOT mean pure memorization or verbatim recall. Valid practice items may require:
-- Reasoning and inference from the source material
-- Application of prerequisite knowledge assumed for the domain (e.g., Terraform docs can assume user knows Python, what an AWS instance is)
-- Synthesis of multiple concepts within the same source
-
-The problem is items requiring **significant knowledge not derivable from the source + reasonable prerequisites**. A fair question is one the user could answer by reading the material and applying their existing foundational skills.
-
-**Root Cause:** The `source_excerpt` field exists in `knowledge_components` table but is never populated. KC extraction captures name/description but not the verbatim source text. Practice item generation receives only name, description, and complexity—no source context.
-
-**Research:** See `NEW FEATURES.md` for comprehensive research including 6 parallel worktree investigations covering data model, KC extraction pipeline, item generation flow, prompt engineering, UI/UX impact, and system integration.
-
-**Implementation Plan:**
-
-| Phase | Task | Details |
-|-------|------|---------|
-| 1 | Update KC extraction prompt | Add `source_excerpt` field to `KC_EXTRACTION_PROMPT` in `kc_extractor.py:65-97`. Request 50-200 word verbatim quotes from source. |
-| 2 | Parse source_excerpt | Update `parse_llm_response()` in `kc_extractor.py:226-233` to extract and validate source_excerpt from LLM response. |
-| 3 | Store source_excerpt | Update `store_extracted_kcs()` in `kc_extractor.py:332-346` to pass source_excerpt to `insert_kcs_batch()`. |
-| 4 | Update practice templates | Modify all 4 template functions in `templates.py` to include source context and explicit grounding constraints. |
-| 5 | Testing | Ingest test document, verify excerpts populated (>95%), verify items grounded, test backward compatibility with NULL excerpts. |
-
-**Files to Modify:**
-
-| File | Change | Lines |
-|------|--------|-------|
-| `learn_system/app/ingestion/kc_extractor.py` | Add source_excerpt to extraction prompt | 65-97 |
-| `learn_system/app/ingestion/kc_extractor.py` | Parse source_excerpt from response | 226-233 |
-| `learn_system/app/ingestion/kc_extractor.py` | Pass source_excerpt to batch insert | 332-346 |
-| `learn_system/app/practice/templates.py` | Add source context + grounding constraints | All 4 functions |
-
-**No changes required:** Database schema (source_excerpt already exists), API contracts (source_excerpt already in KC model), Frontend (already displays source_excerpt when present).
-
-**Migration Strategy:** Forward-only. Only newly ingested documents will have grounded practice items. Existing KCs remain unchanged with NULL source_excerpt. Users can re-ingest specific documents if grounding is desired.
-
-**Validation:**
-
-    # Verify excerpts are populated
-    SELECT name, LEFT(source_excerpt, 100) as excerpt_preview
-    FROM knowledge_components
-    WHERE source_excerpt IS NOT NULL
-    ORDER BY created_at DESC
-    LIMIT 10;
-
-**Success Criteria:**
-- >95% of new KCs have non-empty source_excerpt
-- 100% of practice items answerable from source excerpt + reasonable domain prerequisites
-- 0 items requiring knowledge not in source AND not a reasonable prerequisite
-- Existing items (NULL excerpt) still functional
-
-**Grounding Constraints for Templates:**
-
-Each template will include:
-
-    ---SOURCE EXCERPT---
-    {source_excerpt}
-    ---END SOURCE---
-
-    GROUNDING RULES:
-    - Questions must be answerable by reading the source excerpt + applying reasonable prerequisite knowledge for the domain
-    - You MAY require reasoning, inference, or application of concepts from the excerpt
-    - You MAY assume foundational knowledge appropriate to the topic (e.g., programming basics for a coding tutorial, basic math for a statistics document)
-    - DO NOT require knowledge of facts, terminology, or concepts not mentioned in the excerpt unless they are obvious prerequisites
-    - DO NOT invent specific details, numbers, or examples not present in or derivable from the excerpt
-    - If asked to create application/troubleshooting items, the scenario must be solvable using the excerpt's information + reasonable domain knowledge
-
-    FAIR: "Based on the excerpt's description of X, what would happen if Y?" (requires reasoning from source)
-    UNFAIR: "What are the three types of X?" (when source only mentions one type)
+Practice items grounded in source documents rather than LLM general knowledge. KC extraction populates `source_excerpt` with verbatim quotes (50-200 words). Templates include GROUNDING RULES constraining items to test only concepts derivable from source + reasonable domain prerequisites. Backward compatible with NULL excerpts.
 
 
 ## Web UI Reference
@@ -794,5 +690,5 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-11: M47 Spec Added - Approved Users Whitelist feature integrated into EXECPLAN. Restricts document upload to whitelisted users, admin page for management. 8 implementation phases defined.
 - 2026-01-11: M47 Complete - Approved Users Whitelist feature fully implemented and tested. Database migration (approved_users table with RLS), backend approval logic (ApprovedUser dependency), protected upload endpoint, admin API endpoints (list/add/remove), AdminRoute guard with useIsAdmin hook, Admin page UI (table, add form, remove with confirmation), 403 error handling for non-approved uploads. Integration testing verified: admin link visibility, admin page CRUD operations, upload zone access for approved users. Required `pip install email-validator` for Pydantic EmailStr validation.
 - 2026-01-18: M48 Complete - Persistent Zoom Preference. User's zoom level in document reader now persists across sessions. Created user_preferences table with RLS, useZoomPreference hook with debounced saves, lifted zoom state from PDFRenderer/DOCXRenderer to ReaderContent.
-- 2026-01-19: M49 Spec Added - Source-Grounded Practice Items. Research complete via 6 parallel worktrees. Problem: source_excerpt field exists but never populated, causing practice items to test concepts not in source. Solution: 2-phase fix (KC extraction + templates), no DB migrations needed. See NEW FEATURES.md for full research.
+- 2026-01-19: M49 Spec Added - Source-Grounded Practice Items. Research complete via 6 parallel worktrees. Problem: source_excerpt field exists but never populated, causing practice items to test concepts not in source. Solution: 2-phase fix (KC extraction + templates), no DB migrations needed.
 - 2026-01-19: M49 Complete - Source-Grounded Practice Items. KC extraction now populates source_excerpt with verbatim quotes (kc_extractor.py). Templates include GROUNDING RULES constraining items to test only concepts derivable from source + domain prerequisites (templates.py). Backward compatible with NULL excerpts.

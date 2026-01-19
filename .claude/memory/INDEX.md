@@ -1,13 +1,13 @@
 # Memory System Index
 
-**Last Updated:** 2026-01-18
+**Last Updated:** 2026-01-19
 **Total Files:** 17
 
 ## Quick Navigation
 
 | Category | Files | Key Topics |
 |----------|-------|------------|
-| Milestones | 7 | M1-M46 implementation history |
+| Milestones | 7 | M1-M49 implementation history |
 | Decisions | 4 | Architecture, technology, patterns, memory system |
 | Schemas | 3 | Database, API, React components |
 | Reference | 3 | Research, context, retrospectives |
@@ -20,7 +20,7 @@
 |------|------------|------------|
 | `cli_foundation.md` | M1-M8 | CLI, ingestion, KC extraction, practice items, study loop, SM-2, technique bundles |
 | `webui_core.md` | M9-M15 | React setup, home dashboard, study session, calendar, due review, progress, analytics |
-| `sources_feature.md` | M16-M20 | File upload, FastAPI backend, real-time processing, delete/detail panels |
+| `sources_feature.md` | M16-M20, M49 | File upload, FastAPI backend, real-time processing, delete/detail panels, source-grounded practice items |
 | `speed_optimization.md` | M21-M23 | Groq integration, parallel processing, retry logic, bug fixes |
 | `agent_memory.md` | M24-M29 | Memory system, tiered architecture, scout subagents, EXECPLAN slimming |
 | `document_reader.md` | M30-M40, M48 | PDF/Markdown/DOCX/PPTX rendering, TOC, highlights, AI chat, notes, zen mode, progress, docx-preview, PDF highlighting, LibreOffice conversion, persistent zoom preference |

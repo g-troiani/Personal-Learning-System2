@@ -247,7 +247,7 @@ Bundle settings are stored and displayed in UI but don't modify actual behavior.
 
 1. **Fix Web UI spaced repetition** — Update `next_review_at`, `current_interval_days`, `easiness_factor` after practice
 2. **Initialize `next_review_at` to NOW()** — New KCs appear in due queue immediately
-3. **Add `source_excerpt` extraction** — Ground practice items in source material (see NEW FEATURES.md)
+3. **Add `source_excerpt` extraction** — Ground practice items in source material (COMPLETE - see M49 in `.claude/memory/milestones/sources_feature.md`)
 
 ### Phase 2: High Priority (Short-term)
 
