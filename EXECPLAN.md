@@ -59,6 +59,8 @@ The system solves five problems. First, it eliminates the "I don't know what I d
 
 **Approved Users Whitelist (M47):** This milestone restricts document upload (which triggers expensive Claude and Groq API calls) to a whitelist of approved users. Non-approved users can log in and view existing data but receive a 403 Forbidden error when attempting to upload. Hardcoded admin emails can access an Admin page at `/admin` to manage the whitelist—adding or removing approved users. This prevents runaway API costs from unauthorized usage while preserving read access for all authenticated users.
 
+**Source-Grounded Practice Items (M49):** This milestone fixes a critical quality issue where practice items test concepts not present in the source document. Currently, the LLM generates items from its general knowledge rather than the uploaded content, creating questions that require knowledge the user has no way of having learned. After M49, each Knowledge Component will include the verbatim source excerpt it was derived from, and practice item generation will be constrained to only test concepts derivable from the source + reasonable domain prerequisites. This is NOT pure memorization—items may require reasoning, inference, and application—but they must be answerable by someone who has read the material and has appropriate foundational knowledge. No database changes required—the `source_excerpt` field already exists but was never populated.
+
 
 ## Progress
 
@@ -169,6 +171,14 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M48 Phase 4: Update PDFRenderer and DOCXRenderer to accept zoom props (2026-01-18)
 - [x] M48 Phase 5: Bug fix - SupabaseContext missing session; added auth state tracking (2026-01-18)
 - [x] M48 Testing: Verified zoom persists across page refresh (130% → 150% → refresh → 150%) (2026-01-18)
+
+**Source-Grounded Practice Items (M49)** - Pending
+- [ ] M49 Research: 6 parallel worktrees, comprehensive investigation (2026-01-19)
+- [ ] M49 Phase 1: Update KC extraction prompt to request source_excerpt
+- [ ] M49 Phase 2: Update parse_llm_response() to extract source_excerpt
+- [ ] M49 Phase 3: Update store_extracted_kcs() to pass source_excerpt to DB
+- [ ] M49 Phase 4: Update all 4 practice item templates with grounding constraints
+- [ ] M49 Testing: Verify excerpts populated, items grounded, backward compatibility
 
 
 ## Surprises and Discoveries
@@ -283,7 +293,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through forty-seven milestones. M1-M47 are complete.
+Implementation proceeds through forty-nine milestones. M1-M48 are complete. M49 is next.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -308,6 +318,8 @@ Implementation proceeds through forty-seven milestones. M1-M47 are complete.
 **Approved Users Whitelist (Complete):** M47: Restricted document upload to approved users. Database migration for approved_users table with deny-all RLS, backend approval logic (ApprovedUser dependency) and admin endpoints, frontend AdminRoute guard with useIsAdmin hook, Admin page for managing whitelist, upload error handling for 403.
 
 **Persistent Zoom Preference (Complete):** M48: Remember user's zoom level in document reader across sessions. Database-backed per-user preferences.
+
+**Source-Grounded Practice Items (Next):** M49: Fix practice items that test concepts not in the source document. The `source_excerpt` field exists in the database but is never populated. Two-phase fix: (1) modify KC extraction to capture verbatim source quotes, (2) modify practice item templates to include source context and grounding constraints. No database migrations needed.
 
 
 ## CLI Usage Reference
@@ -671,6 +683,81 @@ CREATE POLICY "Users can manage own preferences" ON user_preferences
 - `web/src/components/reader/DOCXRenderer.jsx` - Accept zoom prop
 
 
+### Source-Grounded Practice Items M49 (Next)
+
+**Goal:** After this milestone, practice items will be grounded in the actual source document rather than generated from the LLM's general knowledge. When a user uploads a document and generates practice items, each item will test only concepts explicitly stated in the source material. The `source_excerpt` field (which already exists in the database but is always NULL) will be populated with the verbatim text that each KC comes from.
+
+**Problem Being Solved:** Currently, practice items test concepts not present in the source document. The LLM fills gaps with general domain knowledge, creating items that require knowledge the user has no way of having learned from the material. For example, an item might ask "What are the three types of attention?" when the source only mentions self-attention—the user cannot answer this from reading the document.
+
+**Important Nuance:** Grounding does NOT mean pure memorization or verbatim recall. Valid practice items may require:
+- Reasoning and inference from the source material
+- Application of prerequisite knowledge assumed for the domain (e.g., Terraform docs can assume user knows Python, what an AWS instance is)
+- Synthesis of multiple concepts within the same source
+
+The problem is items requiring **significant knowledge not derivable from the source + reasonable prerequisites**. A fair question is one the user could answer by reading the material and applying their existing foundational skills.
+
+**Root Cause:** The `source_excerpt` field exists in `knowledge_components` table but is never populated. KC extraction captures name/description but not the verbatim source text. Practice item generation receives only name, description, and complexity—no source context.
+
+**Research:** See `NEW FEATURES.md` for comprehensive research including 6 parallel worktree investigations covering data model, KC extraction pipeline, item generation flow, prompt engineering, UI/UX impact, and system integration.
+
+**Implementation Plan:**
+
+| Phase | Task | Details |
+|-------|------|---------|
+| 1 | Update KC extraction prompt | Add `source_excerpt` field to `KC_EXTRACTION_PROMPT` in `kc_extractor.py:65-97`. Request 50-200 word verbatim quotes from source. |
+| 2 | Parse source_excerpt | Update `parse_llm_response()` in `kc_extractor.py:226-233` to extract and validate source_excerpt from LLM response. |
+| 3 | Store source_excerpt | Update `store_extracted_kcs()` in `kc_extractor.py:332-346` to pass source_excerpt to `insert_kcs_batch()`. |
+| 4 | Update practice templates | Modify all 4 template functions in `templates.py` to include source context and explicit grounding constraints. |
+| 5 | Testing | Ingest test document, verify excerpts populated (>95%), verify items grounded, test backward compatibility with NULL excerpts. |
+
+**Files to Modify:**
+
+| File | Change | Lines |
+|------|--------|-------|
+| `learn_system/app/ingestion/kc_extractor.py` | Add source_excerpt to extraction prompt | 65-97 |
+| `learn_system/app/ingestion/kc_extractor.py` | Parse source_excerpt from response | 226-233 |
+| `learn_system/app/ingestion/kc_extractor.py` | Pass source_excerpt to batch insert | 332-346 |
+| `learn_system/app/practice/templates.py` | Add source context + grounding constraints | All 4 functions |
+
+**No changes required:** Database schema (source_excerpt already exists), API contracts (source_excerpt already in KC model), Frontend (already displays source_excerpt when present).
+
+**Migration Strategy:** Forward-only. Only newly ingested documents will have grounded practice items. Existing KCs remain unchanged with NULL source_excerpt. Users can re-ingest specific documents if grounding is desired.
+
+**Validation:**
+
+    # Verify excerpts are populated
+    SELECT name, LEFT(source_excerpt, 100) as excerpt_preview
+    FROM knowledge_components
+    WHERE source_excerpt IS NOT NULL
+    ORDER BY created_at DESC
+    LIMIT 10;
+
+**Success Criteria:**
+- >95% of new KCs have non-empty source_excerpt
+- 100% of practice items answerable from source excerpt + reasonable domain prerequisites
+- 0 items requiring knowledge not in source AND not a reasonable prerequisite
+- Existing items (NULL excerpt) still functional
+
+**Grounding Constraints for Templates:**
+
+Each template will include:
+
+    ---SOURCE EXCERPT---
+    {source_excerpt}
+    ---END SOURCE---
+
+    GROUNDING RULES:
+    - Questions must be answerable by reading the source excerpt + applying reasonable prerequisite knowledge for the domain
+    - You MAY require reasoning, inference, or application of concepts from the excerpt
+    - You MAY assume foundational knowledge appropriate to the topic (e.g., programming basics for a coding tutorial, basic math for a statistics document)
+    - DO NOT require knowledge of facts, terminology, or concepts not mentioned in the excerpt unless they are obvious prerequisites
+    - DO NOT invent specific details, numbers, or examples not present in or derivable from the excerpt
+    - If asked to create application/troubleshooting items, the scenario must be solvable using the excerpt's information + reasonable domain knowledge
+
+    FAIR: "Based on the excerpt's description of X, what would happen if Y?" (requires reasoning from source)
+    UNFAIR: "What are the three types of X?" (when source only mentions one type)
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -707,3 +794,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-11: M47 Spec Added - Approved Users Whitelist feature integrated into EXECPLAN. Restricts document upload to whitelisted users, admin page for management. 8 implementation phases defined.
 - 2026-01-11: M47 Complete - Approved Users Whitelist feature fully implemented and tested. Database migration (approved_users table with RLS), backend approval logic (ApprovedUser dependency), protected upload endpoint, admin API endpoints (list/add/remove), AdminRoute guard with useIsAdmin hook, Admin page UI (table, add form, remove with confirmation), 403 error handling for non-approved uploads. Integration testing verified: admin link visibility, admin page CRUD operations, upload zone access for approved users. Required `pip install email-validator` for Pydantic EmailStr validation.
 - 2026-01-18: M48 Complete - Persistent Zoom Preference. User's zoom level in document reader now persists across sessions. Created user_preferences table with RLS, useZoomPreference hook with debounced saves, lifted zoom state from PDFRenderer/DOCXRenderer to ReaderContent.
+- 2026-01-19: M49 Spec Added - Source-Grounded Practice Items. Research complete via 6 parallel worktrees. Problem: source_excerpt field exists but never populated, causing practice items to test concepts not in source. Solution: 2-phase fix (KC extraction + templates), no DB migrations needed. See NEW FEATURES.md for full research.
