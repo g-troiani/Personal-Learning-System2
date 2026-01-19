@@ -63,6 +63,8 @@ The system solves five problems. First, it eliminates the "I don't know what I d
 
 **Practice Mode UI Differentiation (M50):** This milestone transforms the study interface to render practice items differently based on their `practice_mode` type. Currently, `AnswerInput.jsx` renders ALL practice modes (free_recall, cued_recall, recognition, explanation, application, execution) as identical textareas. After M50, each mode has appropriate UI: recognition shows clickable multiple-choice buttons with auto-grading, cued_recall shows progressive hint reveals, execution shows task checklists with completion tracking, and explanation/application show rubric previews. This is a **pure frontend enhancement**—the backend already stores and returns all necessary data (`practice_mode`, `hints`, `rubric`, `success_criteria`). No database or API changes required.
 
+**Session Continuity Across Page Reloads (M51):** This milestone persists study session progress so users can resume where they left off after page reload, WiFi change, or browser restart. Currently, `Study.jsx` creates a NEW session ID on every page load (`sess_${Date.now()}`), abandoning any incomplete session. User's completed attempts are saved in the database but inaccessible because React state resets. After M51, the system checks for incomplete sessions on load, offers to resume or start fresh via a modal dialog, and maintains progress across interruptions. Session state uses hybrid storage: localStorage for fast cache + database as source of truth. Requires database migration (5 new columns on `sessions` table) and new API endpoint (`POST /api/sessions/pause` for sendBeacon on tab close).
+
 
 ## Progress
 
@@ -192,6 +194,18 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M50 Phase 6: Explanation/Application - ExplanationInput.jsx with rubric preview (blue), ApplicationInput.jsx with scenario styling (purple), word count (2026-01-19)
 - [x] M50 Testing: ExplanationInput and ApplicationInput verified in Chrome (blue rubric, word count, scenario placeholder). Recognition/CuedRecall/Execution not in current study queue but code verified (2026-01-19)
 
+**Session Continuity Across Page Reloads (M51)** - Complete
+- [x] M51 Research: 6 parallel worktrees (ui-ux, data-model, study-jsx, lifecycle, storage, edge-cases), consolidated spec in NEW FEATURES.md (2026-01-19)
+- [x] M51 Phase 1: Database migration (m51_session_continuity.sql) - add status, current_item_index, queue_item_ids, paused_at, last_activity_at columns to sessions table (2026-01-19)
+- [x] M51 Phase 2: useSessionPersistence hook - localStorage cache + DB sync logic (2026-01-19)
+- [x] M51 Phase 3: SessionRecoveryDialog component - resume/start-fresh modal (2026-01-19)
+- [x] M51 Phase 4: Study.jsx integration - recovery check on mount, save-on-answer (2026-01-19)
+- [x] M51 Phase 5: BeforeUnload handler (integrated in Study.jsx, pauseSession on unload) (2026-01-19)
+- [x] M51 Phase 6: SaveIndicator component in SessionHeader (2026-01-19)
+- [x] M51 Phase 7: Multiple tab prevention (localStorage lock) (2026-01-19)
+- [x] M51 RLS Fix: Added SELECT policy "Users can select own sessions" on sessions table (2026-01-19)
+- [x] M51 Testing: Reload mid-session → recovery dialog shows correct progress (1/20) → resume works (2026-01-19)
+
 
 ## Surprises and Discoveries
 
@@ -251,6 +265,12 @@ Key lessons learned during implementation:
 - Fix applied: `fix_practice_items_rls.sql`, removed redundant filters, fixed port
 - Full analysis archived in `.claude/memory/milestones/auth_multiuser.md`
 
+**M51 Sessions SELECT Policy (FIXED 2026-01-19):**
+- Issue: Sessions table had INSERT/UPDATE/DELETE policies but NO SELECT policy
+- Symptom: `useSessionPersistence` query returned 0 sessions despite data existing (admin could see via postgres role)
+- Fix: `CREATE POLICY "Users can select own sessions" ON sessions FOR SELECT USING (auth.uid() = user_id)`
+- Lesson: Always verify all CRUD operations have corresponding RLS policies
+
 
 ## Known Issues and Future Improvements
 
@@ -305,7 +325,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through fifty milestones. M1-M50 are complete.
+Implementation proceeds through fifty-one milestones. M1-M51 are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -334,6 +354,8 @@ Implementation proceeds through fifty milestones. M1-M50 are complete.
 **Source-Grounded Practice Items (Complete):** M49: Practice items now grounded in source documents. KC extraction populates `source_excerpt` with verbatim quotes, templates include GROUNDING RULES that constrain items to test only concepts derivable from source + reasonable domain prerequisites. No database migrations needed - field already existed.
 
 **Practice Mode UI Differentiation (Complete):** M50: Render practice items with mode-appropriate UI. Recognition shows multiple choice buttons with auto-grading, cued_recall shows progressive hints, execution shows task checklists, explanation/application show rubric previews with word count. Pure frontend work - no backend changes. See `.claude/memory/milestones/webui_core.md` for implementation details.
+
+**Session Continuity (Ready):** M51: Persist study session progress across page reloads. Database migration adds 5 columns to sessions table (status, current_item_index, queue_item_ids, paused_at, last_activity_at). Hybrid storage: localStorage cache + database source of truth. New components: useSessionPersistence hook, SessionRecoveryDialog, SaveIndicator. BeforeUnload with sendBeacon for crash resilience. Multiple tab prevention via localStorage lock.
 
 
 ## CLI Usage Reference
@@ -675,6 +697,25 @@ Practice items grounded in source documents rather than LLM general knowledge. K
 Practice items now render with mode-appropriate UI. Recognition shows A/B/C/D buttons with auto-grading, cued_recall has progressive hints, execution has task checklists. Pure frontend: AnswerInput.jsx dispatches to mode-specific components in `inputs/` directory.
 
 
+### Session Continuity Across Page Reloads M51 (Complete)
+
+**Full specs:** `.claude/memory/milestones/webui_core.md`
+
+Persist study session progress so users can resume after page reload, WiFi change, or browser restart. Hybrid storage: localStorage cache for fast access + database as source of truth. Recovery dialog shows progress and offers resume/start-fresh choice.
+
+**Key Components:**
+- `web/src/hooks/useSessionPersistence.js` - Checks for incomplete sessions on mount, debounced DB saves, localStorage cache
+- `web/src/components/study/SessionRecoveryDialog.jsx` - Resume/start-fresh modal with progress display
+- `web/src/components/study/SaveIndicator.jsx` - Cloud save status icon in header
+- `web/src/components/study/SessionHeader.jsx` - Updated to show SaveIndicator
+
+**Critical Fix:** Added SELECT RLS policy for sessions table - users could INSERT/UPDATE/DELETE but not SELECT their own sessions.
+
+**Validation Rules:**
+- Session age < 7 days: valid, show resume dialog
+- Session age > 7 days: auto-mark abandoned, start fresh
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -715,3 +756,5 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-19: M49 Complete - Source-Grounded Practice Items. KC extraction now populates source_excerpt with verbatim quotes (kc_extractor.py). Templates include GROUNDING RULES constraining items to test only concepts derivable from source + domain prerequisites (templates.py). Backward compatible with NULL excerpts.
 - 2026-01-19: M50 Spec Added - Practice Mode UI Differentiation. Research complete via 6 parallel worktrees (NEW FEATURES.md). Pure frontend enhancement: render practice items with mode-appropriate UI (recognition as MCQ buttons, cued_recall with hints, execution with checklists). 6 implementation phases defined. No backend changes required.
 - 2026-01-19: M50 Complete - Practice Mode UI Differentiation. Created inputs/ directory with 6 mode-specific components (FreeRecallInput, RecognitionInput, CuedRecallInput, ExecutionInput, ExplanationInput, ApplicationInput) and shared/ directory with primitives (TextArea, SubmitButton, SkipButton). AnswerInput refactored as dispatcher. Study.jsx updated with userResponse state and mode-specific handling (recognition auto-grades, execution calculates independence score). Live testing verified ExplanationInput (blue rubric, word count) and ApplicationInput (scenario placeholder).
+- 2026-01-19: M51 Spec Added - Session Continuity Across Page Reloads. Research complete via 6 parallel worktrees (ui-ux, data-model, study-jsx, lifecycle, storage, edge-cases). Problem: Study.jsx creates new session on every load, abandoning incomplete sessions. Solution: hybrid storage (localStorage cache + DB source of truth), SessionRecoveryDialog on mount, beforeunload with sendBeacon, multiple tab prevention. Database migration adds 5 columns to sessions table. 7 implementation phases defined.
+- 2026-01-19: M51 Complete - Session Continuity Across Page Reloads. Implemented useSessionPersistence hook (async auth check, debounced DB saves), SessionRecoveryDialog with progress display (X/20, last activity timestamp), SaveIndicator with cloud icon. Critical fix: added SELECT RLS policy "Users can select own sessions" on sessions table - original RLS only had INSERT/UPDATE/DELETE but not SELECT. Live testing verified: complete item → reload → recovery dialog shows 1/20 progress → resume works.

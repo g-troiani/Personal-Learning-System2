@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useSupabase } from '../contexts/SupabaseContext'
+import { useSessionPersistence } from '../hooks/useSessionPersistence'
 import SessionHeader from '../components/study/SessionHeader'
 import QuestionCard from '../components/study/QuestionCard'
 import AnswerInput from '../components/study/AnswerInput'
 import SelfAssessment from '../components/study/SelfAssessment'
 import SessionSummary from '../components/study/SessionSummary'
+import SessionRecoveryDialog from '../components/study/SessionRecoveryDialog'
 
 export default function Study() {
   const [searchParams] = useSearchParams()
@@ -13,6 +15,22 @@ export default function Study() {
   const { supabase } = useSupabase()
 
   const sourceId = searchParams.get('source')
+
+  // Session persistence hook
+  const {
+    incompleteSession,
+    checkingSession,
+    showRecoveryDialog,
+    resumeSession,
+    startFresh,
+    saveStatus,
+    lastSaveTime,
+    saveSessionState,
+    initializeSession,
+    completeSession,
+    pauseSession,
+    isTabLocked
+  } = useSessionPersistence({ sourceId })
 
   // Session state
   const [sessionId, setSessionId] = useState(null)
@@ -33,7 +51,116 @@ export default function Study() {
   const [completedAttempts, setCompletedAttempts] = useState([])
   const [showSummary, setShowSummary] = useState(false)
 
-  // Fetch study queue
+  // Recovery state
+  const [isResuming, setIsResuming] = useState(false)
+  const [recoveryLoading, setRecoveryLoading] = useState(false)
+
+  // Refs for beforeunload
+  const sessionStateRef = useRef(null)
+
+  // Keep sessionStateRef updated
+  useEffect(() => {
+    if (sessionId && items.length > 0) {
+      sessionStateRef.current = {
+        id: sessionId,
+        currentIndex,
+        queueItemIds: items.map(item => item.id),
+        itemsCompleted: completedAttempts.length
+      }
+    }
+  }, [sessionId, items, currentIndex, completedAttempts])
+
+  // BeforeUnload handler - pause session on tab close/refresh
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (sessionStateRef.current && !showSummary) {
+        pauseSession()
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [pauseSession, showSummary])
+
+  // Handle resuming session
+  const handleResumeSession = async () => {
+    setRecoveryLoading(true)
+    const sessionData = await resumeSession()
+
+    if (sessionData) {
+      setIsResuming(true)
+      setSessionId(sessionData.id)
+      setSessionStartTime(new Date(sessionData.started_at).getTime())
+
+      // Fetch items and restore position
+      await fetchStudyQueueForResume(sessionData)
+    }
+    setRecoveryLoading(false)
+  }
+
+  // Handle starting fresh
+  const handleStartFresh = async () => {
+    setRecoveryLoading(true)
+    await startFresh()
+    setRecoveryLoading(false)
+    // fetchStudyQueue will be called by useEffect since showRecoveryDialog becomes false
+  }
+
+  // Fetch study queue for resume
+  const fetchStudyQueueForResume = async (sessionData) => {
+    try {
+      setLoading(true)
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setError('Not authenticated')
+        setLoading(false)
+        return
+      }
+
+      // If we have queue item IDs, fetch items in that order
+      if (sessionData.queueItemIds && sessionData.queueItemIds.length > 0) {
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('practice_items')
+          .select('*, knowledge_components(*)')
+          .in('id', sessionData.queueItemIds)
+
+        if (itemsError) {
+          throw new Error('Failed to fetch practice items')
+        }
+
+        // Reorder items to match saved queue order
+        const itemsMap = Object.fromEntries(itemsData.map(item => [item.id, item]))
+        const orderedItems = sessionData.queueItemIds
+          .map(id => itemsMap[id])
+          .filter(Boolean)
+          .map(item => ({
+            ...item,
+            knowledge_components: item.knowledge_components
+          }))
+
+        setItems(orderedItems)
+        setCurrentIndex(sessionData.currentIndex || 0)
+        setCompletedAttempts(new Array(sessionData.itemsCompleted || 0).fill({ score: 0, difficulty: 3 }))
+
+        if (orderedItems.length > 0 && sessionData.currentIndex < orderedItems.length) {
+          setCurrentKc(orderedItems[sessionData.currentIndex].knowledge_components)
+        }
+
+        setItemStartTime(Date.now())
+        setLoading(false)
+      } else {
+        // No queue data, start fresh
+        await fetchStudyQueue()
+      }
+    } catch (err) {
+      console.error('Error resuming study queue:', err)
+      setError(err.message || 'Failed to resume session')
+      setLoading(false)
+    }
+  }
+
+  // Fetch study queue (fresh start)
   const fetchStudyQueue = useCallback(async () => {
     try {
       setLoading(true)
@@ -104,7 +231,11 @@ export default function Study() {
           id: newSessionId,
           user_id: user.id,
           session_type: sourceId ? 'source_review' : 'mixed',
-          started_at: new Date().toISOString()
+          started_at: new Date().toISOString(),
+          status: 'active',
+          current_item_index: 0,
+          queue_item_ids: JSON.stringify(shuffled.map(item => item.id)),
+          last_activity_at: new Date().toISOString()
         })
 
       if (sessionError) {
@@ -115,6 +246,9 @@ export default function Study() {
       setSessionId(newSessionId)
       setSessionStartTime(Date.now())
       setItemStartTime(Date.now())
+
+      // Initialize session persistence
+      await initializeSession(newSessionId, shuffled.map(item => item.id))
 
       // Load first KC
       if (shuffled.length > 0) {
@@ -127,11 +261,14 @@ export default function Study() {
       setError(err.message || 'Failed to load study items')
       setLoading(false)
     }
-  }, [supabase, sourceId])
+  }, [supabase, sourceId, initializeSession])
 
+  // Fetch study queue on mount (only if not showing recovery dialog)
   useEffect(() => {
-    fetchStudyQueue()
-  }, [fetchStudyQueue])
+    if (!checkingSession && !showRecoveryDialog && !isResuming) {
+      fetchStudyQueue()
+    }
+  }, [checkingSession, showRecoveryDialog, isResuming, fetchStudyQueue])
 
   // Record attempt and move to next item (shared logic)
   const recordAttemptAndMoveNext = async (score, correctness, responseText, extraData = {}) => {
@@ -195,7 +332,17 @@ export default function Study() {
       }
 
       // Track completed attempt (convert score to 1-5 scale for summary)
-      setCompletedAttempts(prev => [...prev, { score: score * 5, difficulty: 3 }])
+      const newCompletedAttempts = [...completedAttempts, { score: score * 5, difficulty: 3 }]
+      setCompletedAttempts(newCompletedAttempts)
+
+      // Save session state after each answer
+      const nextIndex = currentIndex + 1
+      saveSessionState({
+        id: sessionId,
+        currentIndex: nextIndex,
+        queueItemIds: items.map(item => item.id),
+        itemsCompleted: newCompletedAttempts.length
+      })
 
     } catch (err) {
       console.error('Error saving attempt:', err)
@@ -286,19 +433,12 @@ export default function Study() {
         ? completedAttempts.reduce((sum, a) => sum + a.score, 0) / completedAttempts.length
         : 0
 
-      try {
-        await supabase
-          .from('sessions')
-          .update({
-            ended_at: new Date().toISOString(),
-            actual_duration_minutes: Math.round(duration / 60),
-            items_completed: completedAttempts.length,
-            average_score: avgScore / 5,
-          })
-          .eq('id', sessionId)
-      } catch (err) {
-        console.error('Error ending session:', err)
-      }
+      // Mark session as completed via persistence hook
+      await completeSession(sessionId, {
+        itemsCompleted: completedAttempts.length,
+        averageScore: avgScore / 5,
+        durationMinutes: Math.round(duration / 60)
+      })
     }
 
     setShowSummary(true)
@@ -318,11 +458,39 @@ export default function Study() {
     setShowSummary(false)
     setCompletedAttempts([])
     setCurrentIndex(0)
+    setIsResuming(false)
     fetchStudyQueue()
   }
 
-  // Loading state
-  if (loading) {
+  // Show recovery dialog if incomplete session found
+  if (showRecoveryDialog && incompleteSession) {
+    return (
+      <SessionRecoveryDialog
+        session={incompleteSession}
+        onResume={handleResumeSession}
+        onStartFresh={handleStartFresh}
+        loading={recoveryLoading}
+      />
+    )
+  }
+
+  // Show tab locked message
+  if (isTabLocked) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <p className="text-text-secondary mb-4">This session is already open in another tab.</p>
+        <button
+          onClick={() => navigate('/')}
+          className="px-6 py-2 bg-btn-primary text-white rounded-button"
+        >
+          Go Home
+        </button>
+      </div>
+    )
+  }
+
+  // Loading state (including checking for session)
+  if (loading || checkingSession) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-progress"></div>
@@ -357,6 +525,8 @@ export default function Study() {
         currentIndex={currentIndex}
         totalItems={items.length}
         onEndSession={handleEndSession}
+        saveStatus={saveStatus}
+        lastSaveTime={lastSaveTime}
       />
 
       <div className="py-12 px-6">
