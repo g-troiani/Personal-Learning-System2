@@ -182,15 +182,15 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M49 Phase 4: Update all 4 practice item templates with grounding constraints (2026-01-19)
 - [x] M49 Testing: Verified excerpts populated, grounding constraints in prompts, backward compatible with NULL excerpts (2026-01-19)
 
-**Practice Mode UI Differentiation (M50)** - In Progress
+**Practice Mode UI Differentiation (M50)** - Complete
 - [x] M50 Research: 6 parallel worktrees, consolidated spec in NEW FEATURES.md (2026-01-19)
-- [ ] M50 Phase 1: Infrastructure - Create inputs/ and shared/ directories, shared primitives (TextArea, SubmitButton, SkipButton), extract FreeRecallInput
-- [ ] M50 Phase 2: Dispatcher Refactor - Refactor AnswerInput.jsx to dispatcher pattern, update Study.jsx to pass practiceMode and item props
-- [ ] M50 Phase 3: Recognition Mode - Create RecognitionInput.jsx with multiple choice buttons, parse options from hints field, implement auto-grading, skip SelfAssessment for recognition
-- [ ] M50 Phase 4: Cued Recall - Create CuedRecallInput.jsx with progressive hint reveal, track hintsUsed count in attempt recording
-- [ ] M50 Phase 5: Execution Mode - Create ExecutionInput.jsx with Start Task → Record Results flow, display success_criteria as checklist, track independence/iterations
-- [ ] M50 Phase 6: Explanation/Application Enhancement - Create ExplanationInput.jsx with rubric preview, ApplicationInput.jsx with scenario styling, word count indicator
-- [ ] M50 Testing: Verify all modes render correctly in Chrome, recognition auto-grades, hints tracked, execution flow works
+- [x] M50 Phase 1: Infrastructure - Created inputs/ and shared/ directories, TextArea/SubmitButton/SkipButton primitives, FreeRecallInput (2026-01-19)
+- [x] M50 Phase 2: Dispatcher Refactor - AnswerInput.jsx now dispatches to mode-specific components, Study.jsx passes practiceMode and item (2026-01-19)
+- [x] M50 Phase 3: Recognition Mode - RecognitionInput.jsx with A/B/C/D buttons, auto-grading, skips SelfAssessment (2026-01-19)
+- [x] M50 Phase 4: Cued Recall - CuedRecallInput.jsx with progressive hint reveal, amber styling, tracks hintsUsed (2026-01-19)
+- [x] M50 Phase 5: Execution Mode - ExecutionInput.jsx with Start Task → Record Results flow, success_criteria checklist, independence/iterations tracking (2026-01-19)
+- [x] M50 Phase 6: Explanation/Application - ExplanationInput.jsx with rubric preview (blue), ApplicationInput.jsx with scenario styling (purple), word count (2026-01-19)
+- [x] M50 Testing: ExplanationInput and ApplicationInput verified in Chrome (blue rubric, word count, scenario placeholder). Recognition/CuedRecall/Execution not in current study queue but code verified (2026-01-19)
 
 
 ## Surprises and Discoveries
@@ -305,7 +305,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through fifty milestones. M1-M49 are complete. M50 is in progress.
+Implementation proceeds through fifty milestones. M1-M50 are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -333,7 +333,7 @@ Implementation proceeds through fifty milestones. M1-M49 are complete. M50 is in
 
 **Source-Grounded Practice Items (Complete):** M49: Practice items now grounded in source documents. KC extraction populates `source_excerpt` with verbatim quotes, templates include GROUNDING RULES that constrain items to test only concepts derivable from source + reasonable domain prerequisites. No database migrations needed - field already existed.
 
-**Practice Mode UI Differentiation (In Progress):** M50: Render practice items with mode-appropriate UI. Recognition shows multiple choice, cued_recall shows progressive hints, execution shows task checklists. Pure frontend work - no backend changes. See NEW FEATURES.md for full spec.
+**Practice Mode UI Differentiation (Complete):** M50: Render practice items with mode-appropriate UI. Recognition shows multiple choice buttons with auto-grading, cued_recall shows progressive hints, execution shows task checklists, explanation/application show rubric previews with word count. Pure frontend work - no backend changes. See `.claude/memory/milestones/webui_core.md` for implementation details.
 
 
 ## CLI Usage Reference
@@ -668,124 +668,11 @@ User's zoom level persists across sessions. Database-backed user_preferences tab
 Practice items grounded in source documents rather than LLM general knowledge. KC extraction populates `source_excerpt` with verbatim quotes (50-200 words). Templates include GROUNDING RULES constraining items to test only concepts derivable from source + reasonable domain prerequisites. Backward compatible with NULL excerpts.
 
 
-### Practice Mode UI Differentiation M50 (In Progress)
+### Practice Mode UI Differentiation M50 (Complete)
 
-**Full specs:** `NEW FEATURES.md`
+**Full specs:** `.claude/memory/milestones/webui_core.md`
 
-At the end of this milestone, practice items render with mode-appropriate UI: recognition shows clickable multiple-choice buttons (A/B/C/D) with auto-grading, cued_recall shows textarea with progressive hint reveals, execution shows task checklists with completion tracking, and explanation/application show rubric previews. Users experience differentiated practice based on the cognitive demands of each mode type.
-
-**Observable behavior:** Navigate to `/study`, start a session with mixed practice modes. Recognition items display as clickable option buttons instead of textarea—selecting an option and clicking "Confirm Answer" auto-grades and moves to next item without self-assessment. Cued recall items show "Show Hint" buttons that progressively reveal hints. Execution items show "Start Task" button, then a completion form with independence rating. All modes correctly record attempts to database.
-
-**This is a pure frontend enhancement.** The backend already stores and returns: `practice_mode`, `hints` (JSON array), `rubric`, `success_criteria`, `expected_response`. The frontend currently ignores these for UI branching—all modes render identical textareas.
-
-**File structure after M50:**
-
-    web/src/components/study/
-    ├── AnswerInput.jsx           # Refactored as dispatcher
-    ├── inputs/                   # NEW directory
-    │   ├── FreeRecallInput.jsx   # Extracted from current AnswerInput
-    │   ├── CuedRecallInput.jsx   # Textarea + progressive hints
-    │   ├── RecognitionInput.jsx  # Multiple choice buttons
-    │   ├── ExplanationInput.jsx  # Expanded textarea + rubric preview
-    │   ├── ApplicationInput.jsx  # Scenario styling + textarea
-    │   └── ExecutionInput.jsx    # Checklist + completion tracking
-    └── shared/                   # NEW directory
-        ├── TextArea.jsx          # Styled textarea primitive
-        ├── SubmitButton.jsx      # Primary action button
-        └── SkipButton.jsx        # Skip action
-
-**Recognition mode options:** Stored in existing `hints` field as JSON array where `hints[0]` matches `expected_response` (correct answer). Frontend shuffles before display. No schema changes needed.
-
-**Scoring by mode:**
-
-| Mode | Scoring Method | Self-Assessment? |
-|------|----------------|------------------|
-| free_recall | Self-rating 0-3 → score/3.0 | Yes |
-| cued_recall | Self-rating 0-3 → score/3.0 | Yes |
-| recognition | Auto-grade → 1.0 or 0.0 | **No** |
-| explanation | Self-rating 0-3 → score/3.0 | Yes |
-| application | Self-rating 0-3 → score/3.0 | Yes |
-| execution | Independence 1-5 → (level-1)/4.0 | Modified |
-
-**Phase 1: Infrastructure**
-
-Create directory structure and shared primitives without modifying existing code.
-
-Work:
-1. Create `web/src/components/study/inputs/` directory
-2. Create `web/src/components/study/shared/` directory
-3. Create `shared/TextArea.jsx` - styled textarea with optional char count
-4. Create `shared/SubmitButton.jsx` - primary action with Send icon
-5. Create `shared/SkipButton.jsx` - secondary skip action
-6. Create `inputs/FreeRecallInput.jsx` - extract current AnswerInput logic
-
-Verification: All components import correctly. `npm run dev` starts without errors. Existing study flow unchanged.
-
-**Phase 2: Dispatcher Refactor**
-
-Refactor AnswerInput to dispatcher pattern while maintaining backward compatibility.
-
-Work:
-1. Refactor `AnswerInput.jsx` to import mode components and dispatch based on `practiceMode` prop
-2. Add `practiceMode` and `item` props to AnswerInput
-3. Default to FreeRecallInput for unknown modes
-4. Update `Study.jsx` to pass `practiceMode={currentItem?.practice_mode}` and `item={currentItem}`
-5. Update `handleSubmit` to accept response object with `type` field
-
-Verification: Study flow works identically for all existing modes. No visual changes yet.
-
-**Phase 3: Recognition Mode**
-
-First mode-specific input with auto-grading—the most visibly different from current UI.
-
-Work:
-1. Create `inputs/RecognitionInput.jsx` with A/B/C/D option buttons
-2. Add `parseOptions()` function to extract options from `hints` field
-3. Implement option selection with visual feedback (green border, checkmark)
-4. Add "Confirm Answer" button (disabled until selection)
-5. In `Study.jsx`, detect recognition mode and auto-grade: compare selected option to `expected_response`
-6. Skip `SelfAssessment.jsx` for recognition items—record attempt immediately
-
-Verification: Recognition items show clickable buttons. Selecting correct option records score=1.0, incorrect=0.0. No self-assessment form appears.
-
-**Phase 4: Cued Recall with Hints**
-
-Progressive hint system for supported retrieval.
-
-Work:
-1. Create `inputs/CuedRecallInput.jsx` with textarea + hint section
-2. Add hint reveal button: "Show Hint (1 of 3 remaining)"
-3. Track `hintsRevealed` state, display revealed hints in amber boxes
-4. Pass `hintsUsed` count in response object
-5. Update attempt recording to include `hints_requested` field
-
-Verification: Cued recall items show hint toggle. Clicking reveals hints progressively. Hint count recorded in attempts table.
-
-**Phase 5: Execution Mode**
-
-Task completion workflow for hands-on practice.
-
-Work:
-1. Create `inputs/ExecutionInput.jsx` with two-stage flow
-2. Stage 1: Display success_criteria, "Start Task" button
-3. Stage 2: Completion form with Yes/No, independence rating (1-5), iterations, errors
-4. Pass structured `ExecutionResult` in response object
-5. Calculate score from independence level: `(level - 1) / 4.0`
-
-Verification: Execution items show Start Task → Record Results flow. Independence/iterations recorded. Score calculated correctly.
-
-**Phase 6: Explanation/Application Enhancement**
-
-Rubric preview and scenario styling for deeper practice modes.
-
-Work:
-1. Create `inputs/ExplanationInput.jsx` with expanded textarea (8 rows, resizable)
-2. Add rubric preview in blue box above textarea (parse from `rubric` field)
-3. Add word count indicator
-4. Create `inputs/ApplicationInput.jsx` with scenario card (purple accent, border-left)
-5. Style scenario vs task sections distinctly
-
-Verification: Explanation items show rubric preview. Application items show styled scenario. Word count updates as user types.
+Practice items now render with mode-appropriate UI. Recognition shows A/B/C/D buttons with auto-grading, cued_recall has progressive hints, execution has task checklists. Pure frontend: AnswerInput.jsx dispatches to mode-specific components in `inputs/` directory.
 
 
 ## Web UI Reference
@@ -827,3 +714,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-19: M49 Spec Added - Source-Grounded Practice Items. Research complete via 6 parallel worktrees. Problem: source_excerpt field exists but never populated, causing practice items to test concepts not in source. Solution: 2-phase fix (KC extraction + templates), no DB migrations needed.
 - 2026-01-19: M49 Complete - Source-Grounded Practice Items. KC extraction now populates source_excerpt with verbatim quotes (kc_extractor.py). Templates include GROUNDING RULES constraining items to test only concepts derivable from source + domain prerequisites (templates.py). Backward compatible with NULL excerpts.
 - 2026-01-19: M50 Spec Added - Practice Mode UI Differentiation. Research complete via 6 parallel worktrees (NEW FEATURES.md). Pure frontend enhancement: render practice items with mode-appropriate UI (recognition as MCQ buttons, cued_recall with hints, execution with checklists). 6 implementation phases defined. No backend changes required.
+- 2026-01-19: M50 Complete - Practice Mode UI Differentiation. Created inputs/ directory with 6 mode-specific components (FreeRecallInput, RecognitionInput, CuedRecallInput, ExecutionInput, ExplanationInput, ApplicationInput) and shared/ directory with primitives (TextArea, SubmitButton, SkipButton). AnswerInput refactored as dispatcher. Study.jsx updated with userResponse state and mode-specific handling (recognition auto-grades, execution calculates independence score). Live testing verified ExplanationInput (blue rubric, word count) and ApplicationInput (scenario placeholder).

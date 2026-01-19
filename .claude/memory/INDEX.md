@@ -7,7 +7,7 @@
 
 | Category | Files | Key Topics |
 |----------|-------|------------|
-| Milestones | 7 | M1-M49 implementation history |
+| Milestones | 7 | M1-M50 implementation history |
 | Decisions | 4 | Architecture, technology, patterns, memory system |
 | Schemas | 3 | Database, API, React components |
 | Reference | 3 | Research, context, retrospectives |
@@ -19,7 +19,7 @@
 | File | Milestones | Key Topics |
 |------|------------|------------|
 | `cli_foundation.md` | M1-M8 | CLI, ingestion, KC extraction, practice items, study loop, SM-2, technique bundles |
-| `webui_core.md` | M9-M15 | React setup, home dashboard, study session, calendar, due review, progress, analytics |
+| `webui_core.md` | M9-M15, M50 | React setup, home dashboard, study session, calendar, due review, progress, analytics, practice mode UI differentiation |
 | `sources_feature.md` | M16-M20, M49 | File upload, FastAPI backend, real-time processing, delete/detail panels, source-grounded practice items |
 | `speed_optimization.md` | M21-M23 | Groq integration, parallel processing, retry logic, bug fixes |
 | `agent_memory.md` | M24-M29 | Memory system, tiered architecture, scout subagents, EXECPLAN slimming |

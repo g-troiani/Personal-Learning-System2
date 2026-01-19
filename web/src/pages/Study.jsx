@@ -25,6 +25,7 @@ export default function Study() {
   // Current item state
   const [currentKc, setCurrentKc] = useState(null)
   const [userAnswer, setUserAnswer] = useState('')
+  const [userResponse, setUserResponse] = useState(null) // Full response object from input components
   const [showAssessment, setShowAssessment] = useState(false)
   const [itemStartTime, setItemStartTime] = useState(null)
 
@@ -132,20 +133,8 @@ export default function Study() {
     fetchStudyQueue()
   }, [fetchStudyQueue])
 
-  // Handle answer submission
-  const handleSubmit = (answer) => {
-    setUserAnswer(answer)
-    setShowAssessment(true)
-  }
-
-  // Handle skip (show answer without user response)
-  const handleSkip = () => {
-    setUserAnswer('')
-    setShowAssessment(true)
-  }
-
-  // Handle rating and move to next item
-  const handleRate = async ({ score, difficulty }) => {
+  // Record attempt and move to next item (shared logic)
+  const recordAttemptAndMoveNext = async (score, correctness, responseText, extraData = {}) => {
     const currentItem = items[currentIndex]
     const responseTimeMs = Date.now() - itemStartTime
 
@@ -159,10 +148,10 @@ export default function Study() {
         started_at: new Date(itemStartTime).toISOString(),
         completed_at: new Date().toISOString(),
         response_time_ms: responseTimeMs,
-        response: userAnswer || null,
-        score: score / 5, // Normalize to 0-1
-        correctness: score >= 4 ? 'correct' : score >= 3 ? 'partial' : 'incorrect',
-        difficulty_rating: difficulty,
+        response: responseText || null,
+        score: score,
+        correctness: correctness,
+        ...extraData
       }
 
       const { error: attemptError } = await supabase
@@ -173,7 +162,7 @@ export default function Study() {
         console.error('Error recording attempt:', attemptError)
       }
 
-      // Update KC state (simplified mastery update)
+      // Update KC state
       const { data: kcState, error: stateError } = await supabase
         .from('kc_state')
         .select('*')
@@ -182,7 +171,7 @@ export default function Study() {
 
       if (!stateError && kcState) {
         const alpha = kcState.exposure_count <= 2 ? 0.7 : kcState.exposure_count <= 5 ? 0.5 : 0.35
-        const newMastery = alpha * (score / 5) + (1 - alpha) * kcState.mastery_level
+        const newMastery = alpha * score + (1 - alpha) * kcState.mastery_level
 
         await supabase
           .from('kc_state')
@@ -199,14 +188,14 @@ export default function Study() {
           .from('kc_state')
           .insert({
             kc_id: currentItem.kc_id,
-            mastery_level: score / 5,
+            mastery_level: score,
             exposure_count: 1,
             last_exposure_at: new Date().toISOString(),
           })
       }
 
-      // Track completed attempt
-      setCompletedAttempts(prev => [...prev, { score, difficulty }])
+      // Track completed attempt (convert score to 1-5 scale for summary)
+      setCompletedAttempts(prev => [...prev, { score: score * 5, difficulty: 3 }])
 
     } catch (err) {
       console.error('Error saving attempt:', err)
@@ -218,12 +207,75 @@ export default function Study() {
       setCurrentIndex(nextIndex)
       setCurrentKc(items[nextIndex].knowledge_components)
       setUserAnswer('')
+      setUserResponse(null)
       setShowAssessment(false)
       setItemStartTime(Date.now())
     } else {
       // End of session
       endSession()
     }
+  }
+
+  // Handle answer submission
+  // Response can be a string (legacy) or an object with type field
+  const handleSubmit = async (response) => {
+    if (typeof response === 'string') {
+      // Legacy string response
+      setUserAnswer(response)
+      setUserResponse({ type: 'text', value: response })
+      setShowAssessment(true)
+    } else if (response.type === 'selection') {
+      // Recognition mode: auto-grade and skip self-assessment
+      const isCorrect = response.isCorrect
+      const score = response.score // Already 0.0 or 1.0
+      const correctness = isCorrect ? 'correct' : 'incorrect'
+
+      // Record attempt immediately and move to next
+      await recordAttemptAndMoveNext(score, correctness, response.value)
+    } else if (response.type === 'completion') {
+      // Execution mode: skip self-assessment, use independence-based scoring
+      const score = response.score // Already calculated from independence level
+      const correctness = response.completed
+        ? (response.independenceLevel >= 3 ? 'correct' : 'partial')
+        : 'incorrect'
+
+      // Record attempt with execution-specific fields
+      await recordAttemptAndMoveNext(score, correctness, response.value, {
+        task_completed: response.completed ? 1 : 0,
+        independence_level: response.independenceLevel?.toString(),
+        iterations_to_complete: response.iterations,
+        errors_encountered: response.errors
+      })
+    } else {
+      // Other new response object formats (text, etc.)
+      setUserAnswer(response.value || '')
+      setUserResponse(response)
+      setShowAssessment(true)
+    }
+  }
+
+  // Handle skip (show answer without user response)
+  const handleSkip = () => {
+    setUserAnswer('')
+    setUserResponse(null)
+    setShowAssessment(true)
+  }
+
+  // Handle rating and move to next item (for self-assessment modes)
+  const handleRate = async ({ score, difficulty }) => {
+    // Convert 1-5 score to 0-1 normalized score
+    const normalizedScore = score / 5
+    const correctness = score >= 4 ? 'correct' : score >= 3 ? 'partial' : 'incorrect'
+
+    // Include hints tracking if available from cued_recall mode
+    const extraData = {
+      difficulty_rating: difficulty
+    }
+    if (userResponse?.hintsUsed !== undefined) {
+      extraData.hints_requested = userResponse.hintsUsed
+    }
+
+    await recordAttemptAndMoveNext(normalizedScore, correctness, userAnswer, extraData)
   }
 
   // End session
@@ -313,6 +365,8 @@ export default function Study() {
             <QuestionCard item={currentItem} kc={currentKc} />
             <div className="mt-8">
               <AnswerInput
+                practiceMode={currentItem?.practice_mode}
+                item={currentItem}
                 onSubmit={handleSubmit}
                 onSkip={handleSkip}
                 disabled={showAssessment}
