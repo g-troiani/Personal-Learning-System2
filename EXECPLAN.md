@@ -172,13 +172,13 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M48 Phase 5: Bug fix - SupabaseContext missing session; added auth state tracking (2026-01-18)
 - [x] M48 Testing: Verified zoom persists across page refresh (130% → 150% → refresh → 150%) (2026-01-18)
 
-**Source-Grounded Practice Items (M49)** - Pending
-- [ ] M49 Research: 6 parallel worktrees, comprehensive investigation (2026-01-19)
-- [ ] M49 Phase 1: Update KC extraction prompt to request source_excerpt
-- [ ] M49 Phase 2: Update parse_llm_response() to extract source_excerpt
-- [ ] M49 Phase 3: Update store_extracted_kcs() to pass source_excerpt to DB
-- [ ] M49 Phase 4: Update all 4 practice item templates with grounding constraints
-- [ ] M49 Testing: Verify excerpts populated, items grounded, backward compatibility
+**Source-Grounded Practice Items (M49)** - Complete
+- [x] M49 Research: 6 parallel worktrees, comprehensive investigation (2026-01-19)
+- [x] M49 Phase 1: Update KC extraction prompt to request source_excerpt (2026-01-19)
+- [x] M49 Phase 2: Update parse_llm_response() to extract source_excerpt (2026-01-19)
+- [x] M49 Phase 3: Update store_extracted_kcs() to pass source_excerpt to DB (2026-01-19)
+- [x] M49 Phase 4: Update all 4 practice item templates with grounding constraints (2026-01-19)
+- [x] M49 Testing: Verified excerpts populated, grounding constraints in prompts, backward compatible with NULL excerpts (2026-01-19)
 
 
 ## Surprises and Discoveries
@@ -293,7 +293,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through forty-nine milestones. M1-M48 are complete. M49 is next.
+Implementation proceeds through forty-nine milestones. M1-M49 are complete.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -319,7 +319,7 @@ Implementation proceeds through forty-nine milestones. M1-M48 are complete. M49 
 
 **Persistent Zoom Preference (Complete):** M48: Remember user's zoom level in document reader across sessions. Database-backed per-user preferences.
 
-**Source-Grounded Practice Items (Next):** M49: Fix practice items that test concepts not in the source document. The `source_excerpt` field exists in the database but is never populated. Two-phase fix: (1) modify KC extraction to capture verbatim source quotes, (2) modify practice item templates to include source context and grounding constraints. No database migrations needed.
+**Source-Grounded Practice Items (Complete):** M49: Practice items now grounded in source documents. KC extraction populates `source_excerpt` with verbatim quotes, templates include GROUNDING RULES that constrain items to test only concepts derivable from source + reasonable domain prerequisites. No database migrations needed - field already existed.
 
 
 ## CLI Usage Reference
@@ -795,3 +795,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-11: M47 Complete - Approved Users Whitelist feature fully implemented and tested. Database migration (approved_users table with RLS), backend approval logic (ApprovedUser dependency), protected upload endpoint, admin API endpoints (list/add/remove), AdminRoute guard with useIsAdmin hook, Admin page UI (table, add form, remove with confirmation), 403 error handling for non-approved uploads. Integration testing verified: admin link visibility, admin page CRUD operations, upload zone access for approved users. Required `pip install email-validator` for Pydantic EmailStr validation.
 - 2026-01-18: M48 Complete - Persistent Zoom Preference. User's zoom level in document reader now persists across sessions. Created user_preferences table with RLS, useZoomPreference hook with debounced saves, lifted zoom state from PDFRenderer/DOCXRenderer to ReaderContent.
 - 2026-01-19: M49 Spec Added - Source-Grounded Practice Items. Research complete via 6 parallel worktrees. Problem: source_excerpt field exists but never populated, causing practice items to test concepts not in source. Solution: 2-phase fix (KC extraction + templates), no DB migrations needed. See NEW FEATURES.md for full research.
+- 2026-01-19: M49 Complete - Source-Grounded Practice Items. KC extraction now populates source_excerpt with verbatim quotes (kc_extractor.py). Templates include GROUNDING RULES constraining items to test only concepts derivable from source + domain prerequisites (templates.py). Backward compatible with NULL excerpts.

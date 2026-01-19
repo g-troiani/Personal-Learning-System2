@@ -1,15 +1,59 @@
-"""LLM prompt templates for generating practice items by knowledge type."""
+"""LLM prompt templates for generating practice items by knowledge type.
+
+M49: Added source_excerpt support and grounding constraints to ensure
+practice items test only concepts derivable from the source material
+plus reasonable domain prerequisites.
+"""
+
+
+def _get_grounding_section(kc: dict) -> str:
+    """
+    Returns the grounding section for prompts if source_excerpt is available.
+
+    This ensures practice items are grounded in the actual source material
+    rather than the LLM's general knowledge.
+
+    Args:
+        kc: Knowledge component dictionary
+
+    Returns:
+        Grounding section string, or empty string if no excerpt available
+    """
+    source_excerpt = kc.get('source_excerpt')
+
+    if not source_excerpt:
+        # Backward compatibility: no excerpt available, skip grounding section
+        return ""
+
+    return """
+---SOURCE EXCERPT---
+{excerpt}
+---END SOURCE---
+
+GROUNDING RULES (CRITICAL):
+- Questions must be answerable by reading the source excerpt + applying reasonable prerequisite knowledge for the domain
+- You MAY require reasoning, inference, or application of concepts from the excerpt
+- You MAY assume foundational knowledge appropriate to the topic (e.g., programming basics for a coding tutorial, basic math for a statistics document)
+- DO NOT require knowledge of facts, terminology, or concepts not mentioned in the excerpt unless they are obvious prerequisites
+- DO NOT invent specific details, numbers, or examples not present in or derivable from the excerpt
+- The expected_response must be derivable from the excerpt + reasonable domain knowledge
+
+FAIR: "Based on the excerpt's description of X, what would happen if Y?" (requires reasoning from source)
+UNFAIR: "What are the three types of X?" (when source only mentions one type)
+""".format(excerpt=source_excerpt)
 
 
 def get_factual_prompt(kc: dict) -> str:
     """Returns LLM prompt for generating factual practice items."""
+    grounding = _get_grounding_section(kc)
+
     return """Generate practice items for this FACTUAL knowledge component.
 
 Knowledge Component:
 - Name: {name}
 - Description: {description}
 - Complexity: {complexity}/5
-
+{grounding}
 Generate 3 practice items with varying difficulty:
 1. A free_recall item (difficulty 1-2): Ask the learner to recall the definition/fact from memory with no cues
 2. A cued_recall item (difficulty 2-3): Provide a partial hint or context, ask them to complete it
@@ -36,19 +80,22 @@ Return as a JSON array. Example format:
 ]""".format(
         name=kc['name'],
         description=kc['description'],
-        complexity=kc.get('intrinsic_complexity', 3)
+        complexity=kc.get('intrinsic_complexity', 3),
+        grounding=grounding
     )
 
 
 def get_conceptual_prompt(kc: dict) -> str:
     """Returns LLM prompt for generating conceptual practice items."""
+    grounding = _get_grounding_section(kc)
+
     return """Generate practice items for this CONCEPTUAL knowledge component.
 
 Knowledge Component:
 - Name: {name}
 - Description: {description}
 - Complexity: {complexity}/5
-
+{grounding}
 Generate 3 practice items with varying difficulty:
 1. An explanation item (difficulty 2-3): Ask learner to explain WHY or HOW something works
 2. An application item (difficulty 3-4): Present a scenario where learner applies the concept
@@ -75,19 +122,22 @@ Return as a JSON array. Example format:
 ]""".format(
         name=kc['name'],
         description=kc['description'],
-        complexity=kc.get('intrinsic_complexity', 3)
+        complexity=kc.get('intrinsic_complexity', 3),
+        grounding=grounding
     )
 
 
 def get_procedural_cognitive_prompt(kc: dict) -> str:
     """Returns LLM prompt for generating procedural-cognitive practice items."""
+    grounding = _get_grounding_section(kc)
+
     return """Generate practice items for this PROCEDURAL-COGNITIVE knowledge component.
 
 Knowledge Component:
 - Name: {name}
 - Description: {description}
 - Complexity: {complexity}/5
-
+{grounding}
 Generate 3 practice items with varying difficulty:
 1. A step-listing item (difficulty 2): Ask learner to list the steps of the procedure
 2. An application item (difficulty 3-4): Present a problem and ask them to apply the procedure
@@ -114,19 +164,22 @@ Return as a JSON array. Example format:
 ]""".format(
         name=kc['name'],
         description=kc['description'],
-        complexity=kc.get('intrinsic_complexity', 3)
+        complexity=kc.get('intrinsic_complexity', 3),
+        grounding=grounding
     )
 
 
 def get_procedural_execution_prompt(kc: dict) -> str:
     """Returns LLM prompt for generating execution task practice items."""
+    grounding = _get_grounding_section(kc)
+
     return """Generate practice items for this PROCEDURAL-EXECUTION knowledge component (hands-on skill).
 
 Knowledge Component:
 - Name: {name}
 - Description: {description}
 - Complexity: {complexity}/5
-
+{grounding}
 Generate 3 practice items with varying difficulty:
 1. A guided task (difficulty 2): Provide step-by-step guidance for the execution
 2. An independent task (difficulty 3-4): Describe what to accomplish without detailed steps
@@ -153,7 +206,8 @@ Return as a JSON array. Example format:
 ]""".format(
         name=kc['name'],
         description=kc['description'],
-        complexity=kc.get('intrinsic_complexity', 3)
+        complexity=kc.get('intrinsic_complexity', 3),
+        grounding=grounding
     )
 
 
