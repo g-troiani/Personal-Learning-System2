@@ -46,6 +46,12 @@ function App() {
                 <Route path="progress" element={<Progress />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="reader/:sourceId" element={<DocumentReader />} />
+                {/* Admin route (inside Layout for sidebar) */}
+                <Route path="admin" element={
+                  <AdminRoute>
+                    <Admin />
+                  </AdminRoute>
+                } />
               </Route>
               <Route path="/study" element={
                 <ProtectedRoute>
@@ -56,12 +62,6 @@ function App() {
                 <ProtectedRoute>
                   <Study />
                 </ProtectedRoute>
-              } />
-              {/* Admin route (admin-only) */}
-              <Route path="/admin" element={
-                <AdminRoute>
-                  <Admin />
-                </AdminRoute>
               } />
             </Routes>
           </BrowserRouter>
