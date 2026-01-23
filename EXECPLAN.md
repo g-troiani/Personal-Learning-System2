@@ -424,6 +424,34 @@ External memory in `.claude/memory/` (16 files):
 See `.claude/memory/INDEX.md` for full summaries and cross-references.
 
 
+## Infrastructure Reference
+
+For deployment and operational procedures, see **`INFRA.md`** (project root).
+
+### Quick Links
+- Deployment phases: INFRA.md (EC2 → Docker → Nginx/SSL → Netlify)
+- Credential management: INFRA.md#credentials-reference
+- Troubleshooting: INFRA.md#troubleshooting
+- Operational procedures: INFRA.md#operational-procedures
+
+### Infrastructure Milestones
+
+| ID | Description | Status |
+|----|-------------|--------|
+| I1 | EC2 instance setup + security groups | Spec ready |
+| I2 | Docker + docker-compose configuration | Spec ready |
+| I3 | Nginx reverse proxy + SSL (Let's Encrypt) | Spec ready |
+| I4 | Netlify frontend deployment | Spec ready |
+
+### Deployment Dependencies
+
+Before deploying:
+- [ ] All environment variables documented in INFRA.md
+- [ ] CORS_ORIGINS configured for production domain
+- [ ] Supabase RLS policies applied
+- [ ] Admin users added to approved_users table
+
+
 ## Artifacts and Notes
 
 **Full schema archive:** `.claude/memory/schemas/`
@@ -758,3 +786,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-19: M50 Complete - Practice Mode UI Differentiation. Created inputs/ directory with 6 mode-specific components (FreeRecallInput, RecognitionInput, CuedRecallInput, ExecutionInput, ExplanationInput, ApplicationInput) and shared/ directory with primitives (TextArea, SubmitButton, SkipButton). AnswerInput refactored as dispatcher. Study.jsx updated with userResponse state and mode-specific handling (recognition auto-grades, execution calculates independence score). Live testing verified ExplanationInput (blue rubric, word count) and ApplicationInput (scenario placeholder).
 - 2026-01-19: M51 Spec Added - Session Continuity Across Page Reloads. Research complete via 6 parallel worktrees (ui-ux, data-model, study-jsx, lifecycle, storage, edge-cases). Problem: Study.jsx creates new session on every load, abandoning incomplete sessions. Solution: hybrid storage (localStorage cache + DB source of truth), SessionRecoveryDialog on mount, beforeunload with sendBeacon, multiple tab prevention. Database migration adds 5 columns to sessions table. 7 implementation phases defined.
 - 2026-01-19: M51 Complete - Session Continuity Across Page Reloads. Implemented useSessionPersistence hook (async auth check, debounced DB saves), SessionRecoveryDialog with progress display (X/20, last activity timestamp), SaveIndicator with cloud icon. Critical fix: added SELECT RLS policy "Users can select own sessions" on sessions table - original RLS only had INSERT/UPDATE/DELETE but not SELECT. Live testing verified: complete item → reload → recovery dialog shows 1/20 progress → resume works.
+- 2026-01-23: Infrastructure Deployment Research Complete - 6 parallel worktrees created (infra/ec2-setup, infra/docker-config, infra/nginx-ssl, infra/netlify-frontend, infra/deployment-docs, infra/system-integration). Consolidated into INFRA.md covering: EC2 setup, Docker configuration, Nginx/SSL with Let's Encrypt, Netlify deployment, credentials management, operational procedures, troubleshooting guides. Updated CLAUDE.md and EXECPLAN.md with infrastructure references.

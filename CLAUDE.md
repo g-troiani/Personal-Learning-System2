@@ -130,9 +130,59 @@ After completing work:
 |-------|------------|-------|
 | Language | Python | 3.11+ |
 | Database | Supabase | PostgreSQL, cloud-hosted |
-| Interface | CLI | Command-line, scriptable |
-| LLM | Claude API | Content processing during ingestion |
-| Document Processing | TBD | PDF, DOCX, Markdown parsing |
+| Interface | CLI + Web UI | Command-line and React SPA |
+| LLM | Claude API + Groq | KC extraction (Claude), practice items (Groq) |
+| Document Processing | LibreOffice | PDF, DOCX, PPTX, Markdown |
+
+
+## Infrastructure
+
+For deployment and operational procedures, see **`INFRA.md`**.
+
+### Deployment Overview
+
+| Component | Host | Deploy Method |
+|-----------|------|---------------|
+| Frontend | Netlify | Auto-deploy on push to main |
+| Backend | AWS EC2 | Manual via SSH + docker-compose |
+| Database | Supabase | Managed service |
+
+### Before Deploying
+
+1. Run `npm run build` in `web/` to verify production build
+2. Run `npm run lint` to catch lint errors
+3. Check `INFRA.md` for environment-specific requirements
+4. Verify all environment variables are set
+
+### Key Infrastructure Files
+
+- `INFRA.md` — Full deployment documentation, credentials reference, runbooks
+- `learn_system/Dockerfile` — Backend container definition
+- `learn_system/docker-compose.yml` — Container orchestration
+- `web/netlify.toml` — Frontend deployment configuration
+
+### Common Operations
+
+| Task | Command/Location |
+|------|------------------|
+| Deploy backend | See INFRA.md "Deploy Backend Updates" section |
+| View production logs | `ssh learning-prod` → `docker compose logs -f` |
+| Check health | `curl https://api.yourdomain.com/api/health` |
+| Rollback backend | See INFRA.md "Rollback Backend" section |
+| Rollback frontend | Netlify Dashboard > Deploys > Publish previous |
+
+### Infrastructure Changes
+
+When making infrastructure changes:
+1. Update `INFRA.md` first (documentation-first)
+2. Test in development environment
+3. Deploy to production
+4. Verify with post-deployment checks
+
+Never modify production infrastructure without:
+- Documented rollback procedure
+- Access to monitoring/logs
+- Understanding of `INFRA.md` content
 
 ## Development Commands
 
