@@ -65,6 +65,8 @@ The system solves five problems. First, it eliminates the "I don't know what I d
 
 **Session Continuity Across Page Reloads (M51):** This milestone persists study session progress so users can resume where they left off after page reload, WiFi change, or browser restart. Currently, `Study.jsx` creates a NEW session ID on every page load (`sess_${Date.now()}`), abandoning any incomplete session. User's completed attempts are saved in the database but inaccessible because React state resets. After M51, the system checks for incomplete sessions on load, offers to resume or start fresh via a modal dialog, and maintains progress across interruptions. Session state uses hybrid storage: localStorage for fast cache + database as source of truth. Requires database migration (5 new columns on `sessions` table) and new API endpoint (`POST /api/sessions/pause` for sendBeacon on tab close).
 
+**Infrastructure Deployment (I1-I4):** These milestones deploy the Personal Learning System from localhost to production. After I4, users can access the system from any device via the web. The architecture uses Netlify for the React frontend (free tier), AWS EC2 for the FastAPI backend with Docker and LibreOffice for PPTX conversion, Nginx as reverse proxy with Let's Encrypt SSL, and Supabase for the database (already cloud-hosted). EC2 was chosen over Lambda due to API Gateway timeout limits (29s max vs. 30-60s LLM processing), LibreOffice size constraints, and SSE streaming requirements. Estimated cost: $1-18/month (mostly Claude API).
+
 
 ## Progress
 
@@ -206,6 +208,13 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M51 RLS Fix: Added SELECT policy "Users can select own sessions" on sessions table (2026-01-19)
 - [x] M51 Testing: Reload mid-session → recovery dialog shows correct progress (1/20) → resume works (2026-01-19)
 
+**Infrastructure Deployment (I1-I4)** - See `.claude/memory/milestones/infrastructure_deployment.md`
+- [x] Infrastructure Research: 6 parallel worktrees (ec2, docker, nginx-ssl, netlify, docs, integration), consolidated NEW FEATURES.md (2026-01-23)
+- [ ] I1: EC2 instance setup + security groups + SSH
+- [ ] I2: Docker + docker-compose configuration with LibreOffice
+- [ ] I3: Nginx reverse proxy + SSL (Let's Encrypt)
+- [ ] I4: Netlify frontend deployment
+
 
 ## Surprises and Discoveries
 
@@ -325,7 +334,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through fifty-one milestones. M1-M51 are complete.
+Implementation proceeds through fifty-one milestones plus four infrastructure milestones. M1-M51 are complete. I1-I4 are ready for implementation.
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -355,7 +364,9 @@ Implementation proceeds through fifty-one milestones. M1-M51 are complete.
 
 **Practice Mode UI Differentiation (Complete):** M50: Render practice items with mode-appropriate UI. Recognition shows multiple choice buttons with auto-grading, cued_recall shows progressive hints, execution shows task checklists, explanation/application show rubric previews with word count. Pure frontend work - no backend changes. See `.claude/memory/milestones/webui_core.md` for implementation details.
 
-**Session Continuity (Ready):** M51: Persist study session progress across page reloads. Database migration adds 5 columns to sessions table (status, current_item_index, queue_item_ids, paused_at, last_activity_at). Hybrid storage: localStorage cache + database source of truth. New components: useSessionPersistence hook, SessionRecoveryDialog, SaveIndicator. BeforeUnload with sendBeacon for crash resilience. Multiple tab prevention via localStorage lock.
+**Session Continuity (Complete):** M51: Persist study session progress across page reloads. Database migration adds 5 columns to sessions table (status, current_item_index, queue_item_ids, paused_at, last_activity_at). Hybrid storage: localStorage cache + database source of truth. New components: useSessionPersistence hook, SessionRecoveryDialog, SaveIndicator. BeforeUnload with sendBeacon for crash resilience. Multiple tab prevention via localStorage lock.
+
+**Infrastructure Deployment (Ready):** I1: EC2 instance setup (Ubuntu 24.04 t3.micro, security groups, SSH). I2: Docker configuration (Dockerfile with LibreOffice, docker-compose.yml). I3: Nginx reverse proxy with SSL (Let's Encrypt, 300s timeouts for LLM endpoints). I4: Netlify frontend deployment (netlify.toml, environment variables). See `.claude/memory/milestones/infrastructure_deployment.md`.
 
 
 ## CLI Usage Reference
@@ -412,11 +423,11 @@ The app runs at http://localhost:5173
 
 ## Memory Index
 
-External memory in `.claude/memory/` (16 files):
+External memory in `.claude/memory/` (17 files):
 
 | Category | Files |
 |----------|-------|
-| `milestones/` | cli_foundation.md, webui_core.md, sources_feature.md, speed_optimization.md, agent_memory.md, document_reader.md, auth_multiuser.md |
+| `milestones/` | cli_foundation.md, webui_core.md, sources_feature.md, speed_optimization.md, agent_memory.md, document_reader.md, auth_multiuser.md, infrastructure_deployment.md |
 | `decisions/` | architecture.md, technology.md, patterns.md, memory_system.md |
 | `schemas/` | database.md, api.md, components.md |
 | `reference/` | research.md, context.md, retrospective.md |
@@ -426,30 +437,27 @@ See `.claude/memory/INDEX.md` for full summaries and cross-references.
 
 ## Infrastructure Reference
 
-For deployment and operational procedures, see **`INFRA.md`** (project root).
+**Full specs:** `.claude/memory/milestones/infrastructure_deployment.md`
 
-### Quick Links
-- Deployment phases: INFRA.md (EC2 → Docker → Nginx/SSL → Netlify)
-- Credential management: INFRA.md#credentials-reference
-- Troubleshooting: INFRA.md#troubleshooting
-- Operational procedures: INFRA.md#operational-procedures
+Deploy to production: Netlify (frontend) + EC2 (backend with Docker/LibreOffice/Nginx/SSL) + Supabase (database). Cost: $1-18/month.
 
 ### Infrastructure Milestones
 
 | ID | Description | Status |
 |----|-------------|--------|
-| I1 | EC2 instance setup + security groups | Spec ready |
-| I2 | Docker + docker-compose configuration | Spec ready |
-| I3 | Nginx reverse proxy + SSL (Let's Encrypt) | Spec ready |
-| I4 | Netlify frontend deployment | Spec ready |
+| I1 | EC2 instance setup + security groups + SSH | Pending |
+| I2 | Docker + docker-compose configuration with LibreOffice | Pending |
+| I3 | Nginx reverse proxy + SSL (Let's Encrypt) | Pending |
+| I4 | Netlify frontend deployment | Pending |
 
-### Deployment Dependencies
+### Deployment Prerequisites
 
-Before deploying:
-- [ ] All environment variables documented in INFRA.md
+Before deploying (all documented in memory file):
 - [ ] CORS_ORIGINS configured for production domain
-- [ ] Supabase RLS policies applied
-- [ ] Admin users added to approved_users table
+- [ ] Supabase RLS policies applied (already complete - M45)
+- [ ] Admin users added to approved_users table (already complete - M47)
+- [ ] EC2 SSH key created and secured
+- [ ] Domain DNS configured (or use Netlify subdomain)
 
 
 ## Artifacts and Notes
@@ -744,6 +752,45 @@ Persist study session progress so users can resume after page reload, WiFi chang
 - Session age > 7 days: auto-mark abandoned, start fresh
 
 
+### Infrastructure Deployment I1-I4 (Ready)
+
+**Full specs:** `.claude/memory/milestones/infrastructure_deployment.md`
+
+Deploy to production: EC2 (backend) + Netlify (frontend) + Supabase (database).
+
+**Architecture:** User → Netlify (React SPA) → HTTPS → Nginx (reverse proxy + SSL) → FastAPI (Docker + LibreOffice) → Supabase/Claude/Groq APIs.
+
+**Why EC2 over Lambda:**
+- API Gateway timeout: 29s max vs. 30-60s LLM processing
+- LibreOffice: 500MB+ doesn't fit Lambda layers
+- SSE streaming: API Gateway doesn't support
+- Background tasks: Lambda dies after response
+
+**Milestones:**
+
+**I1: EC2 Instance Setup**
+- Goal: Provision AWS EC2 with SSH access
+- Work: Launch Ubuntu 24.04 t3.micro, configure security groups (22/80/443/8001), allocate Elastic IP, setup SSH config
+- Verification: SSH to instance, Docker hello-world runs
+
+**I2: Docker Configuration**
+- Goal: Containerize FastAPI with LibreOffice
+- Work: Create Dockerfile (python:3.11-slim + libreoffice-impress), docker-compose.yml, .dockerignore
+- Verification: `curl http://localhost:8001/api/health` returns healthy
+
+**I3: Nginx Reverse Proxy + SSL**
+- Goal: HTTPS with Let's Encrypt
+- Work: Configure Nginx upstream, rate limiting, 300s timeout for upload/SSE endpoints, certbot SSL
+- Verification: `curl -I https://api.yourdomain.com/api/health` returns 200 with SSL
+
+**I4: Netlify Frontend Deployment**
+- Goal: Deploy React SPA
+- Work: Create netlify.toml, configure environment variables (VITE_SUPABASE_URL, VITE_API_URL), link repo
+- Verification: Frontend loads, login works, sources page shows data
+
+**Cost:** $1-18/month (t3.micro $0-8, Claude API $1-10, everything else free tier)
+
+
 ## Web UI Reference
 
 **Full specs:** `.claude/memory/schemas/components.md`
@@ -786,4 +833,5 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-19: M50 Complete - Practice Mode UI Differentiation. Created inputs/ directory with 6 mode-specific components (FreeRecallInput, RecognitionInput, CuedRecallInput, ExecutionInput, ExplanationInput, ApplicationInput) and shared/ directory with primitives (TextArea, SubmitButton, SkipButton). AnswerInput refactored as dispatcher. Study.jsx updated with userResponse state and mode-specific handling (recognition auto-grades, execution calculates independence score). Live testing verified ExplanationInput (blue rubric, word count) and ApplicationInput (scenario placeholder).
 - 2026-01-19: M51 Spec Added - Session Continuity Across Page Reloads. Research complete via 6 parallel worktrees (ui-ux, data-model, study-jsx, lifecycle, storage, edge-cases). Problem: Study.jsx creates new session on every load, abandoning incomplete sessions. Solution: hybrid storage (localStorage cache + DB source of truth), SessionRecoveryDialog on mount, beforeunload with sendBeacon, multiple tab prevention. Database migration adds 5 columns to sessions table. 7 implementation phases defined.
 - 2026-01-19: M51 Complete - Session Continuity Across Page Reloads. Implemented useSessionPersistence hook (async auth check, debounced DB saves), SessionRecoveryDialog with progress display (X/20, last activity timestamp), SaveIndicator with cloud icon. Critical fix: added SELECT RLS policy "Users can select own sessions" on sessions table - original RLS only had INSERT/UPDATE/DELETE but not SELECT. Live testing verified: complete item → reload → recovery dialog shows 1/20 progress → resume works.
-- 2026-01-23: Infrastructure Deployment Research Complete - 6 parallel worktrees created (infra/ec2-setup, infra/docker-config, infra/nginx-ssl, infra/netlify-frontend, infra/deployment-docs, infra/system-integration). Consolidated into INFRA.md covering: EC2 setup, Docker configuration, Nginx/SSL with Let's Encrypt, Netlify deployment, credentials management, operational procedures, troubleshooting guides. Updated CLAUDE.md and EXECPLAN.md with infrastructure references.
+- 2026-01-23: Infrastructure Deployment Research Complete - 6 parallel worktrees created (infra/ec2-setup, infra/docker-config, infra/nginx-ssl, infra/netlify-frontend, infra/deployment-docs, infra/system-integration). Consolidated into NEW FEATURES.md covering EC2, Docker, Nginx/SSL, Netlify, credentials, operational procedures, troubleshooting.
+- 2026-01-23: Infrastructure Deployment Integrated into EXECPLAN - Created `.claude/memory/milestones/infrastructure_deployment.md` with full deployment specs. Added I1-I4 milestones to Progress section. Added detailed milestone descriptions. Updated Purpose/Big Picture, Plan of Work, Infrastructure Reference, Memory Index. EXECPLAN now fully self-contained for infrastructure deployment following PLANS.md conventions.
