@@ -45,7 +45,7 @@ export default function AssistantPanel({
 
   if (isCollapsed) {
     return (
-      <div className="w-10 border-l border-gray-300 bg-green-50 flex flex-col items-center py-4">
+      <div className="w-10 bg-green-50 flex flex-col items-center py-4">
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-2 rounded-lg hover:bg-gray-300 text-gray-500 hover:text-gray-700 transition-colors"
@@ -77,7 +77,7 @@ export default function AssistantPanel({
   }
 
   return (
-    <div className="w-[36.75rem] border-l border-gray-300 bg-green-50 flex flex-col h-full">
+    <div className="w-[30.625rem] bg-green-50 flex flex-col h-full">
       {/* Header with tabs - always fixed at top */}
       <div className="flex-shrink-0 flex items-center justify-between border-b border-gray-300 px-2 bg-white">
         <div className="flex">

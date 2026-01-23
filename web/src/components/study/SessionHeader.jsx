@@ -1,6 +1,13 @@
 import { X } from 'lucide-react'
+import SaveIndicator from './SaveIndicator'
 
-export default function SessionHeader({ currentIndex, totalItems, onEndSession }) {
+export default function SessionHeader({
+  currentIndex,
+  totalItems,
+  onEndSession,
+  saveStatus,
+  lastSaveTime
+}) {
   const progress = totalItems > 0 ? ((currentIndex + 1) / totalItems) * 100 : 0
 
   return (
@@ -14,6 +21,7 @@ export default function SessionHeader({ currentIndex, totalItems, onEndSession }
       </button>
 
       <div className="flex items-center gap-4">
+        <SaveIndicator status={saveStatus} lastSaveTime={lastSaveTime} />
         <span className="text-sm text-text-secondary">
           {currentIndex + 1} of {totalItems}
         </span>

@@ -1,31 +1,19 @@
-# NEW FEATURES.md
+# Infrastructure Deployment (I1-I4)
 
-# Infrastructure Deployment Feature
+Archived: 2026-01-23
 
-## Feature Overview
+## Overview
 
-**Target:** Deploy the Personal Learning System from localhost to production with:
+Deploy the Personal Learning System from localhost to production:
 - **Frontend:** Netlify (free tier)
 - **Backend:** AWS EC2 with Docker + Nginx + SSL
 - **Database:** Supabase (already cloud-hosted)
 - **Estimated cost:** $1-18/month (mostly Claude API costs)
 
-**Problem Statement:** The system currently runs on localhost only. Users cannot access it remotely, and there's no documented deployment process. The goal is to create a production-ready deployment with proper security, SSL, and operational procedures.
-
-**Research Methodology:** Six parallel worktrees investigated distinct aspects:
-1. **infra/ec2-setup** - AWS EC2 instance, security groups, SSH configuration
-2. **infra/docker-config** - Docker installation, Dockerfile, docker-compose
-3. **infra/nginx-ssl** - Nginx reverse proxy, SSL/TLS with Let's Encrypt
-4. **infra/netlify-frontend** - Netlify configuration, environment variables
-5. **infra/deployment-docs** - Documentation structure, runbook templates
-6. **infra/system-integration** - Systemd services, deployment scripts, monitoring
-
----
-
-## Architecture Overview
+## Architecture
 
 ```
-                                 PRODUCTION ARCHITECTURE
+                             PRODUCTION ARCHITECTURE
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
 │   [User Browser]                                                             │
@@ -58,50 +46,10 @@
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+## Why EC2 over Lambda
 
-## Cost Analysis
-
-### Free Tier Analysis
-
-| Service | Free Tier | Key Limits |
-|---------|-----------|------------|
-| **Netlify** | Yes | 100GB bandwidth, 300 build min/mo |
-| **AWS EC2 t3.micro** | Yes (12 months) | 750 hours/month, then ~$8/mo |
-| **AWS EC2 t3.small** | No | ~$15/mo |
-| **Supabase** | Yes | 500MB DB, 1GB storage, pauses after 7 days |
-| **Groq** | Yes | 14,400 req/day |
-| **Claude API** | No | Pay per token |
-
-### Cost Estimates
-
-**Minimal Usage (1-2 users):**
-
-| Component | Monthly Cost |
-|-----------|--------------|
-| Netlify | $0 |
-| AWS EC2 t3.micro | $0 (free tier) or $8 |
-| Supabase | $0 |
-| Groq API | $0 |
-| Claude API | $1-5 |
-| **Total** | **$1-13/month** |
-
-**Moderate Usage (3-5 users):**
-
-| Component | Monthly Cost |
-|-----------|--------------|
-| Netlify | $0 |
-| AWS EC2 t3.small | $15 |
-| Supabase | $0 |
-| Claude API | $5-10 |
-| **Total** | **$20-25/month** |
-
----
-
-## Infrastructure Decision: Why EC2 over Lambda
-
-**Lambda NOT Recommended due to blocking issues:**
-1. API Gateway timeout: 29 seconds max - LLM processing takes 30-60+ seconds
+**Lambda NOT Recommended:**
+1. API Gateway timeout: 29s max - LLM processing takes 30-60+ seconds
 2. LibreOffice: Doesn't fit in Lambda layers (500MB limit)
 3. SSE streaming: API Gateway doesn't support Server-Sent Events
 4. Background tasks: Lambda dies after response
@@ -111,17 +59,26 @@
 2. No timeout limits for long-running LLM calls
 3. Docker works natively with LibreOffice
 4. t3.micro free tier (first year) or t3.small ~$15/month
-5. Future-proof: can add other company services to same instance
+
+## Cost Analysis
+
+| Component | Free Tier | Monthly Cost |
+|-----------|-----------|--------------|
+| Netlify | Yes | $0 |
+| AWS EC2 t3.micro | Yes (12 months) | $0 or $8 |
+| Supabase | Yes | $0 |
+| Groq API | Yes | $0 |
+| Claude API | No | $1-5 |
+| **Total** | | **$1-13/month** |
 
 ---
 
-## Implementation Plan
-
-### Milestone I1: EC2 Instance Setup
+## Milestone I1: EC2 Instance Setup
 
 **Goal:** Provision and configure AWS EC2 instance with SSH access.
 
 **Work:**
+
 1. Launch EC2 via AWS Console:
    - AMI: Ubuntu Server 24.04 LTS
    - Instance type: t3.micro (free tier)
@@ -129,6 +86,7 @@
    - Key pair: Create `learning-system-key.pem`
 
 2. Configure Security Group inbound rules:
+
    | Port | Source | Purpose |
    |------|--------|---------|
    | 22 | Your IP | SSH |
@@ -138,7 +96,7 @@
 
 3. Allocate Elastic IP (if using custom domain)
 
-4. Setup SSH config:
+4. Setup SSH config (`~/.ssh/config`):
    ```
    Host learning-prod
        HostName <EC2-PUBLIC-IP>
@@ -156,7 +114,7 @@
 
 ---
 
-### Milestone I2: Docker Configuration
+## Milestone I2: Docker Configuration
 
 **Goal:** Containerize FastAPI backend with LibreOffice support.
 
@@ -248,7 +206,7 @@
 
 ---
 
-### Milestone I3: Nginx Reverse Proxy + SSL
+## Milestone I3: Nginx Reverse Proxy + SSL
 
 **Goal:** Configure Nginx as reverse proxy with Let's Encrypt SSL.
 
@@ -337,7 +295,7 @@
 
 ---
 
-### Milestone I4: Netlify Frontend Deployment
+## Milestone I4: Netlify Frontend Deployment
 
 **Goal:** Deploy React SPA to Netlify with proper configuration.
 
@@ -379,6 +337,7 @@
    - Build settings: Base=`web`, Build=`npm run build`, Publish=`web/dist`
 
 3. Environment Variables (Site settings > Environment variables):
+
    | Variable | Value |
    |----------|-------|
    | `VITE_SUPABASE_URL` | `https://xxx.supabase.co` |
@@ -531,7 +490,7 @@ docker compose logs --tail=100
 
 ---
 
-## Files to Create/Modify
+## Files to Create
 
 | File | Action | Purpose |
 |------|--------|---------|
@@ -541,52 +500,3 @@ docker compose logs --tail=100
 | `learn_system/.env` | Create (on EC2) | Production secrets |
 | `web/netlify.toml` | Create | Frontend deployment config |
 | `/etc/nginx/sites-available/learning-api` | Create (on EC2) | Reverse proxy |
-| `INFRA.md` | Create | Full deployment documentation |
-
----
-
-## Integration with EXECPLAN.md
-
-Add to Progress section:
-```
-**Infrastructure Deployment (I1-I4)** - See `INFRA.md`
-- [ ] I1: EC2 instance setup + security groups
-- [ ] I2: Docker + docker-compose configuration
-- [ ] I3: Nginx reverse proxy + SSL (Let's Encrypt)
-- [ ] I4: Netlify frontend deployment
-```
-
-Add to Milestones section:
-```
-### Infrastructure Deployment I1-I4 (Ready)
-
-**Full specs:** `INFRA.md`
-
-Deploy to production: EC2 (backend) + Netlify (frontend) + Supabase (database).
-- I1: EC2 setup, security groups, SSH
-- I2: Docker, docker-compose, LibreOffice container
-- I3: Nginx reverse proxy, SSL/TLS with Let's Encrypt, long-timeout handling
-- I4: Netlify config, environment variables, deploy previews
-
-**Cost:** $1-18/month (mostly Claude API)
-```
-
----
-
-## Research Sources
-
-This consolidated plan draws from:
-
-1. **PRODUCTION DEPLOYMENT RESEARCH.md** - Original 6-agent research covering backend infrastructure, database security, API security, frontend hosting, DevOps/CI/CD, cost optimization
-
-2. **infra/ec2-setup worktree** - Detailed EC2 launch steps, security group configuration, SSH patterns, instance sizing guidance
-
-3. **infra/docker-config worktree** - Dockerfile optimization, docker-compose configuration, LibreOffice integration, container networking
-
-4. **infra/nginx-ssl worktree** - Nginx reverse proxy configuration, SSL/TLS with Let's Encrypt, long-running request handling, SSE streaming support
-
-5. **infra/netlify-frontend worktree** - netlify.toml configuration, environment variables, deploy previews, custom domain setup
-
-6. **infra/deployment-docs worktree** - INFRA.md structure, credential management documentation, runbook format, deployment checklists
-
-7. **infra/system-integration worktree** - Systemd services, deployment scripts, health checks, monitoring setup, emergency procedures

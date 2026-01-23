@@ -89,8 +89,33 @@
 
 **Date:** 2026-01-02
 
+## Document Rendering Technologies (M38-M40)
+
+**DOCX Rendering: docx-preview**
+- Client-side library, no server changes required
+- Native HTML output enables text selection and AnnotationLayer
+- ~1.7MB bundle addition
+
+**PPTX Rendering: LibreOffice**
+- Server-side conversion to PDF using `soffice --headless --convert-to pdf`
+- High-fidelity output, reuses existing PDFRenderer
+- **WARNING:** Do NOT use pptx2html - abandoned 8 years, unpatched XSS vulnerability
+
+**PPTX Text Extraction: python-pptx**
+- Pure Python, no native dependencies
+- Extracts text from shapes, tables, and speaker notes
+- SmartArt limitation accepted (python-pptx doesn't support it)
+
+**PDF Highlighting: Page-Based Percentages**
+- Uses percentage-based coordinates (x%, y%, width%, height%) relative to page dimensions
+- Survives zoom/scale changes
+- Character offsets incompatible with PDF's multi-page structure
+
+**Date:** 2026-01-06
+
 ## Cross-References
 
 - Related architecture: `decisions/architecture.md`
 - Related patterns: `decisions/patterns.md`
 - Related milestones: `milestones/speed_optimization.md` (Groq, threading)
+- Related milestones: `milestones/document_reader.md` (M38-M40 implementation)

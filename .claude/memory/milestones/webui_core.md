@@ -1,7 +1,7 @@
 # Web UI Core Milestones Archive
 
-**Last Updated:** 2026-01-04
-**Summary:** Implementation details for M9-M15 (React web interface, all core pages)
+**Last Updated:** 2026-01-19
+**Summary:** Implementation details for M9-M15, M50 (React web interface, all core pages, practice mode UI differentiation)
 
 ## Quick Reference
 
@@ -108,6 +108,62 @@ Deep insights, technique comparison, and recommendations.
 - Created ItemsNeedingAttention.jsx listing struggling items with Practice buttons linking to filtered study sessions
 - Full Analytics.jsx page with filter controls (time period, source, knowledge type) that update all sections
 - All analytics calculated from real database queries (attempts, kc_state, technique_bundles, retention_tests, kc_technique_history)
+
+### Milestone 50: Practice Mode UI Differentiation (2026-01-19)
+
+Render practice items with mode-appropriate UI instead of uniform textarea.
+
+**Problem:** AnswerInput.jsx rendered ALL practice modes (free_recall, cued_recall, recognition, explanation, application, execution) as identical textareas, ignoring mode-specific data (`hints`, `rubric`, `success_criteria`).
+
+**Solution:** Refactored AnswerInput.jsx as dispatcher to mode-specific input components.
+
+**File Structure Created:**
+```
+web/src/components/study/
+├── AnswerInput.jsx           # Dispatcher based on practice_mode
+├── inputs/
+│   ├── FreeRecallInput.jsx   # Simple textarea
+│   ├── CuedRecallInput.jsx   # Textarea + progressive amber hints
+│   ├── RecognitionInput.jsx  # A/B/C/D buttons, auto-grade
+│   ├── ExplanationInput.jsx  # Blue rubric box + word count
+│   ├── ApplicationInput.jsx  # Purple scenario card + word count
+│   └── ExecutionInput.jsx    # Start Task → Record Results flow
+└── shared/
+    ├── TextArea.jsx          # Styled textarea primitive
+    ├── SubmitButton.jsx      # Primary action button
+    └── SkipButton.jsx        # Skip action
+```
+
+**Scoring by Mode:**
+| Mode | Scoring | Self-Assessment? |
+|------|---------|------------------|
+| free_recall | Self-rating 0-3 → score/3.0 | Yes |
+| cued_recall | Self-rating 0-3 → score/3.0 | Yes |
+| recognition | Auto-grade → 1.0 or 0.0 | **No** |
+| explanation | Self-rating 0-3 → score/3.0 | Yes |
+| application | Self-rating 0-3 → score/3.0 | Yes |
+| execution | Independence 1-5 → (level-1)/4.0 | Modified |
+
+**Key Implementation Details:**
+- Dispatcher pattern: `MODE_COMPONENTS[practiceMode] || FreeRecallInput`
+- Recognition auto-grading: compares selected option to `expected_response`, skips SelfAssessment
+- Cued recall: tracks `hintsUsed` count, amber styling (`bg-amber-50`)
+- Execution: two-phase flow (Start Task → Record Results), success_criteria checklist
+- Explanation: blue rubric box (`bg-blue-50`), word count indicator
+- Application: purple scenario card (`bg-purple-50`, `border-l-4 border-purple-500`)
+
+**Study.jsx Changes:**
+- Added `userResponse` state to track mode-specific data
+- Recognition mode: auto-grades and skips to next item
+- Execution mode: calculates independence score from 1-5 level
+- All modes pass proper response object to SelfAssessment
+
+**Testing Verified:**
+- ExplanationInput: blue rubric preview, word count displays correctly
+- ApplicationInput: scenario placeholder styling (purple), word count works
+- Recognition/CuedRecall/Execution: code verified, not in current study queue
+
+**This was a pure frontend enhancement - no backend or database changes.**
 
 ## Cross-References
 

@@ -19,31 +19,40 @@ import '../../styles/docx.css'
  * @param {string} fileUrl - Signed URL to the DOCX file
  * @param {Array} highlights - Highlight annotations to display
  * @param {Function} onDeleteHighlight - Callback when highlight is deleted
+ * @param {number} zoom - Current zoom level (0.5-2.0), controlled by parent
+ * @param {Function} onZoomChange - Callback when zoom changes
  */
 const DOCXRenderer = memo(function DOCXRenderer({
   fileUrl,
   highlights = [],
-  onDeleteHighlight
+  onDeleteHighlight,
+  zoom = 1.0,
+  onZoomChange
 }) {
   const containerRef = useRef(null)
   const contentRef = useRef(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [rendered, setRendered] = useState(false)
-  const [zoom, setZoom] = useState(1.0)
 
-  // Zoom handlers
+  // Zoom handlers - call parent callback if provided
   const handleZoomIn = useCallback(() => {
-    setZoom(prev => Math.min(prev + ZOOM_STEP, MAX_ZOOM))
-  }, [])
+    if (onZoomChange) {
+      onZoomChange(prev => Math.min(prev + ZOOM_STEP, MAX_ZOOM))
+    }
+  }, [onZoomChange])
 
   const handleZoomOut = useCallback(() => {
-    setZoom(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM))
-  }, [])
+    if (onZoomChange) {
+      onZoomChange(prev => Math.max(prev - ZOOM_STEP, MIN_ZOOM))
+    }
+  }, [onZoomChange])
 
   const handleZoomReset = useCallback(() => {
-    setZoom(1.0)
-  }, [])
+    if (onZoomChange) {
+      onZoomChange(1.0)
+    }
+  }, [onZoomChange])
 
   useEffect(() => {
     if (!fileUrl) {

@@ -244,6 +244,11 @@ Implements Supabase Auth for email/password authentication, Row-Level Security (
 
 ## RLS/Display Bug Fix (2026-01-07)
 
+**Symptoms (discovered during M46 testing, NOT caused by M46):**
+- Sources page showed "0 Practice Items" despite API returning 117
+- Study page showed "No items to study" even with 40 new items
+- Document Reader couldn't load documents
+
 **Root Cause Analysis:**
 - practice_items RLS policy had complex nested EXISTS that failed silently
 - migration.py endpoints double-filtered on user_id (redundant)

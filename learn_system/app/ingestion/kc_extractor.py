@@ -62,6 +62,7 @@ def call_with_retry(fn: Callable[[], T], max_retries: int = MAX_RETRIES) -> T:
 
 # Extraction prompt template from EXECPLAN.md
 # Note: Using double braces {{ }} to escape them for .format()
+# M49: Added source_excerpt field for grounding practice items in source material
 KC_EXTRACTION_PROMPT = """You are analyzing educational content to extract learnable knowledge components.
 
 For each distinct concept, skill, or fact that a learner should master, extract:
@@ -71,6 +72,7 @@ For each distinct concept, skill, or fact that a learner should master, extract:
 4. cognitive_level: One of remember, understand, apply, analyze, evaluate, create
 5. intrinsic_complexity: 1-5 where 1 is simple definition, 5 is complex multi-step concept
 6. prerequisites: Names of other KCs that should be learned first (if any, as a list of strings)
+7. source_excerpt: The VERBATIM text from the content (50-200 words) that this KC is derived from. Copy exact quotes from the source - do not paraphrase. Include enough context to understand the concept. If the relevant passage is shorter than 50 words, include the full passage.
 
 Knowledge type definitions:
 - factual: Definitions, terms, formulas. Tested by recall.
@@ -81,6 +83,8 @@ Knowledge type definitions:
 Return ONLY a JSON array with no additional text. Extract 10-20 knowledge components from this content.
 Be specific and granular. Each KC should be independently learnable and testable.
 
+IMPORTANT: The source_excerpt must be a VERBATIM copy from the content below - do not summarize or paraphrase. This excerpt will be used to ensure practice questions test only what is actually stated in the source material.
+
 Example output format:
 [
   {{
@@ -89,7 +93,8 @@ Example output format:
     "knowledge_type": "factual",
     "cognitive_level": "remember",
     "intrinsic_complexity": 2,
-    "prerequisites": []
+    "prerequisites": [],
+    "source_excerpt": "Retrieval practice is the act of recalling information from memory. Research shows this strengthens the memory trace more effectively than passive review techniques like re-reading. The testing effect demonstrates that taking a test on material produces better long-term retention than spending that time studying."
   }}
 ]
 
@@ -223,6 +228,14 @@ def parse_llm_response(response_text: str) -> List[Dict[str, Any]]:
         if not isinstance(prereqs, list):
             prereqs = []
 
+        # M49: Extract source_excerpt for grounding practice items
+        source_excerpt = kc.get('source_excerpt')
+        if source_excerpt is not None:
+            source_excerpt = str(source_excerpt).strip()
+            # Treat empty/whitespace-only as None
+            if not source_excerpt:
+                source_excerpt = None
+
         validated_kcs.append({
             'name': str(kc['name']).strip(),
             'description': str(kc['description']).strip(),
@@ -230,6 +243,7 @@ def parse_llm_response(response_text: str) -> List[Dict[str, Any]]:
             'cognitive_level': level,
             'intrinsic_complexity': complexity,
             'prerequisites': prereqs,
+            'source_excerpt': source_excerpt,
         })
 
     return validated_kcs
@@ -329,6 +343,7 @@ def store_extracted_kcs(source_id: str, kcs: List[Dict[str, Any]], domain: str) 
         return []
 
     # Prepare batch data
+    # M49: Include source_excerpt for grounding practice items
     kcs_data = []
     for kc in kcs:
         kcs_data.append({
@@ -339,6 +354,7 @@ def store_extracted_kcs(source_id: str, kcs: List[Dict[str, Any]], domain: str) 
             'cognitive_level': kc['cognitive_level'],
             'intrinsic_complexity': kc['intrinsic_complexity'],
             'domain': domain,
+            'source_excerpt': kc.get('source_excerpt'),
             'metadata': {'prerequisites': kc.get('prerequisites', [])}
         })
 

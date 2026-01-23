@@ -58,17 +58,78 @@
 
 **Date:** 2026-01-02
 
-## Single User Model
+## Multi-User Authentication (M41-M47)
 
-**Decision:** Design for single user without authentication.
+**Decision:** Transform single-user localhost system into secure multi-user web deployment using Supabase Auth.
 
 **Rationale:**
-- Personal learning system, not multi-tenant SaaS
-- Simplifies implementation significantly
-- No RLS policies needed beyond basic security
-- Future: Auth can be added if needed
+- Battle-tested JWT handling with automatic token refresh
+- Email/password first, OAuth can be added later
+- Built-in password reset, email confirmation flows
+- Reduces security surface area vs custom implementation
 
-**Date:** Initial design
+**Date:** 2026-01-06 (overrides initial single-user decision)
+
+## Row-Level Security (RLS)
+
+**Decision:** Use RLS for data isolation instead of application-level filtering.
+
+**Rationale:**
+- Database-level enforcement - can't be bypassed by application bugs
+- Works with direct database access (Supabase client)
+- auth.uid() function provides user context automatically
+- 46+ policies across 14 user-owned tables
+- Storage policies use same pattern for file isolation
+
+**Date:** 2026-01-06
+
+## Zero-Downtime Migration
+
+**Decision:** Phased migration approach for adding auth to existing system.
+
+**Rationale:**
+1. Phase 1: Add nullable user_id columns (non-breaking)
+2. Phase 2: Deploy auth code (backwards compatible)
+3. Phase 3: Migrate existing data to first user
+4. Phase 4: Enforce NOT NULL + RLS (breaking for unauthenticated)
+Each phase has rollback scripts.
+
+**Date:** 2026-01-06
+
+## Deployment Target
+
+**Decision:** Deploy to Vercel (frontend) + Railway (backend) + Supabase (database).
+
+**Rationale:**
+- Vercel has excellent Vite support with free tier
+- Railway supports Docker for LibreOffice container
+- Supabase already in use for database
+- API keys (Claude/Groq) only in Railway environment - never exposed to frontend
+
+**Date:** 2026-01-06
+
+## Document Reader Integration
+
+**Decision:** Document Reader uses existing Sidebar with conditional TOC section.
+
+**Rationale:**
+- Reuses existing UI patterns
+- Avoids redundant navigation
+- TOC in teal color differentiates from nav items
+
+**Date:** 2026-01-05
+
+## File Storage
+
+**Decision:** Store uploaded files in Supabase Storage, not blob columns.
+
+**Rationale:**
+- CDN delivery
+- Signed URLs with expiry
+- Separate storage from database
+- 50MB file limit
+
+**Date:** 2026-01-05
 
 ## Cross-References
 

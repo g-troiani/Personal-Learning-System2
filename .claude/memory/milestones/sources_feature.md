@@ -1,7 +1,28 @@
 # Sources Feature Milestones Archive
 
-**Last Updated:** 2026-01-04
-**Summary:** Implementation details for M16-M20 (file upload, FastAPI backend, real-time processing)
+**Last Updated:** 2026-01-19
+**Summary:** Implementation details for M16-M20 (file upload, FastAPI backend, real-time processing) and M49 (source-grounded practice items)
+
+## Critical Gotchas
+
+**Environment Configuration:**
+- Single `.env` file in project root serves both Python (no `export` prefix) and Vite (`VITE_` prefix required)
+- Shell env vars override `.env` files - run `env | grep VITE_` to diagnose connection issues
+- API server must run on port 8001 to match frontend: `uvicorn app.api.server:app --port 8001`
+
+**Supabase Keys:**
+- **CRITICAL:** JS client requires legacy anon key (starts with `eyJhbG...`), NOT the new `sb_publishable_` format
+- To get legacy key: Supabase Dashboard → Settings → API Keys → "Legacy anon, service_role API keys" tab
+- Python library v2.27.0+ required for newer key formats
+
+**LLM APIs:**
+- Groq model `qwen-qwq-32b` deprecated → use `qwen/qwen3-32b`
+- Groq rate limits can cause stuck processing - retry logic helps but timeouts needed
+- Practice items: 3 per KC consistently (predictable 3:1 ratio)
+
+**Python 3.9 Compatibility:**
+- Use `Optional[X]` instead of `X | None`, `List[Dict]` instead of `list[dict]`
+- Timestamp parsing needs try-except for variable microsecond precision
 
 ## Quick Reference
 
@@ -129,6 +150,71 @@ Delete UI, SourceDetailPanel, confirmation dialogs.
   - "Delete" option opens confirmation dialog with source name and item counts
   - Cancel closes dialog without deleting
   - Backend DELETE endpoint already functional from M18
+
+### M49: Source-Grounded Practice Items (2026-01-19)
+
+**Goal:** Practice items grounded in actual source documents, not LLM general knowledge.
+
+**Problem:** `source_excerpt` field in `knowledge_components` existed but was always NULL. Practice items tested concepts not present in source material (e.g., asking about "three types of attention" when source only mentioned self-attention).
+
+**Important Nuance:** Grounding ≠ memorization. Valid items may require:
+- Reasoning/inference from source material
+- Prerequisite knowledge for the domain (e.g., Terraform docs can assume Python knowledge)
+- Synthesis of multiple concepts within same source
+
+The problem is items requiring knowledge **not derivable from source + reasonable prerequisites**.
+
+**Implementation:**
+
+| Phase | Task | Files | Lines |
+|-------|------|-------|-------|
+| 1 | Update KC extraction prompt | `kc_extractor.py` | 65-97 |
+| 2 | Parse source_excerpt from LLM | `kc_extractor.py` | 226-247 |
+| 3 | Pass source_excerpt to batch insert | `kc_extractor.py` | 346-358 |
+| 4 | Add grounding constraints to templates | `templates.py` | All 4 functions |
+
+**Key Code - KC Extraction Prompt (kc_extractor.py:75):**
+```
+7. source_excerpt: The VERBATIM text from the content (50-200 words) that this KC is derived from. Copy exact quotes from the source - do not paraphrase. Include enough context to understand the concept.
+```
+
+**Key Code - Grounding Section (templates.py:28-43):**
+```python
+---SOURCE EXCERPT---
+{excerpt}
+---END SOURCE---
+
+GROUNDING RULES (CRITICAL):
+- Questions must be answerable by reading the source excerpt + applying reasonable prerequisite knowledge for the domain
+- You MAY require reasoning, inference, or application of concepts from the excerpt
+- You MAY assume foundational knowledge appropriate to the topic
+- DO NOT require knowledge of facts, terminology, or concepts not mentioned in the excerpt unless they are obvious prerequisites
+- DO NOT invent specific details, numbers, or examples not present in or derivable from the excerpt
+```
+
+**Files Modified:**
+- `learn_system/app/ingestion/kc_extractor.py` - Prompt update, parsing, storage
+- `learn_system/app/practice/templates.py` - Added `_get_grounding_section()`, updated all 4 template functions
+
+**No Changes Required:**
+- Database schema (`source_excerpt` already existed)
+- API contracts (field already in KC model)
+- Frontend (already displays `source_excerpt` when present)
+
+**Migration Strategy:** Forward-only. Only new ingestions get grounded items. Existing KCs unchanged. Users can re-ingest for grounding.
+
+**Verification:**
+```sql
+SELECT name, LEFT(source_excerpt, 100) as excerpt_preview
+FROM knowledge_components
+WHERE source_excerpt IS NOT NULL
+ORDER BY created_at DESC LIMIT 10;
+```
+
+**Success Criteria:**
+- >95% of new KCs have non-empty source_excerpt
+- 100% of items answerable from excerpt + reasonable prerequisites
+- Existing items (NULL excerpt) still functional (backward compatible)
 
 ## Cross-References
 

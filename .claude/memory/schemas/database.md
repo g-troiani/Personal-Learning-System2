@@ -1,6 +1,6 @@
 # Database Schema
 
-**Last Updated:** 2026-01-04
+**Last Updated:** 2026-01-18
 **Database:** Supabase (PostgreSQL)
 **Location:** `learn_system/app/database/schema.sql`
 
@@ -20,6 +20,7 @@
 | kc_technique_history | Which techniques used for which KCs |
 | retention_tests | Scheduled retention assessments |
 | learning_goals | User-defined learning objectives |
+| user_preferences | Per-user settings (zoom level, etc.) |
 
 ## Full Schema
 
@@ -248,6 +249,28 @@ VALUES
     ('bundle_generation', 'Generation First', 'Pre-testing before instruction to prime encoding',
      'free_recall', 1.0, 0, 1, 0, 'delayed');
 ```
+
+## User Preferences Table (M48)
+
+```sql
+CREATE TABLE user_preferences (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  preference_key TEXT NOT NULL,
+  preference_value JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, preference_key)
+);
+
+CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id);
+
+-- RLS: Users can only access their own preferences
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own preferences" ON user_preferences
+  FOR ALL USING (auth.uid() = user_id);
+```
+
+**Used for:** reader_zoom (document reader zoom level)
 
 ## Cross-References
 

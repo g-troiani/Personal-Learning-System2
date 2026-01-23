@@ -1,0 +1,42 @@
+# Netlify configuration for Personal Learning System frontend
+
+[build]
+  # Build from the web directory
+  base = "web"
+  command = "npm run build"
+  publish = "dist"
+
+# SPA routing - redirect all routes to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Cache hashed assets for 1 year (immutable)
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Security headers for all pages
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Production environment settings
+[context.production.environment]
+  NODE_VERSION = "20"
+  # Note: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, and VITE_API_URL
+  # should be set in Netlify Dashboard > Site settings > Environment variables
+
+# Deploy preview settings (same as production)
+[context.deploy-preview.environment]
+  NODE_VERSION = "20"
+
+# Branch deploy settings
+[context.branch-deploy.environment]
+  NODE_VERSION = "20"
