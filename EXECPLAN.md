@@ -208,12 +208,15 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M51 RLS Fix: Added SELECT policy "Users can select own sessions" on sessions table (2026-01-19)
 - [x] M51 Testing: Reload mid-session → recovery dialog shows correct progress (1/20) → resume works (2026-01-19)
 
-**Infrastructure Deployment (I1-I4)** - See `.claude/memory/milestones/infrastructure_deployment.md`
+**Infrastructure Deployment (I1-I4)** - Full specs in Milestones section below (self-contained)
 - [x] Infrastructure Research: 6 parallel worktrees (ec2, docker, nginx-ssl, netlify, docs, integration), consolidated NEW FEATURES.md (2026-01-23)
-- [ ] I1: EC2 instance setup + security groups + SSH
-- [ ] I2: Docker + docker-compose configuration with LibreOffice
-- [ ] I3: Nginx reverse proxy + SSL (Let's Encrypt)
-- [ ] I4: Netlify frontend deployment
+- [x] I2 Files: Created Dockerfile, docker-compose.yml, .dockerignore (2026-01-23)
+- [x] I4 Files: Created web/netlify.toml (2026-01-23)
+- [x] EXECPLAN Integration: Full deployment content integrated into EXECPLAN.md (credentials, concrete steps, checklist, procedures, troubleshooting) (2026-01-23)
+- [ ] I1: EC2 instance setup + security groups + SSH (requires AWS Console)
+- [ ] I2 Deploy: Deploy Docker container to EC2
+- [ ] I3: Nginx reverse proxy + SSL (Let's Encrypt) (requires EC2)
+- [ ] I4 Deploy: Netlify site creation + environment variables
 
 
 ## Surprises and Discoveries
@@ -311,11 +314,33 @@ Key lessons learned during implementation:
 ## Decision Log
 
 **Full decision archive:** `.claude/memory/decisions/`
-- `architecture.md` - Supabase, hybrid CLI/web, FastAPI, RLS, auth, deployment
+
+**Infrastructure Deployment Decisions (2026-01-23):**
+
+- **Decision:** EC2 over Lambda for backend hosting
+  - Rationale: Lambda's 29s API Gateway timeout is insufficient for LLM processing (30-60s). LibreOffice (500MB+) exceeds Lambda layer limits. SSE streaming not supported by API Gateway. Background tasks require persistent server.
+  - Date: 2026-01-23
+
+- **Decision:** Netlify over Vercel for frontend
+  - Rationale: Free tier generous (100GB bandwidth), excellent Vite support, simpler configuration than Vercel for SPAs.
+  - Date: 2026-01-23
+
+- **Decision:** Docker container for backend
+  - Rationale: Encapsulates LibreOffice dependency (~400-500MB), ensures consistent environment between dev and prod, simplifies deployment with docker-compose.
+  - Date: 2026-01-23
+
+- **Decision:** Nginx reverse proxy with 300s timeout for LLM endpoints
+  - Rationale: Default Nginx timeout (60s) kills long-running LLM requests. Upload endpoint needs 300s for PPTX conversion + KC extraction + practice item generation. SSE streaming needs buffering disabled.
+  - Date: 2026-01-23
+
+- **Decision:** Let's Encrypt for SSL
+  - Rationale: Free, automated renewal via certbot, widely trusted. No need for paid certificates for personal learning system.
+  - Date: 2026-01-23
+
+**Earlier Decisions (archived in `.claude/memory/decisions/`):**
+- `architecture.md` - Supabase, hybrid CLI/web, FastAPI, RLS, auth
 - `technology.md` - Claude/Groq, SM-2, React/Vite, ThreadPoolExecutor, document rendering
 - `patterns.md` - Batch inserts, retry logic, progress callbacks
-
-All decisions are archived with full rationale. See memory files for details.
 
 
 ## Outcomes and Retrospective
@@ -437,7 +462,7 @@ See `.claude/memory/INDEX.md` for full summaries and cross-references.
 
 ## Infrastructure Reference
 
-**Full specs:** `.claude/memory/milestones/infrastructure_deployment.md`
+**Full specs:** See "Infrastructure Deployment I1-I4" in Milestones section below (self-contained, no external files needed).
 
 Deploy to production: Netlify (frontend) + EC2 (backend with Docker/LibreOffice/Nginx/SSL) + Supabase (database). Cost: $1-18/month.
 
@@ -446,14 +471,14 @@ Deploy to production: Netlify (frontend) + EC2 (backend with Docker/LibreOffice/
 | ID | Description | Status |
 |----|-------------|--------|
 | I1 | EC2 instance setup + security groups + SSH | Pending |
-| I2 | Docker + docker-compose configuration with LibreOffice | Pending |
+| I2 | Docker + docker-compose configuration with LibreOffice | Files created, deployment pending |
 | I3 | Nginx reverse proxy + SSL (Let's Encrypt) | Pending |
-| I4 | Netlify frontend deployment | Pending |
+| I4 | Netlify frontend deployment | Files created, deployment pending |
 
 ### Deployment Prerequisites
 
-Before deploying (all documented in memory file):
-- [ ] CORS_ORIGINS configured for production domain
+Before deploying:
+- [ ] CORS_ORIGINS configured for production domain (set in EC2 .env)
 - [ ] Supabase RLS policies applied (already complete - M45)
 - [ ] Admin users added to approved_users table (already complete - M47)
 - [ ] EC2 SSH key created and secured
@@ -754,41 +779,430 @@ Persist study session progress so users can resume after page reload, WiFi chang
 
 ### Infrastructure Deployment I1-I4 (Ready)
 
-**Full specs:** `.claude/memory/milestones/infrastructure_deployment.md`
+Deploy the Personal Learning System from localhost to production. After I4 completion, users can access the system from any device via the web.
 
-Deploy to production: EC2 (backend) + Netlify (frontend) + Supabase (database).
+**Architecture:**
 
-**Architecture:** User → Netlify (React SPA) → HTTPS → Nginx (reverse proxy + SSL) → FastAPI (Docker + LibreOffice) → Supabase/Claude/Groq APIs.
+    User Browser
+         │ HTTPS
+         ▼
+    ┌─────────────┐                    ┌─────────────────────┐
+    │   Netlify   │ ──── HTTPS ─────▶  │     Supabase        │
+    │  (Frontend) │                    │  PostgreSQL + Auth  │
+    │  React SPA  │                    │  Storage (Documents)│
+    └──────┬──────┘                    └─────────────────────┘
+           │ HTTPS
+           ▼
+    ┌─────────────┐                    ┌─────────────────────┐
+    │   Nginx     │ ──── HTTPS ─────▶  │   External APIs     │
+    │  (Reverse   │                    │  Anthropic (Claude) │
+    │   Proxy)    │                    │  Groq (Fast LLM)    │
+    │  SSL/TLS    │                    └─────────────────────┘
+    └──────┬──────┘
+           │ HTTP (localhost only)
+           ▼
+    ┌─────────────┐
+    │  FastAPI    │
+    │  (Docker)   │
+    │  LibreOffice│
+    └─────────────┘
+    [AWS EC2 t3.micro]
 
-**Why EC2 over Lambda:**
-- API Gateway timeout: 29s max vs. 30-60s LLM processing
-- LibreOffice: 500MB+ doesn't fit Lambda layers
-- SSE streaming: API Gateway doesn't support
+**Why EC2 over Lambda (CRITICAL):**
+- API Gateway timeout: 29s max — LLM processing takes 30-60+ seconds
+- LibreOffice: 500MB+ doesn't fit Lambda layers (500MB limit)
+- SSE streaming: API Gateway doesn't support Server-Sent Events
 - Background tasks: Lambda dies after response
 
-**Milestones:**
+**Cost Estimate:** $1-18/month (t3.micro $0-8 after free tier, Claude API $1-10, Netlify/Supabase/Groq free tier)
 
-**I1: EC2 Instance Setup**
-- Goal: Provision AWS EC2 with SSH access
-- Work: Launch Ubuntu 24.04 t3.micro, configure security groups (22/80/443/8001), allocate Elastic IP, setup SSH config
-- Verification: SSH to instance, Docker hello-world runs
+---
 
-**I2: Docker Configuration**
-- Goal: Containerize FastAPI with LibreOffice
-- Work: Create Dockerfile (python:3.11-slim + libreoffice-impress), docker-compose.yml, .dockerignore
-- Verification: `curl http://localhost:8001/api/health` returns healthy
+#### Credentials Reference (NEVER commit to git)
 
-**I3: Nginx Reverse Proxy + SSL**
-- Goal: HTTPS with Let's Encrypt
-- Work: Configure Nginx upstream, rate limiting, 300s timeout for upload/SSE endpoints, certbot SSL
-- Verification: `curl -I https://api.yourdomain.com/api/health` returns 200 with SSL
+| Credential | Where to Store | How to Get |
+|------------|----------------|------------|
+| Supabase URL | EC2 `.env`, Netlify vars | Supabase Dashboard → Settings → API |
+| Supabase Anon Key | EC2 `.env`, Netlify vars | Supabase Dashboard → Settings → API → **Legacy tab** (must start with `eyJhbG...`) |
+| Supabase Service Role Key | EC2 `.env` ONLY | Supabase Dashboard → Settings → API (bypasses RLS, never expose to frontend) |
+| Anthropic API Key | EC2 `.env` | console.anthropic.com |
+| Groq API Key | EC2 `.env` | console.groq.com |
+| EC2 SSH Key | Local `~/.ssh/` | AWS Console (created during EC2 launch) |
 
-**I4: Netlify Frontend Deployment**
-- Goal: Deploy React SPA
-- Work: Create netlify.toml, configure environment variables (VITE_SUPABASE_URL, VITE_API_URL), link repo
-- Verification: Frontend loads, login works, sources page shows data
+**Backend .env template (create on EC2 at `/home/ubuntu/app/learn_system/.env`):**
 
-**Cost:** $1-18/month (t3.micro $0-8, Claude API $1-10, everything else free tier)
+    ENVIRONMENT=production
+    SUPABASE_URL=https://xxx.supabase.co
+    SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
+    ANTHROPIC_API_KEY=sk-ant-...
+    GROQ_API_KEY=gsk_...
+    CORS_ORIGINS=https://your-app.netlify.app
+
+**Netlify Environment Variables (set in Netlify Dashboard → Site settings → Environment variables):**
+
+    VITE_SUPABASE_URL=https://xxx.supabase.co
+    VITE_SUPABASE_ANON_KEY=eyJhbGc...
+    VITE_API_URL=https://api.yourdomain.com/api
+
+---
+
+#### I1: EC2 Instance Setup
+
+**Goal:** Provision AWS EC2 instance with SSH access and Docker installed.
+
+**Concrete Steps:**
+
+1. **Launch EC2 instance via AWS Console:**
+   - Go to EC2 Dashboard → Launch Instance
+   - AMI: Ubuntu Server 24.04 LTS (free tier eligible)
+   - Instance type: t3.micro (free tier for 12 months)
+   - Storage: 20GB gp3
+   - Key pair: Create new → `learning-system-key.pem` → Download and save to `~/.ssh/`
+
+2. **Configure Security Group (inbound rules):**
+
+   | Port | Source | Purpose |
+   |------|--------|---------|
+   | 22 | Your IP only | SSH access |
+   | 80 | 0.0.0.0/0 | HTTP (redirects to HTTPS) |
+   | 443 | 0.0.0.0/0 | HTTPS |
+   | 8001 | 127.0.0.1 | FastAPI (localhost only in production) |
+
+3. **Allocate Elastic IP (optional but recommended):**
+   - EC2 Dashboard → Elastic IPs → Allocate → Associate with instance
+   - This gives you a static IP that survives instance restarts
+
+4. **Setup local SSH config (on your machine, `~/.ssh/config`):**
+
+       Host learning-prod
+           HostName <EC2-PUBLIC-IP-OR-ELASTIC-IP>
+           User ubuntu
+           IdentityFile ~/.ssh/learning-system-key.pem
+
+5. **Secure the key and connect:**
+
+       chmod 400 ~/.ssh/learning-system-key.pem
+       ssh learning-prod
+
+6. **Initial server setup (run on EC2):**
+
+       sudo apt update && sudo apt upgrade -y
+
+       # Install Docker
+       sudo apt install -y docker.io docker-compose-v2
+       sudo usermod -aG docker ubuntu
+
+       # Install Nginx and Certbot
+       sudo apt install -y nginx certbot python3-certbot-nginx
+
+       # Log out and back in for docker group to take effect
+       exit
+
+   Then reconnect: `ssh learning-prod`
+
+**Verification:**
+
+    ssh learning-prod
+    docker run hello-world
+    # Should print "Hello from Docker!"
+
+---
+
+#### I2: Docker Configuration
+
+**Goal:** Containerize FastAPI backend with LibreOffice support.
+
+**Files already created:**
+- `learn_system/Dockerfile` — Python 3.11-slim + LibreOffice + curl for healthcheck
+- `learn_system/docker-compose.yml` — Container orchestration with logging
+- `learn_system/.dockerignore` — Excludes .env, tests, __pycache__
+
+**Concrete Steps (on EC2):**
+
+1. **Clone repository:**
+
+       cd /home/ubuntu
+       git clone <your-repo-url> app
+       cd app/learn_system
+
+2. **Create production .env file:**
+
+       nano .env
+       # Paste the backend .env template from Credentials Reference above
+       # Fill in your actual values
+
+3. **Build and start container:**
+
+       docker compose up -d --build
+
+   First build takes 5-10 minutes (LibreOffice is ~400-500MB).
+
+4. **Check container status:**
+
+       docker compose ps
+       # Should show: learning-system-api   running (healthy)
+
+**Verification:**
+
+    curl http://localhost:8001/api/health
+    # Expected: {"status":"healthy","version":"1.0.0","timestamp":"..."}
+
+**Troubleshooting:**
+
+    # View logs if container fails
+    docker compose logs --tail=100
+
+    # Common issues:
+    # - Missing .env: Create it with nano .env
+    # - Port in use: sudo lsof -i :8001
+    # - Out of disk: df -h
+
+---
+
+#### I3: Nginx Reverse Proxy + SSL
+
+**Goal:** Configure Nginx as reverse proxy with Let's Encrypt SSL certificate.
+
+**Concrete Steps (on EC2):**
+
+1. **Create Nginx config:**
+
+       sudo nano /etc/nginx/sites-available/learning-api
+
+   Paste the following (replace `api.yourdomain.com` with your actual domain):
+
+       # Rate limiting
+       limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+
+       upstream fastapi_backend {
+           server 127.0.0.1:8001;
+           keepalive 32;
+       }
+
+       # HTTP -> HTTPS redirect
+       server {
+           listen 80;
+           server_name api.yourdomain.com;
+
+           location /.well-known/acme-challenge/ {
+               root /var/www/certbot;
+           }
+
+           location / {
+               return 301 https://$host$request_uri;
+           }
+       }
+
+       # HTTPS server
+       server {
+           listen 443 ssl http2;
+           server_name api.yourdomain.com;
+
+           # SSL certificates (certbot will configure these)
+           ssl_certificate /etc/letsencrypt/live/api.yourdomain.com/fullchain.pem;
+           ssl_certificate_key /etc/letsencrypt/live/api.yourdomain.com/privkey.pem;
+
+           # Security headers
+           add_header X-Frame-Options "DENY" always;
+           add_header X-Content-Type-Options "nosniff" always;
+           add_header Strict-Transport-Security "max-age=31536000" always;
+
+           client_max_body_size 50M;
+
+           # Upload endpoint (300s timeout for PPTX conversion + LLM processing)
+           location /api/sources/upload {
+               limit_req zone=api_limit burst=5 nodelay;
+               proxy_pass http://fastapi_backend;
+               proxy_read_timeout 300s;
+               proxy_send_timeout 300s;
+           }
+
+           # SSE streaming endpoint (buffering disabled)
+           location /api/ai/chat/stream {
+               proxy_pass http://fastapi_backend;
+               proxy_set_header Connection '';
+               proxy_buffering off;
+               proxy_cache off;
+               chunked_transfer_encoding off;
+               proxy_read_timeout 300s;
+           }
+
+           # All other API endpoints
+           location /api/ {
+               limit_req zone=api_limit burst=20 nodelay;
+               proxy_pass http://fastapi_backend;
+               proxy_read_timeout 120s;
+           }
+       }
+
+2. **Enable site and test config:**
+
+       sudo ln -s /etc/nginx/sites-available/learning-api /etc/nginx/sites-enabled/
+       sudo nginx -t
+       # Should say: syntax is ok, test is successful
+
+3. **Point your domain DNS to EC2:**
+   - In your domain registrar, create an A record: `api.yourdomain.com` → `<EC2-ELASTIC-IP>`
+   - Wait for DNS propagation (5-30 minutes)
+
+4. **Get SSL certificate:**
+
+       sudo mkdir -p /var/www/certbot
+       sudo certbot --nginx -d api.yourdomain.com
+       # Follow prompts, enter email, agree to terms
+
+5. **Reload Nginx:**
+
+       sudo systemctl reload nginx
+
+**Verification:**
+
+    curl -I https://api.yourdomain.com/api/health
+    # Should return HTTP/2 200 with SSL certificate info
+
+**SSL Auto-Renewal:** Certbot creates a systemd timer that auto-renews certificates. Verify with:
+
+    sudo systemctl status certbot.timer
+
+---
+
+#### I4: Netlify Frontend Deployment
+
+**Goal:** Deploy React SPA to Netlify with proper configuration.
+
+**File already created:** `web/netlify.toml` — SPA routing, caching, security headers
+
+**Concrete Steps:**
+
+1. **Commit and push netlify.toml:**
+
+       git add web/netlify.toml
+       git commit -m "feat: Add netlify.toml for production deployment"
+       git push
+
+2. **Create Netlify site:**
+   - Go to https://app.netlify.com
+   - Add new site → Import from Git
+   - Connect your repository
+   - Build settings:
+     - Base directory: `web`
+     - Build command: `npm run build`
+     - Publish directory: `web/dist`
+
+3. **Set environment variables (Netlify Dashboard → Site settings → Environment variables):**
+
+   | Variable | Value |
+   |----------|-------|
+   | `VITE_SUPABASE_URL` | `https://xxx.supabase.co` |
+   | `VITE_SUPABASE_ANON_KEY` | `eyJhbGc...` (legacy format, NOT sb_publishable_) |
+   | `VITE_API_URL` | `https://api.yourdomain.com/api` |
+
+4. **Trigger deploy:**
+   - Netlify auto-deploys on push, or click "Trigger deploy" in dashboard
+
+**Verification:**
+- Navigate to your Netlify URL (e.g., `https://your-app.netlify.app`)
+- Login should work
+- Sources page should show your documents
+- Upload should work (if you're an approved user)
+
+---
+
+#### Deployment Checklist
+
+**Before Going Live:**
+- [ ] EC2 instance launched (t3.micro, Ubuntu 24.04)
+- [ ] SSH key secured (`chmod 400`)
+- [ ] Docker installed and tested (`docker run hello-world`)
+- [ ] Repository cloned to `/home/ubuntu/app`
+- [ ] Backend `.env` created with all credentials
+- [ ] Container running: `docker compose ps` shows healthy
+- [ ] Health check passes: `curl http://localhost:8001/api/health`
+- [ ] Domain DNS points to EC2 Elastic IP
+- [ ] Nginx config created and tested (`nginx -t`)
+- [ ] SSL certificate obtained via certbot
+- [ ] HTTPS works: `curl -I https://api.yourdomain.com/api/health`
+- [ ] netlify.toml committed and pushed
+- [ ] Netlify site created and linked to repo
+- [ ] Netlify environment variables set (all 3)
+- [ ] Frontend loads at Netlify URL
+- [ ] End-to-end test: login → view sources → practice
+
+**Week 1 Post-Launch:**
+- [ ] Uptime monitoring configured (e.g., UptimeRobot free tier)
+- [ ] AWS billing alert set (e.g., $15 threshold)
+
+---
+
+#### Operational Procedures
+
+**Deploy Backend Updates:**
+
+    ssh learning-prod
+    cd /home/ubuntu/app
+    git pull
+    cd learn_system
+    docker compose down
+    docker compose up -d --build
+    curl http://localhost:8001/api/health
+
+**Rollback Backend:**
+
+    ssh learning-prod
+    cd /home/ubuntu/app
+    git log --oneline -10  # Find previous commit
+    git checkout <previous-commit>
+    cd learn_system
+    docker compose down
+    docker compose up -d --build
+
+**Rollback Frontend (Netlify):**
+1. Netlify Dashboard → Site → Deploys
+2. Click previous successful deploy
+3. Click "Publish deploy"
+
+**View Logs:**
+
+    # Backend logs
+    ssh learning-prod
+    docker compose -f /home/ubuntu/app/learn_system/docker-compose.yml logs -f --tail=100
+
+    # Nginx logs
+    ssh learning-prod
+    sudo tail -f /var/log/nginx/error.log
+
+**Force SSL Renewal (if needed):**
+
+    ssh learning-prod
+    sudo certbot renew --force-renewal
+    sudo systemctl reload nginx
+
+---
+
+#### Troubleshooting Guide
+
+**API Returns 502 Bad Gateway:**
+1. Check container: `docker compose ps`
+2. Check logs: `docker compose logs --tail=50`
+3. Restart: `docker compose restart`
+
+**CORS Errors:**
+1. Verify `CORS_ORIGINS` in backend `.env` matches Netlify domain exactly (including `https://`)
+2. Verify `VITE_API_URL` in Netlify matches backend domain exactly
+3. Restart container: `docker compose down && docker compose up -d`
+
+**Container Won't Start:**
+
+    docker compose logs --tail=100
+    # Common issues:
+    # - Missing .env file
+    # - Port 8001 in use: sudo lsof -i :8001
+    # - Out of disk space: df -h
+
+**SSL Certificate Expired:**
+
+    sudo certbot renew --force-renewal
+    sudo systemctl reload nginx
 
 
 ## Web UI Reference
@@ -835,3 +1249,5 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-19: M51 Complete - Session Continuity Across Page Reloads. Implemented useSessionPersistence hook (async auth check, debounced DB saves), SessionRecoveryDialog with progress display (X/20, last activity timestamp), SaveIndicator with cloud icon. Critical fix: added SELECT RLS policy "Users can select own sessions" on sessions table - original RLS only had INSERT/UPDATE/DELETE but not SELECT. Live testing verified: complete item → reload → recovery dialog shows 1/20 progress → resume works.
 - 2026-01-23: Infrastructure Deployment Research Complete - 6 parallel worktrees created (infra/ec2-setup, infra/docker-config, infra/nginx-ssl, infra/netlify-frontend, infra/deployment-docs, infra/system-integration). Consolidated into NEW FEATURES.md covering EC2, Docker, Nginx/SSL, Netlify, credentials, operational procedures, troubleshooting.
 - 2026-01-23: Infrastructure Deployment Integrated into EXECPLAN - Created `.claude/memory/milestones/infrastructure_deployment.md` with full deployment specs. Added I1-I4 milestones to Progress section. Added detailed milestone descriptions. Updated Purpose/Big Picture, Plan of Work, Infrastructure Reference, Memory Index. EXECPLAN now fully self-contained for infrastructure deployment following PLANS.md conventions.
+- 2026-01-23: Infrastructure Files Created - Created `learn_system/Dockerfile` (Python 3.11-slim + LibreOffice), `learn_system/docker-compose.yml`, `learn_system/.dockerignore`. Created `web/netlify.toml` (SPA routing, security headers, caching).
+- 2026-01-23: EXECPLAN Self-Contained - Integrated full infrastructure deployment content directly into EXECPLAN.md per PLANS.md requirements. Added: Credentials Reference with .env templates, Concrete Steps with exact commands for I1-I4, Deployment Checklist, Operational Procedures, Troubleshooting Guide, Infrastructure Decision Log entries. Removed external INFRA.md dependency. EXECPLAN.md now contains everything needed for a novice to deploy end-to-end.
