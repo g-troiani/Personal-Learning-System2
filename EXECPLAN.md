@@ -289,6 +289,8 @@ Key lessons learned during implementation:
 - **CORS for production:** EC2 `.env` needs `CORS_ORIGINS=http://localhost:5173,https://your-app.netlify.app` (comma-separated, no spaces)
 - **Elastic IP cost:** Free when associated with running instance; ~$3.60/month if instance stopped. Keep instance running or release EIP.
 - **docker-compose version warning:** "version attribute is obsolete" warning is harmless, can be ignored or remove `version: '3.8'` line
+- **CRITICAL - Mixed content blocking:** HTTPS frontend (Netlify) cannot make HTTP requests to backend (EC2 without SSL). Browser blocks these as mixed content. **Solution:** Add Netlify proxy in netlify.toml: `[[redirects]] from="/api/*" to="http://EC2-IP/api/:splat" status=200 force=true`. Set `VITE_API_URL=/api` (relative path). Requests go HTTPS→Netlify→HTTP→EC2.
+- **docker-compose restart vs recreate:** `docker compose restart` does NOT reload `.env` file. Must use `docker compose down && docker compose up -d` to pick up env var changes.
 
 
 ## Known Issues and Future Improvements
