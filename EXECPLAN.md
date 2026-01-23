@@ -208,15 +208,15 @@ This section tracks granular progress with timestamps. Each stopping point must 
 - [x] M51 RLS Fix: Added SELECT policy "Users can select own sessions" on sessions table (2026-01-19)
 - [x] M51 Testing: Reload mid-session → recovery dialog shows correct progress (1/20) → resume works (2026-01-19)
 
-**Infrastructure Deployment (I1-I4)** - Full specs in Milestones section below (self-contained)
+**Infrastructure Deployment (I1-I4)** - Complete (2026-01-23)
 - [x] Infrastructure Research: 6 parallel worktrees (ec2, docker, nginx-ssl, netlify, docs, integration), consolidated NEW FEATURES.md (2026-01-23)
 - [x] I2 Files: Created Dockerfile, docker-compose.yml, .dockerignore (2026-01-23)
-- [x] I4 Files: Created web/netlify.toml (2026-01-23)
-- [x] EXECPLAN Integration: Full deployment content integrated into EXECPLAN.md (credentials, concrete steps, checklist, procedures, troubleshooting) (2026-01-23)
-- [ ] I1: EC2 instance setup + security groups + SSH (requires AWS Console)
-- [ ] I2 Deploy: Deploy Docker container to EC2
-- [ ] I3: Nginx reverse proxy + SSL (Let's Encrypt) (requires EC2)
-- [ ] I4 Deploy: Netlify site creation + environment variables
+- [x] I4 Files: Created netlify.toml (moved to repo root) (2026-01-23)
+- [x] EXECPLAN Integration: Full deployment content integrated into EXECPLAN.md (2026-01-23)
+- [x] I1: EC2 instance provisioned via Terraform (t3.micro, Ubuntu 24.04, Elastic IP: 3.215.170.154) (2026-01-23)
+- [x] I2 Deploy: Docker container running on EC2, health check passing (2026-01-23)
+- [x] I3: Nginx reverse proxy configured (SSL pending custom domain) (2026-01-23)
+- [x] I4 Deploy: Netlify site live at https://personalized-learning-system.netlify.app/ (2026-01-23)
 
 
 ## Surprises and Discoveries
@@ -282,6 +282,13 @@ Key lessons learned during implementation:
 - Symptom: `useSessionPersistence` query returned 0 sessions despite data existing (admin could see via postgres role)
 - Fix: `CREATE POLICY "Users can select own sessions" ON sessions FOR SELECT USING (auth.uid() = user_id)`
 - Lesson: Always verify all CRUD operations have corresponding RLS policies
+
+**Infrastructure Deployment (I1-I4) - 2026-01-23:**
+- **Terraform for EC2:** Created `infrastructure/main.tf` with full EC2 provisioning (instance, security group, elastic IP, SSH key pair). User_data script installs Docker and Nginx automatically.
+- **netlify.toml location:** Must be in repo root, not in `web/` subdirectory. Netlify ignores toml files in subdirectories.
+- **CORS for production:** EC2 `.env` needs `CORS_ORIGINS=http://localhost:5173,https://your-app.netlify.app` (comma-separated, no spaces)
+- **Elastic IP cost:** Free when associated with running instance; ~$3.60/month if instance stopped. Keep instance running or release EIP.
+- **docker-compose version warning:** "version attribute is obsolete" warning is harmless, can be ignored or remove `version: '3.8'` line
 
 
 ## Known Issues and Future Improvements
@@ -1251,3 +1258,4 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 - 2026-01-23: Infrastructure Deployment Integrated into EXECPLAN - Created `.claude/memory/milestones/infrastructure_deployment.md` with full deployment specs. Added I1-I4 milestones to Progress section. Added detailed milestone descriptions. Updated Purpose/Big Picture, Plan of Work, Infrastructure Reference, Memory Index. EXECPLAN now fully self-contained for infrastructure deployment following PLANS.md conventions.
 - 2026-01-23: Infrastructure Files Created - Created `learn_system/Dockerfile` (Python 3.11-slim + LibreOffice), `learn_system/docker-compose.yml`, `learn_system/.dockerignore`. Created `web/netlify.toml` (SPA routing, security headers, caching).
 - 2026-01-23: EXECPLAN Self-Contained - Integrated full infrastructure deployment content directly into EXECPLAN.md per PLANS.md requirements. Added: Credentials Reference with .env templates, Concrete Steps with exact commands for I1-I4, Deployment Checklist, Operational Procedures, Troubleshooting Guide, Infrastructure Decision Log entries. Removed external INFRA.md dependency. EXECPLAN.md now contains everything needed for a novice to deploy end-to-end.
+- 2026-01-23: **I1-I4 COMPLETE - Production Deployment Live.** Created Terraform config (`infrastructure/main.tf`) for automated EC2 provisioning. Deployed: EC2 t3.micro (IP: 3.215.170.154) with Docker container, Nginx reverse proxy. Frontend live at https://personalized-learning-system.netlify.app/. Fixed: moved netlify.toml to repo root (Netlify ignores subdirectory configs), added email-validator to requirements.txt. Full end-to-end testing verified: login, dashboard, sources loading. SSL pending custom domain configuration.
