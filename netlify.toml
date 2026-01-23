@@ -6,6 +6,13 @@
   command = "npm run build"
   publish = "dist"
 
+# Proxy API requests to EC2 backend (solves mixed content HTTPS->HTTP issue)
+[[redirects]]
+  from = "/api/*"
+  to = "http://3.215.170.154/api/:splat"
+  status = 200
+  force = true
+
 # SPA routing - redirect all routes to index.html
 [[redirects]]
   from = "/*"
