@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Bot, User, AlertCircle, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-// API base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
+// API base URL (includes /api path)
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api'
 
 /**
  * AIChatPanel - AI chat interface for asking questions about the document
@@ -72,7 +72,7 @@ export default function AIChatPanel({
         isStreaming: true
       }])
 
-      const response = await fetch(`${API_BASE_URL}/api/ai/chat/stream`, {
+      const response = await fetch(`${API_BASE_URL}/ai/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

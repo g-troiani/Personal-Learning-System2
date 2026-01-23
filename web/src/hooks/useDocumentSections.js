@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 
-// API base URL from environment or default to localhost:8001
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001'
+// API base URL from environment or default to localhost:8001/api
+// Note: VITE_API_URL should include /api (e.g., "/api" or "http://localhost:8001/api")
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api'
 
 /**
  * Hook to fetch document sections (TOC) for a given source.
@@ -25,7 +26,7 @@ export function useDocumentSections(sourceId) {
     setError(null)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sources/${sourceId}/sections`)
+      const response = await fetch(`${API_BASE_URL}/sources/${sourceId}/sections`)
 
       if (!response.ok) {
         if (response.status === 404) {
