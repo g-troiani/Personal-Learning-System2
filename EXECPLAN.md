@@ -366,7 +366,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Plan of Work
 
-Implementation proceeds through fifty-one milestones plus four infrastructure milestones. M1-M51 are complete. I1-I4 are ready for implementation.
+Implementation proceeds through fifty-one milestones plus four infrastructure milestones. **All milestones complete (M1-M51, I1-I4).** Production deployment live at https://personalized-learning-system.netlify.app/
 
 **CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
 
@@ -477,15 +477,19 @@ Deploy to production: Netlify (frontend) + EC2 (backend with Docker/LibreOffice/
 
 | ID | Description | Status |
 |----|-------------|--------|
-| I1 | EC2 instance setup + security groups + SSH | Pending |
-| I2 | Docker + docker-compose configuration with LibreOffice | Files created, deployment pending |
-| I3 | Nginx reverse proxy + SSL (Let's Encrypt) | Pending |
-| I4 | Netlify frontend deployment | Files created, deployment pending |
+| I1 | EC2 instance setup + security groups + SSH | ✅ Complete (Terraform) |
+| I2 | Docker + docker-compose configuration with LibreOffice | ✅ Complete |
+| I3 | Nginx reverse proxy + SSL (Let's Encrypt) | ✅ Complete (SSL pending domain) |
+| I4 | Netlify frontend deployment | ✅ Complete |
+
+**Production URLs:**
+- Frontend: https://personalized-learning-system.netlify.app/
+- Backend: http://3.215.170.154/api
 
 ### Deployment Prerequisites
 
-Before deploying:
-- [ ] CORS_ORIGINS configured for production domain (set in EC2 .env)
+Completed:
+- [x] CORS_ORIGINS configured for production domain (set in EC2 .env)
 - [ ] Supabase RLS policies applied (already complete - M45)
 - [ ] Admin users added to approved_users table (already complete - M47)
 - [ ] EC2 SSH key created and secured
