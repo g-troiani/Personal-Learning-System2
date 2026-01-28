@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Lightbulb, ChevronDown } from 'lucide-react'
-import { TextArea, SubmitButton, SkipButton } from '../shared'
+import { TextArea, SubmitButton, SkipButton, MicrophoneButton } from '../shared'
+import useSpeechRecognition from '../../../hooks/useSpeechRecognition'
 
 // Parse hints from hints field (JSON array or comma-separated string)
 function parseHints(hints) {
@@ -32,6 +33,31 @@ export default function CuedRecallInput({ item, onSubmit, onSkip, disabled }) {
   const [answer, setAnswer] = useState('')
   const [hintsRevealed, setHintsRevealed] = useState(0)
 
+  // Speech recognition for dictation
+  const {
+    isListening,
+    transcript,
+    interimTranscript,
+    isSupported,
+    error: speechError,
+    toggle: toggleSpeech,
+    reset: resetSpeech,
+  } = useSpeechRecognition({
+    continuous: true,
+    interimResults: true,
+  })
+
+  // Append transcript to answer when speech is recognized
+  useEffect(() => {
+    if (transcript) {
+      setAnswer(prev => {
+        const separator = prev.trim() ? ' ' : ''
+        return prev + separator + transcript
+      })
+      resetSpeech()
+    }
+  }, [transcript, resetSpeech])
+
   // Parse hints once
   const hints = useMemo(() => parseHints(item?.hints), [item?.hints])
   const totalHints = hints.length
@@ -46,6 +72,7 @@ export default function CuedRecallInput({ item, onSubmit, onSkip, disabled }) {
   const handleSubmit = (e) => {
     e.preventDefault()
     if (answer.trim() || disabled) {
+      if (isListening) toggleSpeech()
       onSubmit({
         type: 'text',
         value: answer.trim(),
@@ -57,10 +84,16 @@ export default function CuedRecallInput({ item, onSubmit, onSkip, disabled }) {
   }
 
   const handleSkip = () => {
+    if (isListening) toggleSpeech()
     onSkip()
     setAnswer('')
     setHintsRevealed(0)
   }
+
+  // Display value includes interim results while listening
+  const displayValue = isListening && interimTranscript
+    ? answer + (answer.trim() ? ' ' : '') + interimTranscript
+    : answer
 
   return (
     <div className="space-y-4">
@@ -114,14 +147,21 @@ export default function CuedRecallInput({ item, onSubmit, onSkip, disabled }) {
       <form onSubmit={handleSubmit}>
         <div className="relative">
           <TextArea
-            value={answer}
+            value={displayValue}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Type your answer..."
+            placeholder={isListening ? 'Listening...' : 'Type or dictate your answer...'}
             rows={4}
             disabled={disabled}
-            className="pr-24"
+            className="pr-28"
           />
-          <div className="absolute right-3 bottom-3">
+          <div className="absolute right-3 bottom-3 flex items-center gap-2">
+            <MicrophoneButton
+              isListening={isListening}
+              isSupported={isSupported}
+              disabled={disabled}
+              onClick={toggleSpeech}
+              error={speechError}
+            />
             <SubmitButton
               type="submit"
               disabled={disabled || !answer.trim()}
@@ -130,6 +170,19 @@ export default function CuedRecallInput({ item, onSubmit, onSkip, disabled }) {
           </div>
         </div>
       </form>
+
+      {/* Show listening indicator or error */}
+      {isListening && (
+        <div className="text-sm text-accent-progress flex items-center gap-2">
+          <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+          Listening... speak now
+        </div>
+      )}
+      {speechError && !isListening && (
+        <div className="text-sm text-red-500">
+          {speechError}
+        </div>
+      )}
 
       <div className="mt-4 text-center">
         <SkipButton onClick={handleSkip} disabled={disabled} />

@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { BookOpen, List } from 'lucide-react'
-import { TextArea, SubmitButton, SkipButton } from '../shared'
+import { TextArea, SubmitButton, SkipButton, MicrophoneButton } from '../shared'
+import useSpeechRecognition from '../../../hooks/useSpeechRecognition'
 
 // Parse rubric from JSON or string
 function parseRubric(rubric) {
@@ -33,24 +34,56 @@ function parseRubric(rubric) {
 export default function ExplanationInput({ item, onSubmit, onSkip, disabled }) {
   const [answer, setAnswer] = useState('')
 
+  // Speech recognition for dictation
+  const {
+    isListening,
+    transcript,
+    interimTranscript,
+    isSupported,
+    error: speechError,
+    toggle: toggleSpeech,
+    reset: resetSpeech,
+  } = useSpeechRecognition({
+    continuous: true,
+    interimResults: true,
+  })
+
+  // Append transcript to answer when speech is recognized
+  useEffect(() => {
+    if (transcript) {
+      setAnswer(prev => {
+        const separator = prev.trim() ? ' ' : ''
+        return prev + separator + transcript
+      })
+      resetSpeech()
+    }
+  }, [transcript, resetSpeech])
+
   // Parse rubric
   const rubric = useMemo(() => parseRubric(item?.rubric), [item?.rubric])
 
-  const wordCount = answer.trim() ? answer.trim().split(/\s+/).length : 0
+  // Display value includes interim results while listening
+  const displayValue = isListening && interimTranscript
+    ? answer + (answer.trim() ? ' ' : '') + interimTranscript
+    : answer
+
+  const wordCount = displayValue.trim() ? displayValue.trim().split(/\s+/).length : 0
 
   const handleSubmit = (e) => {
     e.preventDefault()
     if (answer.trim() || disabled) {
+      if (isListening) toggleSpeech()
       onSubmit({
         type: 'text',
         value: answer.trim(),
-        wordCount
+        wordCount: answer.trim() ? answer.trim().split(/\s+/).length : 0
       })
       setAnswer('')
     }
   }
 
   const handleSkip = () => {
+    if (isListening) toggleSpeech()
     onSkip()
     setAnswer('')
   }
@@ -97,19 +130,41 @@ export default function ExplanationInput({ item, onSubmit, onSkip, disabled }) {
       <form onSubmit={handleSubmit}>
         <div className="relative">
           <TextArea
-            value={answer}
+            value={displayValue}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Write your explanation..."
+            placeholder={isListening ? 'Listening...' : 'Write or dictate your explanation...'}
             rows={8}
             disabled={disabled}
             className="resize-y min-h-[200px]"
           />
 
-          {/* Word Count */}
+          {/* Word Count and Microphone */}
           <div className="absolute bottom-3 left-3 text-xs text-text-muted">
             {wordCount} word{wordCount !== 1 ? 's' : ''}
           </div>
+          <div className="absolute bottom-3 right-3">
+            <MicrophoneButton
+              isListening={isListening}
+              isSupported={isSupported}
+              disabled={disabled}
+              onClick={toggleSpeech}
+              error={speechError}
+            />
+          </div>
         </div>
+
+        {/* Show listening indicator or error */}
+        {isListening && (
+          <div className="mt-2 text-sm text-accent-progress flex items-center gap-2">
+            <span className="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            Listening... speak now
+          </div>
+        )}
+        {speechError && !isListening && (
+          <div className="mt-2 text-sm text-red-500">
+            {speechError}
+          </div>
+        )}
 
         <div className="mt-3 flex items-center justify-between">
           <p className="text-xs text-text-muted">
