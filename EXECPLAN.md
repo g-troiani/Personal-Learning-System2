@@ -586,8 +586,11 @@ NEVER use mock data when real services are available. This applies to EVERYTHING
 
 | Type | Tool | Purpose | When Required |
 |------|------|---------|---------------|
-| **Logic Tests** | pytest, Vitest | Verify business logic, APIs, hooks, data transformations | Every code change |
-| **UI Tests** | Chrome extension | Verify visual rendering, user flows, interactions | Every UI change |
+| **Logic Tests** | pytest, Vitest, Playwright | Verify business logic, APIs, hooks, data transformations | Every code change |
+| **UI Tests** | Chrome extension, Playwright | Verify visual rendering, user flows, interactions | Every UI change |
+
+**Alternative: MCP Tools for Testing**
+The system has access to MCP browser automation tools (Chrome extension). If these are faster or more advantageous for a specific test scenario, use them instead of or alongside traditional test frameworks.
 
 **UI Testing Permission:** The system has standing permission to use Chrome browser automation for UI testing without additional approval.
 

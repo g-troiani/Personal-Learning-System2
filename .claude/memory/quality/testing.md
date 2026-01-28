@@ -38,6 +38,15 @@ If a real endpoint exists, use it. If a real database exists, query it. If a rea
 
 **Rationale:** Mocks hide real integration issues. Real tests catch real bugs. If you're testing database queries, query the real database. If you're testing API calls, call the real API.
 
+### Alternative Testing Tools
+
+| Tool | Use Case | When to Consider |
+|------|----------|------------------|
+| **Playwright** | E2E browser testing | Full user flow testing, cross-browser testing |
+| **MCP Browser Tools** | Ad-hoc testing via Chrome extension | Faster for quick verification, interactive debugging |
+
+**MCP Tools for Testing:** The system has access to MCP browser automation tools (Chrome extension). If these are faster or more advantageous for a specific test scenario, use them instead of or alongside traditional test frameworks.
+
 ## Test Infrastructure
 
 ### Backend (pytest)

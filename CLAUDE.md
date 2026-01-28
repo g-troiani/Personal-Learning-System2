@@ -299,10 +299,14 @@ If a real endpoint exists, use it. If a real database exists, query it. If a rea
 |------|----------|-------------|
 | pytest | `learn_system/tests/` | `cd learn_system && pytest -v` |
 | Vitest | `web/src/**/*.test.js` | `cd web && npm run test:run` |
+| Playwright | E2E tests | `npx playwright test` (if installed) |
 
 **What to test with Logic Tests:**
 - Backend: API endpoints, SM-2 algorithm, JWT validation, data transformations
 - Frontend: Hook logic, utility functions, state management, form validation
+
+**Alternative: MCP Tools for Testing**
+The system has access to MCP browser automation tools (Chrome extension). If these are faster or more advantageous for a specific test scenario, use them instead of or alongside traditional test frameworks.
 
 **Run before every commit:**
 ```bash
