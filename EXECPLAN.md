@@ -23,6 +23,7 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Auth/RLS/Admin (M41-M47) → `.claude/memory/milestones/auth_multiuser.md`
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
+   - Testing work → `.claude/memory/quality/testing.md`
 
 3. **Why this matters:** This EXECPLAN is intentionally slim (~500 lines). Full implementation details, decisions, and patterns are archived in `.claude/memory/`. Reading the archives prevents repeating mistakes and ensures consistency with past decisions.
 
@@ -571,6 +572,18 @@ The agent that writes tests MUST be different from the agent that implements the
 1. Spawn **Test Agent** first to write failing tests based on requirements
 2. Spawn **Implementation Agent** to write code that passes the tests
 3. Test Agent reviews coverage and adds edge cases
+
+**Real Data Policy (MANDATORY):**
+NEVER use mock data when real endpoints are available. Tests should hit real Supabase and real API endpoints.
+- ✅ Use real Supabase (test database, test user, test data)
+- ✅ Use real FastAPI endpoints via TestClient or httpx
+- ❌ Do NOT mock Supabase client when real Supabase is available
+- ❌ Do NOT mock API responses when you can call real endpoints
+
+**Only mock when absolutely necessary:**
+- External paid APIs (Claude, Groq) to avoid CI costs
+- Time-sensitive operations (use fixed timestamps)
+- Network failure scenarios (error handling tests)
 
 **Two Test Types:**
 

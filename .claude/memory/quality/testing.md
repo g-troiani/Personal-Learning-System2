@@ -24,6 +24,23 @@ This prevents bias where the implementer writes tests that only cover their own 
 3. **Test Agent** reviews coverage and adds edge cases
 4. Both agents are spawned from the same milestone but with different prompts
 
+### Real Data Policy (MANDATORY)
+
+**NEVER use mock data when real endpoints are available.** Tests should hit real Supabase and real API endpoints.
+
+| Approach | Use | Avoid |
+|----------|-----|-------|
+| Supabase | Real test database with test user/data | Mocked Supabase client |
+| FastAPI | Real endpoints via TestClient/httpx | Mocked API responses |
+| localStorage | Real jsdom localStorage | Unless testing specific scenarios |
+
+**Only mock when absolutely necessary:**
+- External paid APIs (Claude, Groq) to avoid CI costs
+- Time-sensitive operations (use fixed timestamps)
+- Network failure scenarios (error handling tests)
+
+**Rationale:** Mocks can hide real integration issues. If Supabase has an API endpoint, test against it. If FastAPI has an endpoint, call it. Real tests catch real bugs.
+
 ## Test Infrastructure
 
 ### Backend (pytest)
