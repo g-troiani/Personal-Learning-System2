@@ -283,18 +283,15 @@ These principles guide all implementation decisions:
 
 ### Real Data Policy (MANDATORY)
 
-**NEVER use mock data when real endpoints are available.** Tests should hit real Supabase, real API endpoints, and real services.
+**NEVER use mock data when real services are available.** This applies to EVERYTHING - databases, APIs, storage, auth, any service.
 
-- ✅ Use real Supabase test database (create test user, test data)
-- ✅ Use real FastAPI endpoints via TestClient or httpx
-- ✅ Use real localStorage in jsdom environment
-- ❌ Do NOT mock Supabase client when you can use real Supabase
-- ❌ Do NOT mock API responses when you can call real endpoints
+If a real endpoint exists, use it. If a real database exists, query it. If a real service exists, call it.
 
 **Only mock when absolutely necessary:**
 - External paid APIs (Claude, Groq) to avoid costs during CI
 - Time-sensitive operations (use fixed timestamps)
-- Network failures (to test error handling)
+- Network failure scenarios (to test error handling)
+- Third-party services with no test environment
 
 ### Logic Tests (Automated)
 
@@ -364,7 +361,7 @@ Use Chrome extension for visual verification and user flow testing.
 - Store secrets in code or CLAUDE.md/EXECPLAN.md
 - Skip tests when implementing new features
 - Mark milestones complete without passing tests
-- Use mock data when real Supabase/API endpoints are available
+- Use mock data when real services are available (databases, APIs, storage, auth, etc.)
 - Commit API keys to git (use .env files, test with real but gitignored credentials)
 
 ## Success Metrics

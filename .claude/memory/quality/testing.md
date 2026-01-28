@@ -26,20 +26,17 @@ This prevents bias where the implementer writes tests that only cover their own 
 
 ### Real Data Policy (MANDATORY)
 
-**NEVER use mock data when real endpoints are available.** Tests should hit real Supabase and real API endpoints.
+**NEVER use mock data when real services are available.** This applies to EVERYTHING - databases, APIs, storage, auth, any service.
 
-| Approach | Use | Avoid |
-|----------|-----|-------|
-| Supabase | Real test database with test user/data | Mocked Supabase client |
-| FastAPI | Real endpoints via TestClient/httpx | Mocked API responses |
-| localStorage | Real jsdom localStorage | Unless testing specific scenarios |
+If a real endpoint exists, use it. If a real database exists, query it. If a real service exists, call it.
 
 **Only mock when absolutely necessary:**
 - External paid APIs (Claude, Groq) to avoid CI costs
 - Time-sensitive operations (use fixed timestamps)
 - Network failure scenarios (error handling tests)
+- Third-party services with no test environment
 
-**Rationale:** Mocks can hide real integration issues. If Supabase has an API endpoint, test against it. If FastAPI has an endpoint, call it. Real tests catch real bugs.
+**Rationale:** Mocks hide real integration issues. Real tests catch real bugs. If you're testing database queries, query the real database. If you're testing API calls, call the real API.
 
 ## Test Infrastructure
 

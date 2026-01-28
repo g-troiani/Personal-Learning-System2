@@ -574,16 +574,13 @@ The agent that writes tests MUST be different from the agent that implements the
 3. Test Agent reviews coverage and adds edge cases
 
 **Real Data Policy (MANDATORY):**
-NEVER use mock data when real endpoints are available. Tests should hit real Supabase and real API endpoints.
-- ✅ Use real Supabase (test database, test user, test data)
-- ✅ Use real FastAPI endpoints via TestClient or httpx
-- ❌ Do NOT mock Supabase client when real Supabase is available
-- ❌ Do NOT mock API responses when you can call real endpoints
+NEVER use mock data when real services are available. This applies to EVERYTHING - databases, APIs, storage, auth, any service. If a real endpoint/service exists, use it.
 
 **Only mock when absolutely necessary:**
 - External paid APIs (Claude, Groq) to avoid CI costs
 - Time-sensitive operations (use fixed timestamps)
 - Network failure scenarios (error handling tests)
+- Third-party services with no test environment
 
 **Two Test Types:**
 
