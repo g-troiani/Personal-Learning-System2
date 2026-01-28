@@ -4,9 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the **Personal Adaptive Learning System**—a localhost CLI tool that automates the logistics of learning using cognitive science principles (spaced repetition, retrieval practice, interleaving).
+This is the **Personal Adaptive Learning System**—a deployed web application (with optional CLI) that automates the logistics of learning using cognitive science principles (spaced repetition, retrieval practice, interleaving).
 
-**Current Status:** Fully implemented through M23 (CLI + Web UI + FastAPI backend). M24-M29 implemented the tiered memory system to manage EXECPLAN complexity.
+**Production URLs:**
+- Frontend: https://personalized-learning-system.netlify.app/
+- Backend: AWS EC2 with Docker (http://3.215.170.154/api)
+
+**Current Status:** Fully implemented through M51 + I1-I4 (infrastructure deployment). All milestones complete. The system supports document upload (PDF, DOCX, PPTX, Markdown), AI-powered knowledge extraction, spaced repetition practice, multi-user auth with RLS, and session continuity.
 
 ## ExecPlans
 
@@ -60,6 +64,9 @@ Stored in `.claude/memory/`:
 | `milestones/webui_core.md` | M9-M15 details | Modifying UI |
 | `milestones/sources_feature.md` | M16-M20 details | Upload issues |
 | `milestones/speed_optimization.md` | M21-M23 details | Performance |
+| `milestones/document_reader.md` | M30-M40 details | Document viewing |
+| `milestones/auth_multiuser.md` | M41-M47 details | Auth/RLS issues |
+| `milestones/infrastructure_deployment.md` | I1-I4 details | Deployment issues |
 | `decisions/architecture.md` | Structural choices | Proposing changes |
 | `decisions/technology.md` | Stack choices | Evaluating alternatives |
 | `decisions/patterns.md` | Implementation patterns | Adding features |
@@ -84,6 +91,9 @@ Before implementing a new milestone, PROACTIVELY read relevant memory:
    - Web UI work → `milestones/webui_core.md`
    - Upload/processing → `milestones/sources_feature.md`
    - Performance → `milestones/speed_optimization.md`
+   - Document reader → `milestones/document_reader.md`
+   - Auth/RLS/Admin → `milestones/auth_multiuser.md`
+   - Infrastructure/Deployment → `milestones/infrastructure_deployment.md`
    - Database changes → `schemas/database.md`
    - API changes → `schemas/api.md`
    - New features → `reference/research.md` (learning science basis)
@@ -128,9 +138,10 @@ After completing work:
 
 | Layer | Technology | Notes |
 |-------|------------|-------|
-| Language | Python | 3.11+ |
-| Database | Supabase | PostgreSQL, cloud-hosted |
-| Interface | CLI + Web UI | Command-line and React SPA |
+| Frontend | React 18 + Vite 5 | Tailwind CSS, React Router 6, Recharts |
+| Backend | Python 3.11+ FastAPI | Docker, LibreOffice for PPTX conversion |
+| Database | Supabase | PostgreSQL, Auth, Storage, RLS |
+| Hosting | Netlify + AWS EC2 | Frontend CDN, Backend Docker container |
 | LLM | Claude API + Groq | KC extraction (Claude), practice items (Groq) |
 | Document Processing | LibreOffice | PDF, DOCX, PPTX, Markdown |
 
@@ -187,19 +198,36 @@ Never modify production infrastructure without:
 ## Development Commands
 
 ```bash
-# TBD - Commands will be defined as implementation begins
-python -m learn todo      # Show what's due for practice
-python -m learn ingest    # Process a new document
-python -m learn practice  # Start a practice session
-python -m learn stats     # View learning analytics
+# Web UI (primary interface)
+cd web/
+npm install              # Install dependencies
+npm run dev              # Development server at http://localhost:5173
+npm run build            # Production build
+npm run lint             # Lint code
+
+# Backend API
+cd learn_system/
+pip install -r requirements.txt
+uvicorn app.api.server:app --port 8001 --reload  # API at http://localhost:8001
+
+# CLI (optional, all commands functional)
+python -m app.main init                    # Initialize database and bundles
+python -m app.main ingest <file> --domain  # Process document, extract KCs
+python -m app.main status                  # Show system statistics
+python -m app.main sources                 # List ingested documents
+python -m app.main todo                    # Show what's due for review
+python -m app.main study --duration 30     # Start study session
+python -m app.main review <pattern>        # Focus session on specific source
 ```
 
 ## Key Architectural Decisions
 
-- **Single user** (no auth, no multi-tenancy)
-- **CLI + Web UI** (both interfaces share same Supabase backend)
-- **Supabase database** (cloud PostgreSQL)
+- **Multi-user with RLS** (Supabase Auth, email/password, Row-Level Security)
+- **Approved users whitelist** (upload requires approval, admins manage via /admin)
+- **Web UI primary, CLI secondary** (both share same Supabase backend)
+- **Supabase database** (cloud PostgreSQL with 46+ RLS policies)
 - **LLM for ingestion only** (not during practice sessions)
+- **EC2 over Lambda** (LLM timeouts exceed API Gateway 29s limit)
 
 ## Design Philosophy
 
@@ -224,18 +252,22 @@ These principles guide all implementation decisions:
 
 ## Core Capabilities
 
-1. **Automatic Content Processing** — Extract knowledge components from documents, classify by type, generate practice items
-2. **Intelligent Scheduling** — Spaced repetition, overdue tracking, struggle detection
-3. **Measurement & Tracking** — Correctness, confidence, timing, attempts, hints used
-4. **Self-Experimentation** — A/B testing of learning techniques with controlled variables
-5. **Source-Specific Review** — Per-document tracking and topic-focused sessions
+1. **Automatic Content Processing** — Extract knowledge components from documents (PDF, DOCX, PPTX, Markdown), classify by type, generate practice items grounded in source material
+2. **Document Reader** — Read uploaded documents with TOC navigation, highlights, notes, and AI chat before practicing
+3. **Intelligent Scheduling** — Spaced repetition (SM-2), overdue tracking, struggle detection
+4. **Mode-Specific Practice** — Recognition (multiple choice), cued recall (hints), execution (checklists), explanation/application (rubrics)
+5. **Session Continuity** — Resume practice sessions after page reload, browser restart, or WiFi change
+6. **Measurement & Tracking** — Correctness, confidence, timing, attempts, hints used
+7. **Multi-User with Approval** — Email/password auth, RLS isolation, admin-controlled upload whitelist
 
 ## Testing Instructions
 
-- Run linting before commits
-- Test with sample documents of each type (PDF, DOCX, Markdown)
-- Verify database migrations work on existing data
-- Test spaced repetition algorithm with simulated time progression
+- Run `npm run lint` in `web/` before commits
+- Run `npm run build` in `web/` to verify production build
+- Test document uploads for each type (PDF, DOCX, PPTX, Markdown)
+- Test auth flows: login, signup, logout, approved user upload restrictions
+- Test session recovery: reload mid-practice, verify resume dialog appears
+- Verify RLS: users should only see their own data
 
 ## Git Workflow
 
@@ -249,11 +281,14 @@ These principles guide all implementation decisions:
 - Follow the design philosophy above
 - Track all variables defined in the variable taxonomy
 - Handle document processing errors gracefully
-- Make CLI output clear and actionable
+- Maintain RLS policies when adding database features
+- Test auth flows (login, approved user checks)
 
 **Do Not:**
 - Call LLM during practice sessions (only during ingestion)
 - Add gamification elements (badges, streaks, points)
+- Bypass RLS with service role key in frontend
+- Store secrets in code or CLAUDE.md/EXECPLAN.md
 
 ## Success Metrics
 
@@ -262,4 +297,4 @@ The system succeeds if:
 2. Time-to-mastery improves vs. unstructured learning
 3. Retention at 7 and 30 days is measurably better
 4. Self-experimentation yields actionable insights
-5. `learn todo` replaces manual study planning
+5. The Home dashboard replaces manual study planning
