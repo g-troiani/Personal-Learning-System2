@@ -57,7 +57,7 @@ Users upload educational documents and receive automatically generated practice 
 
 ## Progress
 
-**All milestones complete (M1-M51, I1-I4).** For detailed implementation notes, see `.claude/memory/milestones/`.
+**M1-M51, I1-I4 complete. T1-T4 (TDD) in progress.** For detailed notes, see `.claude/memory/milestones/`.
 
 | Phase | Milestones | Date | Archive |
 |-------|------------|------|---------|
@@ -77,6 +77,228 @@ Users upload educational documents and receive automatically generated practice 
 | Practice Mode UI | M50 | 2026-01-19 | `webui_core.md` |
 | Session Continuity | M51 | 2026-01-19 | `webui_core.md` |
 | Infrastructure | I1-I4 | 2026-01-23 | `infrastructure_deployment.md` |
+| **TDD Foundation** | **T1-T6** | **In Progress** | `quality/testing.md` |
+
+### Active Milestones: Test-Driven Development (T1-T6)
+
+Enforce TDD as mandatory practice with two test categories: **Logic Tests** (automated via pytest/Vitest) and **UI Tests** (browser automation via Chrome extension).
+
+**Why TDD matters:** The system currently has 0 automated tests across 98 frontend and 44 backend files. Without tests: bugs reach production, refactoring is risky, and regressions are undetected. TDD ensures design clarity, documents behavior, and enables confident changes.
+
+**Two Test Categories:**
+
+| Category | Tool | Tests What | When to Use |
+|----------|------|------------|-------------|
+| **Logic Tests** | pytest (backend), Vitest (frontend) | Business logic, pure functions, hooks, API endpoints, data transformations | Every milestone with code changes |
+| **UI Tests** | Chrome extension (browser automation) | Visual rendering, user flows, component interactions, responsive design | UI changes, new features, visual regressions |
+
+**UI Testing Permission:** The system has standing permission to use Chrome browser automation for UI testing. No additional approval needed.
+
+- [ ] **T1: Backend Logic Test Infrastructure** — Install pytest, create config, write first test
+- [ ] **T2: Frontend Logic Test Infrastructure** — Install Vitest, create config, write first test
+- [ ] **T3: UI Test Protocol** — Define Chrome extension testing workflow and checklist
+- [ ] **T4: Documentation Updates** — Update CLAUDE.md and EXECPLAN.md with TDD requirements
+- [ ] **T5: Memory System Integration** — Create quality/ category, archive test patterns
+- [ ] **T6: Validation** — Run full test suite (logic + UI) to verify infrastructure
+
+---
+
+#### T1: Backend Logic Test Infrastructure
+
+At the end of this milestone, `pytest` runs successfully with at least one passing test. The backend has test configuration, fixtures for auth and database mocking, and validated tests for health check and core logic.
+
+**What to test with Logic Tests (pytest):**
+- API endpoint responses (status codes, JSON structure)
+- Business logic (SM-2 spacing algorithm, KC extraction parsing, item generation)
+- Authentication (JWT encoding/decoding, token validation)
+- Database queries (with mocked Supabase client)
+- Data transformations (document processing pipelines)
+
+**Work:**
+
+1. Add test dependencies to `learn_system/requirements.txt`:
+
+        # Testing
+        pytest>=7.4.0
+        pytest-asyncio>=0.23.0
+        pytest-cov>=4.1.0
+        pytest-mock>=3.12.0
+        httpx>=0.25.0
+        responses>=0.24.0
+
+2. Create `learn_system/pytest.ini`:
+
+        [pytest]
+        python_files = test_*.py
+        python_classes = Test*
+        python_functions = test_*
+        addopts = -v --strict-markers --tb=short --cov=app --cov-report=term-missing
+        markers =
+            unit: Pure function tests (no external deps)
+            integration: API + database tests
+            auth: Authentication tests
+        asyncio_mode = auto
+        testpaths = tests
+
+3. Create `learn_system/tests/conftest.py` with fixtures for TestClient, auth headers, and mock Supabase.
+
+4. Create `learn_system/tests/unit/test_health.py` and `learn_system/tests/unit/test_spacing.py`.
+
+**Validation:**
+
+    cd learn_system/
+    pip install -r requirements.txt
+    pytest -v
+
+    Expected: 2+ passed
+
+---
+
+#### T2: Frontend Logic Test Infrastructure
+
+At the end of this milestone, `npm run test` runs successfully with passing tests. The frontend has Vitest configuration for testing hooks, utilities, and component logic (not visual rendering).
+
+**What to test with Logic Tests (Vitest):**
+- Custom hooks (useSessionPersistence, useSources, useAuth state logic)
+- Utility functions (date formatting, data transformations)
+- Service layer (API client, error handling)
+- Component logic (form validation, state management)
+- Context providers (data flow, state updates)
+
+**NOT for Vitest (use UI Tests instead):**
+- Visual rendering ("does the button look right?")
+- Layout and styling
+- User interaction flows across pages
+- Responsive design
+
+**Work:**
+
+1. Install test dependencies:
+
+        cd web/
+        npm install -D vitest @vitest/ui @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom @vitest/coverage-v8
+
+2. Create `web/vitest.config.js` with jsdom environment and coverage settings.
+
+3. Update `web/package.json` scripts:
+
+        "test": "vitest",
+        "test:run": "vitest run",
+        "test:coverage": "vitest run --coverage"
+
+4. Create `web/src/__tests__/setup.js` with cleanup and mocks.
+
+5. Create `web/src/hooks/useSessionPersistence.test.js` testing hook logic.
+
+**Validation:**
+
+    cd web/
+    npm run test:run
+
+    Expected: 1+ passed
+
+---
+
+#### T3: UI Test Protocol (Chrome Extension)
+
+At the end of this milestone, a documented protocol exists for UI testing using the Chrome extension. The protocol defines when to use UI tests, how to run them, and what to verify.
+
+**What to test with UI Tests (Chrome extension):**
+- Visual rendering: Does the page look correct? Are elements visible?
+- User flows: Can a user complete login → upload → study workflow?
+- Component interactions: Do buttons click? Do forms submit? Do modals open/close?
+- Responsive design: Does the UI work at 375px, 768px, 1024px, 1440px?
+- Error states: Are error messages displayed correctly?
+- Loading states: Do spinners/skeletons appear during async operations?
+
+**UI Test Protocol:**
+
+1. **Before UI changes:** Take screenshot of current state
+2. **After UI changes:** Take screenshot, visually compare
+3. **For new features:** Test complete user flow end-to-end
+4. **For bug fixes:** Verify the fix visually, test related flows
+
+**Chrome Extension Tools:**
+
+| Tool | Use For |
+|------|---------|
+| `mcp__claude-in-chrome__computer` (screenshot) | Capture visual state |
+| `mcp__claude-in-chrome__computer` (left_click) | Click buttons, links |
+| `mcp__claude-in-chrome__form_input` | Fill form fields |
+| `mcp__claude-in-chrome__navigate` | Go to URLs |
+| `mcp__claude-in-chrome__read_page` | Verify element presence |
+| `mcp__claude-in-chrome__find` | Locate elements by description |
+
+**UI Test Checklist (run after UI changes):**
+
+    1. Start dev server: cd web/ && npm run dev
+    2. Navigate to http://localhost:5173
+    3. Take screenshot of affected pages
+    4. Test user interactions (click, type, submit)
+    5. Verify visual correctness
+    6. Test at mobile viewport (375px width)
+    7. Document any visual issues found
+
+**Validation:** Protocol documented. At least one UI test flow completed successfully using Chrome extension.
+
+---
+
+#### T4: Documentation Updates
+
+At the end of this milestone, CLAUDE.md and EXECPLAN.md contain TDD requirements for both logic tests and UI tests.
+
+**Work:**
+
+1. Update CLAUDE.md "Testing Instructions" section with:
+   - Logic test requirements (pytest, Vitest)
+   - UI test requirements (Chrome extension)
+   - When to use each type
+
+2. Update CLAUDE.md "Development Commands" with test commands.
+
+3. Update CLAUDE.md "Coding Constraints" with Do/Do Not for tests.
+
+4. TDD Operational Policy already added to EXECPLAN.md (see Operational Policies section).
+
+**Validation:** CLAUDE.md contains both "Logic Tests" and "UI Tests" sections.
+
+---
+
+#### T5: Memory System Integration
+
+At the end of this milestone, test documentation is archived to `.claude/memory/quality/` and INDEX.md is updated.
+
+**Work:**
+
+1. Create `.claude/memory/quality/testing.md` with:
+   - Logic test coverage tracking
+   - UI test checklist templates
+   - Test patterns and fixtures
+
+2. Update `.claude/memory/INDEX.md` with quality/ category.
+
+3. Archive T1-T6 implementation details to `quality/testing.md`.
+
+**Validation:** `.claude/memory/quality/testing.md` exists with both logic and UI test sections.
+
+---
+
+#### T6: Validation
+
+At the end of this milestone, both logic tests and UI tests run successfully, proving the infrastructure works.
+
+**Work:**
+
+1. Run backend logic tests: `cd learn_system/ && pytest -v`
+2. Run frontend logic tests: `cd web/ && npm run test:run`
+3. Run UI test: Navigate to app, take screenshot, verify login flow works
+4. Document test results in quality/testing.md
+
+**Validation:**
+
+    Backend: pytest passes (2+ tests)
+    Frontend: npm run test:run passes (1+ tests)
+    UI: Screenshot captured, login flow verified visually
 
 
 ## Surprises and Discoveries
@@ -192,6 +414,8 @@ Key lessons learned during implementation:
 | Nginx 300s timeout | LLM requests need 30-60s+, SSE buffering | `infrastructure_deployment.md` |
 | Supabase + RLS | Auth, PostgreSQL, row-level security | `architecture.md` |
 | Claude + Groq | KC extraction (Claude), practice items (Groq) | `technology.md` |
+| **Vitest over Jest** | Native Vite integration, 5-10x faster, zero config | `quality/testing.md` |
+| **TDD mandatory** | 0% coverage = high regression risk, TDD ensures design clarity | `quality/testing.md` |
 
 
 ## Outcomes and Retrospective
@@ -210,7 +434,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Milestone Quick Reference
 
-**All 55 milestones complete.** Production: https://personalized-learning-system.netlify.app/
+**55 milestones complete, T1-T4 in progress.** Production: https://personalized-learning-system.netlify.app/
 
 | Range | Feature | Key Components |
 |-------|---------|----------------|
@@ -230,6 +454,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 | M50 | Practice Mode UI | Recognition/CuedRecall/Execution/Explanation input components |
 | M51 | Session Continuity | sessions table columns, useSessionPersistence, recovery dialog |
 | I1-I4 | Infrastructure | EC2 + Docker + Nginx + Netlify deployment |
+| **T1-T6** | **TDD Foundation** | **pytest, Vitest, Chrome UI tests, coverage targets, TDD policy** |
 
 
 ## CLI Usage Reference
@@ -286,7 +511,7 @@ The app runs at http://localhost:5173
 
 ## Memory Index
 
-External memory in `.claude/memory/` (17 files):
+External memory in `.claude/memory/` (18+ files):
 
 | Category | Files |
 |----------|-------|
@@ -294,6 +519,7 @@ External memory in `.claude/memory/` (17 files):
 | `decisions/` | architecture.md, technology.md, patterns.md, memory_system.md |
 | `schemas/` | database.md, api.md, components.md |
 | `reference/` | research.md, context.md, retrospective.md |
+| `quality/` | testing.md (TBD - created in T4) |
 
 See `.claude/memory/INDEX.md` for full summaries and cross-references.
 
@@ -549,6 +775,87 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 **Verification:** CLAUDE.md contains Memory System section with both proactive and reactive protocols. New session starting a milestone reads relevant archives before implementation.
 
 
+### Test-Driven Development (OPERATIONAL POLICY - DO NOT DELETE)
+
+TDD is mandatory for all production code. This policy uses two test types: **Logic Tests** (automated) and **UI Tests** (browser automation). Write tests BEFORE implementing features.
+
+**Two Test Types:**
+
+| Type | Tool | Purpose | When Required |
+|------|------|---------|---------------|
+| **Logic Tests** | pytest, Vitest | Verify business logic, APIs, hooks, data transformations | Every code change |
+| **UI Tests** | Chrome extension | Verify visual rendering, user flows, interactions | Every UI change |
+
+**UI Testing Permission:** The system has standing permission to use Chrome browser automation for UI testing without additional approval.
+
+**Modified Cleanup Loop:**
+
+    Work → Logic Test → UI Test → Archive → Slim → Repeat
+                 ↑           ↑
+                 └───────────┴─ Both required before completion
+
+**When to use each test type:**
+
+| Change Type | Logic Tests | UI Tests |
+|-------------|-------------|----------|
+| Backend API endpoint | ✅ Required | ❌ Not needed |
+| Business logic (spacing, parsing) | ✅ Required | ❌ Not needed |
+| React hook logic | ✅ Required | ❌ Not needed |
+| New UI component | ✅ Required (logic) | ✅ Required (visual) |
+| Styling/layout change | ❌ Not needed | ✅ Required |
+| User flow change | ✅ Required (logic) | ✅ Required (flow) |
+| Bug fix (backend) | ✅ Required | ❌ Not needed |
+| Bug fix (UI) | ⚠️ If logic involved | ✅ Required |
+
+**Pre-Completion Verification:**
+
+Before marking ANY milestone complete:
+
+    # 1. Logic Tests
+    cd learn_system/ && pytest --cov=app -v    # Backend
+    cd web/ && npm run test:run                 # Frontend
+
+    # 2. UI Tests (if UI changed)
+    - Start dev server: cd web/ && npm run dev
+    - Use Chrome extension to navigate to affected pages
+    - Take screenshots, verify visual correctness
+    - Test user interactions (click, type, submit)
+    - Test at mobile viewport if responsive
+
+**Requirements:**
+1. Logic tests pass (no failures, no skips without rationale)
+2. Coverage meets targets: ≥70% frontend, ≥75% backend critical modules
+3. UI tests verify visual correctness (screenshots reviewed)
+4. User flows complete successfully in browser
+
+**Failure Handling:**
+
+If tests don't pass:
+- ✗ DO NOT mark milestone complete in Progress table
+- ✗ DO NOT run Archive step of Cleanup Loop
+- ✓ DO document issue in "Known Issues and Future Improvements"
+- ✓ DO keep milestone "in-progress" until tests pass
+
+**Memory Integration:**
+
+When archiving to `.claude/memory/milestones/[feature].md`, include "Testing Approach" section:
+
+    ## Testing Approach (MXX)
+
+    **Logic Tests:**
+    - Files: paths/to/test/files
+    - Coverage: XX%
+    - Key cases: list
+
+    **UI Tests:**
+    - Pages tested: /login, /upload, etc.
+    - Flows verified: login → upload → study
+    - Viewports: desktop, mobile
+    - Issues found: none / list
+
+**Verification:** Run `pytest`, `npm run test:run`, and Chrome UI verification before any milestone completion.
+
+
 ---
 
 ## Completed Milestones Summary
@@ -735,3 +1042,5 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 **Full changelog:** See `.claude/memory/reference/retrospective.md`
 
 Key milestones: M1-M51 (CLI, Web UI, Sources, Speed, Memory, Document Reader, Auth, Whitelist, Zoom, Grounding, Practice Mode UI, Session Continuity) + I1-I4 (Infrastructure Deployment). All complete as of 2026-01-23.
+
+**2026-01-28:** Added T1-T4 (TDD Foundation) milestones. Added TDD Operational Policy to enforce test-first development with coverage verification before milestone completion. Added quality/ category to memory system.
