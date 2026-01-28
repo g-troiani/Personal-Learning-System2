@@ -10,7 +10,7 @@ This is the **Personal Adaptive Learning System**—a deployed web application (
 - Frontend: https://personalized-learning-system.netlify.app/
 - Backend: AWS EC2 with Docker (http://3.215.170.154/api)
 
-**Current Status:** Fully implemented through M51 + I1-I4 (infrastructure deployment). All milestones complete. The system supports document upload (PDF, DOCX, PPTX, Markdown), AI-powered knowledge extraction, spaced repetition practice, multi-user auth with RLS, and session continuity.
+**Current Status:** The system supports document upload (PDF, DOCX, PPTX, Markdown), AI-powered knowledge extraction, spaced repetition practice, multi-user auth with RLS, and session continuity.
 
 ## ExecPlans
 
@@ -125,6 +125,8 @@ Also read external memory when:
 
 ### Memory Update Protocol
 
+   **This is mandatory for EVERY milestone.** 
+
 After completing work:
 1. Archive detailed notes to appropriate memory file
 2. Update EXECPLAN.md Progress (keep concise - link to archive)
@@ -204,11 +206,17 @@ npm install              # Install dependencies
 npm run dev              # Development server at http://localhost:5173
 npm run build            # Production build
 npm run lint             # Lint code
+npm run test             # Run tests in watch mode
+npm run test:run         # Run tests once
+npm run test:coverage    # Run tests with coverage
 
 # Backend API
 cd learn_system/
 pip install -r requirements.txt
 uvicorn app.api.server:app --port 8001 --reload  # API at http://localhost:8001
+pytest -v                # Run all tests
+pytest --cov=app -v      # Run tests with coverage
+pytest tests/unit/       # Run only unit tests
 
 # CLI (optional, all commands functional)
 python -m app.main init                    # Initialize database and bundles
@@ -262,12 +270,56 @@ These principles guide all implementation decisions:
 
 ## Testing Instructions
 
-- Run `npm run lint` in `web/` before commits
-- Run `npm run build` in `web/` to verify production build
-- Test document uploads for each type (PDF, DOCX, PPTX, Markdown)
-- Test auth flows: login, signup, logout, approved user upload restrictions
-- Test session recovery: reload mid-practice, verify resume dialog appears
-- Verify RLS: users should only see their own data
+**TDD is mandatory for EVERY milestone.** No milestone is complete without passing tests. Use two test types: **Logic Tests** (automated) and **UI Tests** (browser automation).
+
+### Agent Separation Policy (MANDATORY)
+
+**The agent that writes tests MUST be different from the agent that implements the solution.** This prevents bias. For every milestone:
+1. Spawn **Test Agent** first to write failing tests based on requirements
+2. Spawn **Implementation Agent** to write code that passes the tests
+3. Test Agent reviews coverage and adds edge cases
+
+### Logic Tests (Automated)
+
+| Tool | Location | Run Command |
+|------|----------|-------------|
+| pytest | `learn_system/tests/` | `cd learn_system && pytest -v` |
+| Vitest | `web/src/**/*.test.js` | `cd web && npm run test:run` |
+
+**What to test with Logic Tests:**
+- Backend: API endpoints, SM-2 algorithm, JWT validation, data transformations
+- Frontend: Hook logic, utility functions, state management, form validation
+
+**Run before every commit:**
+```bash
+cd learn_system && pytest -v              # Backend tests
+cd web && npm run test:run                 # Frontend tests
+```
+
+### UI Tests (Browser Automation)
+
+Use Chrome extension for visual verification and user flow testing.
+
+**What to test with UI Tests:**
+- Visual rendering: Does the page look correct?
+- User flows: login → upload → study workflow
+- Component interactions: buttons, forms, modals
+- Responsive design: 375px, 768px, 1024px, 1440px viewports
+
+**UI Test Protocol:**
+1. Start dev server: `cd web && npm run dev`
+2. Navigate to http://localhost:5173
+3. Take screenshots of affected pages
+4. Test user interactions (click, type, submit)
+5. Test at mobile viewport (375px width)
+
+### Pre-Commit Checklist
+
+- [ ] `npm run lint` passes in `web/`
+- [ ] `npm run build` succeeds in `web/`
+- [ ] `pytest -v` passes in `learn_system/`
+- [ ] `npm run test:run` passes in `web/`
+- [ ] UI visually verified for any UI changes
 
 ## Git Workflow
 
@@ -283,12 +335,19 @@ These principles guide all implementation decisions:
 - Handle document processing errors gracefully
 - Maintain RLS policies when adding database features
 - Test auth flows (login, approved user checks)
+- Write tests BEFORE implementing new features (TDD)
+- Run `pytest` and `npm run test:run` before committing
+- Add test coverage for new backend endpoints and frontend hooks
+- Use UI tests for visual changes and user flow verification
 
 **Do Not:**
 - Call LLM during practice sessions (only during ingestion)
 - Add gamification elements (badges, streaks, points)
 - Bypass RLS with service role key in frontend
 - Store secrets in code or CLAUDE.md/EXECPLAN.md
+- Skip tests when implementing new features
+- Mark milestones complete without passing tests
+- Use real API keys or database connections in tests
 
 ## Success Metrics
 

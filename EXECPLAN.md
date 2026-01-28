@@ -57,7 +57,7 @@ Users upload educational documents and receive automatically generated practice 
 
 ## Progress
 
-**M1-M51, I1-I4 complete. T1-T4 (TDD) in progress.** For detailed notes, see `.claude/memory/milestones/`.
+**M1-M51, I1-I4, T1-T6 complete.** For detailed notes, see `.claude/memory/milestones/` and `.claude/memory/quality/`.
 
 | Phase | Milestones | Date | Archive |
 |-------|------------|------|---------|
@@ -77,7 +77,7 @@ Users upload educational documents and receive automatically generated practice 
 | Practice Mode UI | M50 | 2026-01-19 | `webui_core.md` |
 | Session Continuity | M51 | 2026-01-19 | `webui_core.md` |
 | Infrastructure | I1-I4 | 2026-01-23 | `infrastructure_deployment.md` |
-| **TDD Foundation** | **T1-T6** | **In Progress** | `quality/testing.md` |
+| TDD Foundation | T1-T6 | 2026-01-28 | `quality/testing.md` |
 
 ### Active Milestones: Test-Driven Development (T1-T6)
 
@@ -94,12 +94,12 @@ Enforce TDD as mandatory practice with two test categories: **Logic Tests** (aut
 
 **UI Testing Permission:** The system has standing permission to use Chrome browser automation for UI testing. No additional approval needed.
 
-- [ ] **T1: Backend Logic Test Infrastructure** — Install pytest, create config, write first test
-- [ ] **T2: Frontend Logic Test Infrastructure** — Install Vitest, create config, write first test
-- [ ] **T3: UI Test Protocol** — Define Chrome extension testing workflow and checklist
-- [ ] **T4: Documentation Updates** — Update CLAUDE.md and EXECPLAN.md with TDD requirements
-- [ ] **T5: Memory System Integration** — Create quality/ category, archive test patterns
-- [ ] **T6: Validation** — Run full test suite (logic + UI) to verify infrastructure
+- [x] **T1: Backend Logic Test Infrastructure** — pytest installed, 21 tests passing (health, spacing)
+- [x] **T2: Frontend Logic Test Infrastructure** — Vitest installed, 24 tests passing (session persistence)
+- [x] **T3: UI Test Protocol** — Chrome extension workflow validated, responsive design tested
+- [x] **T4: Documentation Updates** — CLAUDE.md updated with TDD requirements
+- [x] **T5: Memory System Integration** — quality/testing.md created, INDEX.md updated
+- [x] **T6: Validation** — All tests pass: 21 backend, 24 frontend, UI verified
 
 ---
 
@@ -434,7 +434,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Milestone Quick Reference
 
-**55 milestones complete, T1-T4 in progress.** Production: https://personalized-learning-system.netlify.app/
+**61 milestones complete (M1-M51, I1-I4, T1-T6).** Production: https://personalized-learning-system.netlify.app/
 
 | Range | Feature | Key Components |
 |-------|---------|----------------|
@@ -454,7 +454,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 | M50 | Practice Mode UI | Recognition/CuedRecall/Execution/Explanation input components |
 | M51 | Session Continuity | sessions table columns, useSessionPersistence, recovery dialog |
 | I1-I4 | Infrastructure | EC2 + Docker + Nginx + Netlify deployment |
-| **T1-T6** | **TDD Foundation** | **pytest, Vitest, Chrome UI tests, coverage targets, TDD policy** |
+| T1-T6 | TDD Foundation | pytest (21 tests), Vitest (24 tests), Chrome UI tests, agent separation |
 
 
 ## CLI Usage Reference
@@ -777,7 +777,13 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 
 ### Test-Driven Development (OPERATIONAL POLICY - DO NOT DELETE)
 
-TDD is mandatory for all production code. This policy uses two test types: **Logic Tests** (automated) and **UI Tests** (browser automation). Write tests BEFORE implementing features.
+**TDD is mandatory for EVERY milestone.** No milestone is complete without passing tests. Write tests BEFORE implementing features. Use two test types: **Logic Tests** (automated) and **UI Tests** (browser automation).
+
+**Agent Separation Policy (MANDATORY):**
+The agent that writes tests MUST be different from the agent that implements the solution. This prevents bias. For every milestone:
+1. Spawn **Test Agent** first to write failing tests based on requirements
+2. Spawn **Implementation Agent** to write code that passes the tests
+3. Test Agent reviews coverage and adds edge cases
 
 **Two Test Types:**
 

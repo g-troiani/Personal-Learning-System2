@@ -1,7 +1,7 @@
 # Memory System Index
 
-**Last Updated:** 2026-01-23
-**Total Files:** 18
+**Last Updated:** 2026-01-28
+**Total Files:** 19
 
 ## Quick Navigation
 
@@ -11,6 +11,7 @@
 | Decisions | 4 | Architecture, technology, patterns, memory system |
 | Schemas | 3 | Database, API, React components |
 | Reference | 3 | Research, context, retrospectives |
+| Quality | 1 | Testing infrastructure, TDD protocol, coverage |
 
 ## File Summaries
 
@@ -51,6 +52,12 @@
 | `research.md` | Learning science sources (Make It Stick, A Mind for Numbers, Ultralearning), core findings, feature mapping |
 | `context.md` | Complete glossary, project structure, requirements, memory system overview |
 | `retrospective.md` | Major milestone retrospectives, what worked, gaps, lessons learned |
+
+### quality/
+
+| File | Topics |
+|------|--------|
+| `testing.md` | T1-T6 TDD Foundation, pytest/Vitest setup, UI test protocol, fixtures, coverage, agent separation policy |
 
 ### Project Root Analysis Documents
 
