@@ -1,10 +1,14 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useSupabase } from '../contexts/SupabaseContext'
 import GreetingHeader from '../components/home/GreetingHeader'
 import OverdueAlert from '../components/home/OverdueAlert'
 import SearchBar from '../components/home/SearchBar'
 import QuickActions from '../components/home/QuickActions'
 import SourceCard from '../components/home/SourceCard'
+
+const LearningContributionGraph = lazy(() =>
+  import('../components/home/contribution-graph/LearningContributionGraph')
+)
 
 export default function Home() {
   const { sources, loading: contextLoading, fetchSources, getDueCounts, getMasteryBySource } = useSupabase()
@@ -75,6 +79,12 @@ export default function Home() {
       />
 
       <QuickActions />
+
+      <Suspense fallback={
+        <div className="bg-bg-card border border-bg-card-border rounded-card p-6 mb-6 h-40 animate-pulse" />
+      }>
+        <LearningContributionGraph className="mb-8" />
+      </Suspense>
 
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-text-primary mb-4">Your Sources</h2>
