@@ -1,7 +1,7 @@
 # Web UI Core Milestones Archive
 
-**Last Updated:** 2026-01-19
-**Summary:** Implementation details for M9-M15, M50 (React web interface, all core pages, practice mode UI differentiation)
+**Last Updated:** 2026-02-06
+**Summary:** Implementation details for M9-M15, M50, M51, M52-M55 (React web interface, all core pages, practice mode UI, session continuity, contribution graph)
 
 ## Quick Reference
 
@@ -164,6 +164,123 @@ web/src/components/study/
 - Recognition/CuedRecall/Execution: code verified, not in current study queue
 
 **This was a pure frontend enhancement - no backend or database changes.**
+
+### Milestone 51: Session Continuity (2026-01-19)
+
+Resume study sessions after page reload, browser restart, or WiFi change.
+
+**Problem:** Study sessions were lost on page reload—users had to restart from scratch.
+
+**Solution:** Hybrid localStorage + Supabase persistence with recovery dialog.
+
+**Database Changes:**
+- Added columns to `sessions` table: `practice_queue` (jsonb), `current_item_index` (int), `items_completed` (int), `answers` (jsonb)
+- Added RLS SELECT policy: `Users can select own sessions`
+
+**Files Created/Modified:**
+- `web/src/hooks/useSessionPersistence.js` — Debounced save to both localStorage and Supabase
+- `web/src/components/study/SessionRecoveryDialog.jsx` — Modal offering resume/discard
+- `web/src/pages/Study.jsx` — Recovery flow integration
+
+**Recovery Flow:**
+1. On mount, check localStorage for recent session (<24h)
+2. If found, show SessionRecoveryDialog
+3. User chooses Resume (restore state) or Start Fresh (discard)
+4. Session state persists every 2 seconds during practice
+
+**Key Implementation Details:**
+- Dual storage: localStorage (fast) + Supabase (durable across devices)
+- Session state includes: queue, currentIndex, itemsCompleted, answers array
+- Recovery dialog styled with amber border for visibility
+- "Resume" restores exact position in queue
+
+### Milestones 52-55: Learning Contribution Graph (2026-01-28)
+
+GitHub-style heatmap showing daily practice activity on Home page.
+
+**Location:** Between QuickActions and "Your Sources" grid on Home.jsx
+
+**Visual Design:**
+- 52-week grid (26 weeks on mobile), weeks as columns, days as rows (Monday-aligned)
+- Cell color hue = dominant source practiced that day
+- Cell intensity = volume (0→empty, 1-3→light, 4-7→medium, 8+→dark)
+- 10-hue palette: Violet(270), Teal(175), Rose(340), Indigo(235), Orange(25), Cyan(195), Magenta(310), Lime(90), Coral(10), Slate Blue(215)
+- Multi-source days: dominant source wins color, white 3px dot in corner
+
+**Database:**
+```sql
+CREATE INDEX IF NOT EXISTS idx_attempts_user_started_at
+ON attempts(user_id, started_at DESC);
+```
+
+**File Structure:**
+```
+web/src/
+├── lib/contributionGraph.js              # Pure utility functions (7 functions)
+├── hooks/useContributionData.js          # Standalone data hook (not in SupabaseContext)
+└── components/home/contribution-graph/
+    ├── LearningContributionGraph.jsx     # Container (lazy-loaded)
+    ├── GraphHeader.jsx                   # Title + 12w/26w/52w selector
+    ├── ContributionGrid.jsx              # Grid layout
+    ├── WeekColumn.jsx                    # 7 DayCells per week
+    ├── DayCell.jsx                       # 12×12px cell (React.memo)
+    ├── MonthLabels.jsx                   # Jan-Dec above grid
+    ├── DayLabels.jsx                     # Mon/Wed/Fri on left
+    ├── GraphLegend.jsx                   # Intensity scale + source chips
+    └── GraphTooltip.jsx                  # Hover details (position: fixed)
+```
+
+**M52 - Pure Utility Functions:**
+- `generateDateGrid(weeks)` — Builds weeks×7 array of date cells
+- `getIntensityLevel(count)` — 0→0, 1-3→1, 4-7→2, 8+→3
+- `getSourceHue(sourceId)` — djb2 hash × golden angle mod 360
+- `getSourceColor(hue, level)` — HSL string for cell color
+- `resolveCellColor(dayData, colorMap)` — Picks dominant source color
+- `aggregateAttempts(attempts, kcSourceMap)` — Groups by date+source
+- `computeSummary(dateMap)` — Stats: totalAttempts, activeDays, etc.
+- Tests: 42 Vitest tests in `web/src/lib/__tests__/contributionGraph.test.js`
+
+**M53 - Data Hook:**
+- `useContributionData({ weeks, sourceFilter })` — Standalone hook
+- Two parallel Supabase queries: attempts + knowledge_components→content_sources
+- 5-minute useRef cache
+- Returns: `{ gridData, sources, loading, error, totalAttempts, activeDays, refresh }`
+- Tests: 11 Vitest tests in `web/src/hooks/__tests__/useContributionData.test.js`
+
+**M54 - UI Components:**
+- Container wrapped in `bg-bg-card border border-bg-card-border rounded-card p-6`
+- Lazy-loaded with `React.lazy()` + Suspense fallback
+- Empty state: full empty grid + "No practice activity yet" overlay
+- Code-split chunk: 11.22 kB
+- Tests: 6 component tests
+
+**M55 - Responsive + Accessibility:**
+| Breakpoint | Cells | Gap | Day Labels |
+|------------|-------|-----|------------|
+| 1440/1024px | 12px | 3px | Visible |
+| 768px | 10px | 2px | Visible |
+| 375px | 10px | 2px | Hidden |
+
+Accessibility:
+- `role="grid"` with `aria-activedescendant`
+- Single tabIndex on grid (avoids 364 tab stops)
+- Arrow key navigation (up/down/left/right)
+- Enter/Space opens tooltip, Escape closes
+- `aria-label` on every cell with date + count
+
+**Design Decisions:**
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| HTML divs over SVG | divs | Codebase has zero SVG; full Tailwind support |
+| Standalone hook | useContributionData | Only used on Home; avoids context bloat |
+| Zero new packages | Custom grid/tooltip | Recharts lacks heatmap; stay minimal |
+| Hash-based colors | djb2 × golden angle | Deterministic, stable across deletions |
+| Absolute thresholds | 1/4/8 counts | Stable, intuitive, matches GitHub |
+| No gamification | "Practice Activity" title | Design philosophy: analytical not motivational |
+
+**No gamification:** No streaks, badges, flames, or motivational language. Graph is an analytical tool for self-observation.
+
+**Tests:** 83 total tests passing (42 utility + 11 hook + 6 component + existing), lint clean, build succeeds.
 
 ## Cross-References
 

@@ -58,7 +58,7 @@ Users upload educational documents and receive automatically generated practice 
 
 ## Progress
 
-**M1-M51, I1-I4, T1-T6 complete.** M52-M55 in progress. For detailed notes, see `.claude/memory/milestones/` and `.claude/memory/quality/`.
+**M1-M55, I1-I4, T1-T6 complete.** For detailed notes, see `.claude/memory/milestones/` and `.claude/memory/quality/`.
 
 | Phase | Milestones | Date | Archive |
 |-------|------------|------|---------|
@@ -79,7 +79,7 @@ Users upload educational documents and receive automatically generated practice 
 | Session Continuity | M51 | 2026-01-19 | `webui_core.md` |
 | Infrastructure | I1-I4 | 2026-01-23 | `infrastructure_deployment.md` |
 | TDD Foundation | T1-T6 | 2026-01-28 | `quality/testing.md` |
-| **Contribution Graph** | **M52-M55** | **2026-01-28** | **Complete** |
+| Contribution Graph | M52-M55 | 2026-01-28 | `webui_core.md` |
 
 ### T1-T6: TDD Foundation (Complete)
 
@@ -92,205 +92,9 @@ Test-Driven Development infrastructure with two test types: **Logic Tests** (pyt
 
 ### M52-M55: Learning Contribution Graph (Complete)
 
-A GitHub-style contribution heatmap on the Home page showing daily practice activity over 52 weeks. Each cell represents one day. Color hue indicates the dominant subject practiced; intensity indicates volume. Data comes from existing `attempts` → `knowledge_components` → `content_sources` tables. The feature is analytical (not gamified) — it helps users observe their consistency patterns over months.
+GitHub-style heatmap on Home page showing daily practice activity over 52 weeks. Color hue = dominant source; intensity = volume. Responsive (26 weeks mobile, 52 desktop), keyboard-navigable, screen-reader accessible. 83 tests total.
 
-**User-visible outcome:** After M55, the Home page displays a colored grid between QuickActions and "Your Sources." Each colored cell shows a day the user practiced. Hovering a cell reveals which subjects were practiced and how many questions were answered. The grid is responsive (26 weeks on mobile, 52 on desktop), accessible via keyboard, and does not slow down the existing page.
-
-**Design reference:** Full specification in `NEW FEATURES.md` (research-phase output, not an ExecPlan).
-
----
-
-#### M52: Database Index + Pure Utility Functions
-
-**Goal:** At the end of M52, all pure data-transformation functions exist and are tested. No UI yet. The database has the compound index needed for efficient queries.
-
-**SQL migration** (run before feature ships):
-
-    CREATE INDEX IF NOT EXISTS idx_attempts_user_started_at
-    ON attempts(user_id, started_at DESC);
-
-Run via Supabase SQL Editor or a migration file.
-
-**File to create:** `web/src/lib/contributionGraph.js`
-
-This file contains zero React code — only pure functions that transform raw attempt data into grid-ready structures.
-
-**Functions:**
-
-`generateDateGrid(weeks)` — Builds a `weeks × 7` array of date cells. Each cell: `{ date: 'YYYY-MM-DD', dayOfWeek: 0-6, isToday: bool, isFuture: bool }`. Weeks as columns (left = oldest), days as rows (top = Monday). Monday-aligned to match existing `WeeklyChart.jsx`.
-
-`getIntensityLevel(count)` — Maps attempt count to 0-3. Thresholds: 0→0, 1-3→1, 4-7→2, 8+→3. Absolute thresholds (stable, intuitive, matches GitHub).
-
-`getSourceHue(sourceId)` — Deterministic hue from source ID using djb2 hash × golden angle (137.5°) mod 360. Stable across source additions/deletions. Ten-hue palette: Violet(270), Teal(175), Rose(340), Indigo(235), Orange(25), Cyan(195), Magenta(310), Lime(90), Coral(10), Slate Blue(215). Avoids existing semantic colors (emerald, amber, red, blue).
-
-`getSourceColor(hue, level)` — Returns HSL string for a given hue and intensity level. Level 0 returns `#EBEDF0`. Levels 1-3 use S/L values: 55/82%, 65/62%, 75/42%.
-
-`resolveCellColor(dayData, sourceColorMap)` — Given a day's per-source attempt counts, returns `{ color, dominantSourceId, isMultiSource }`. Dominant source (most attempts) wins. Intensity based on total count.
-
-`aggregateAttempts(attempts, kcSourceMap)` — Groups raw attempts by local date (`toLocaleDateString('en-CA')`), then by source. Returns `Map<dateKey, { total, bySource: Map<sourceId, count> }>`.
-
-`computeSummary(dateMap)` — Returns `{ totalAttempts, activeDays, mostActiveDay, mostActiveCount }`.
-
-**Tests (Vitest):** `web/src/lib/__tests__/contributionGraph.test.js`
-
-- `generateDateGrid(52)` returns exactly 52 arrays of 7 cells each
-- `generateDateGrid` first cell is Monday, last cell is Sunday
-- `getIntensityLevel` boundary values: 0→0, 1→1, 3→1, 4→2, 7→2, 8→3, 100→3
-- `getSourceHue` returns same hue for same sourceId across calls
-- `getSourceHue` returns different hues for different sourceIds
-- `getSourceColor` level 0 returns `#EBEDF0`
-- `aggregateAttempts` empty array returns empty map
-- `aggregateAttempts` groups multiple attempts on same date correctly
-- `aggregateAttempts` handles null kc_id gracefully (buckets under "unknown")
-- `resolveCellColor` picks source with highest count as dominant
-- `resolveCellColor` sets isMultiSource=true when 2+ sources present
-- Date parsing: UTC timestamp near midnight converts to correct local date
-
-**Acceptance:** `cd web && npm run test:run` — all new tests pass. No UI changes visible yet.
-
----
-
-#### M53: Data Fetching Hook
-
-**Goal:** At the end of M53, a custom hook `useContributionData` fetches attempt data from Supabase, transforms it using M52 utilities, and returns grid-ready data with loading/error states.
-
-**File to create:** `web/src/hooks/useContributionData.js`
-
-The hook is standalone (not added to SupabaseContext). Rationale: contribution data is only used on the Home page; adding it to context would bloat context and trigger re-renders on other pages.
-
-**Hook signature:**
-
-    export function useContributionData({ weeks = 26, sourceFilter = null } = {})
-    // Returns: { gridData, sources, loading, error, totalAttempts, activeDays, refresh }
-
-**Data pipeline inside the hook:**
-
-1. Two parallel Supabase queries:
-   - `attempts`: `select('kc_id, started_at').gte('started_at', startDate).order('started_at', { ascending: true })`
-   - `knowledge_components`: `select('id, source_id, source:content_sources(id, title, domain)')`
-2. Build `kcSourceMap` from KC query: `Map<kcId, { sourceId, sourceTitle }>`
-3. Call `aggregateAttempts(attempts, kcSourceMap)` from M52 utilities
-4. Call `generateDateGrid(weeks)` and merge with aggregated data
-5. Call `resolveCellColor` per cell to assign colors
-6. 5-minute `useRef` cache — invalidated on remount only
-
-**RLS compatibility:** Both queries use the authenticated Supabase client. `attempts` has `auth.uid() = user_id` policy. `knowledge_components` has its own user-scoped RLS. No service role key needed.
-
-**Error handling:** Independent try/catch. If KC-to-source join fails, fall back to intensity-only mode (no per-source tooltip breakdown). Never breaks the Home page.
-
-**Tests (Vitest):** `web/src/hooks/__tests__/useContributionData.test.js`
-
-- Hook returns `loading: true` initially
-- Hook returns `gridData` array after fetch completes
-- Hook handles Supabase error gracefully (sets error state, gridData stays empty)
-- Hook respects `weeks` parameter (26 vs 52 changes date range)
-- Hook respects `sourceFilter` parameter (filters by source)
-- `refresh()` triggers re-fetch
-
-**Acceptance:** `cd web && npm run test:run` — all hook tests pass. No UI changes visible yet.
-
----
-
-#### M54: Core UI Components
-
-**Goal:** At the end of M54, the contribution graph renders on the Home page as a functional heatmap grid with colored cells and basic interactivity (hover tooltip).
-
-**Files to create in `web/src/components/home/contribution-graph/`:**
-
-`LearningContributionGraph.jsx` — Container component. Manages state: `weeks` (12/26/52), `sourceFilter`, `showLegend`, `tooltip`. Calls `useContributionData({ weeks, sourceFilter })`. Renders GraphHeader, ContributionGrid, GraphLegend, GraphTooltip. Wrapped in `bg-bg-card border border-bg-card-border rounded-card p-6`. Has its own loading spinner and error fallback — never breaks Home page.
-
-`GraphHeader.jsx` — Title ("Practice Activity"), total count display, time-range selector (12w/26w/52w as buttons or dropdown), legend toggle. No gamification language — no "streak," "score," or motivational text.
-
-`ContributionGrid.jsx` — Renders the grid layout: MonthLabels across top, DayLabels (Mon/Wed/Fri) on left, WeekColumn array as the grid body. Uses HTML divs with flexbox (not SVG). `overflow-x-auto` for horizontal scroll on mobile.
-
-`WeekColumn.jsx` — Renders 7 DayCell components in a vertical flex column.
-
-`DayCell.jsx` — Single 12×12px div with `rounded-sm`. Background color from `resolveCellColor()` via inline `style` (dynamic colors cannot use Tailwind classes). `React.memo` with custom comparator checking `date`, `count`, `bySource`. `onMouseEnter` calls parent with tooltip data including `getBoundingClientRect()` coordinates. White 3px dot in bottom-right for multi-source days.
-
-`MonthLabels.jsx` — Month abbreviations positioned above grid columns. Computes which weeks start a new month.
-
-`DayLabels.jsx` — Static: Mon, Wed, Fri labels. Tue/Thu/Sat/Sun hidden to reduce clutter.
-
-`GraphLegend.jsx` — Below grid. Part A: intensity scale ("Less → More" with 4 colored squares). Part B (when 2+ sources): source color chips with truncated titles (20 chars). Click to filter. Top 5 sources shown; "Show all" toggle if >5.
-
-`GraphTooltip.jsx` — `position: fixed` div anchored above hovered cell. Dark background (`bg-gray-900 text-white`). Shows: formatted date, total count, per-source breakdown with colored dots. 80ms debounce on hover. Dismisses on mouse leave or tap-outside on mobile.
-
-**Modify:** `web/src/pages/Home.jsx` — Add lazy import and Suspense wrapper:
-
-    import { lazy, Suspense } from 'react'
-    const LearningContributionGraph = lazy(() =>
-      import('../components/home/contribution-graph/LearningContributionGraph')
-    )
-
-    // In JSX, between <QuickActions /> and the sources div:
-    <Suspense fallback={
-      <div className="bg-bg-card border border-bg-card-border rounded-card p-6 mb-6 h-40 animate-pulse" />
-    }>
-      <LearningContributionGraph className="mb-8" />
-    </Suspense>
-
-**Empty state:** When `totalAttempts === 0`, render the full grid in `#EBEDF0` with `opacity-40`. Centered overlay: "No practice activity yet. Complete a study session to see your activity here."
-
-**Tests:**
-
-- Component renders without crashing with empty data
-- Component renders 364 cells (52 weeks × 7 days) at weeks=52
-- Tooltip appears on cell hover with correct date and count
-- Error fallback renders when hook returns error
-- Loading state shows spinner inside card container
-- Empty state message appears when totalAttempts is 0
-
-**Acceptance:** `cd web && npm run dev` — Home page shows the contribution graph between QuickActions and "Your Sources." Cells are colored for days with practice activity. Hovering shows tooltip. `npm run build` succeeds. `npm run lint` passes. `npm run test:run` passes.
-
----
-
-#### M55: Responsive Design, Accessibility, and Polish
-
-**Goal:** At the end of M55, the contribution graph is production-ready: responsive across all breakpoints, keyboard-navigable, screen-reader accessible, and visually verified.
-
-**Responsive behavior:**
-
-| Breakpoint | Behavior |
-|------------|----------|
-| 1440/1024px | Full 52-week grid, 12px cells, 3px gap |
-| 768px | Full 52-week grid, 10px cells, 2px gap |
-| 375px | 26-week grid (toggle for full year), 10px cells, 2px gap, no day labels |
-
-Mobile adjustments: card uses `p-3` instead of `p-5`, header stacks vertically, legend scrolls horizontally with `overflow-x-auto`.
-
-**Accessibility:**
-
-- Grid container: `role="grid"` with `aria-label="Learning activity over the past N weeks"`
-- Single `tabIndex={0}` on grid with `aria-activedescendant` (avoids 364 tab stops)
-- Arrow key navigation: up/down move between days in a week, left/right move between weeks
-- Each cell: `aria-label` with full date and attempt breakdown text
-- `Enter`/`Space` on focused cell opens tooltip; `Escape` closes
-- `prefers-reduced-motion`: instant tooltip show/hide (no fade animation)
-- Color-blind safe: tooltips always provide text labels alongside colors
-
-**Edge cases to verify:**
-
-| Case | Expected behavior |
-|------|-------------------|
-| Zero attempts (new user) | Full empty grid + overlay message |
-| Single data point | One colored cell, rest empty |
-| 20+ sources | Legend shows top 5 + "Show all" toggle |
-| Deleted source | Labeled "Deleted source" in tooltip |
-| 50+ questions/day | Intensity caps at level 3, tooltip shows exact count |
-| Timezone boundary | `toLocaleDateString('en-CA')` converts UTC→local correctly |
-| Pending attempts | Included — user engaged with material |
-
-**No gamification verification:** Confirm the component contains no streaks, badges, flames, achievements, or motivational language. Title is "Practice Activity." Tooltip says "N questions" not "Great job!"
-
-**Pre-commit checklist:**
-- `cd web && npm run lint` — 0 errors
-- `cd web && npm run build` — succeeds
-- `cd web && npm run test:run` — all pass
-- Visual verification at 375px, 768px, 1024px, 1440px
-- Keyboard navigation works (Tab into grid, arrow keys, Enter for tooltip, Escape to close)
-- Screen reader announces cell content correctly
-
-**Acceptance:** The contribution graph is fully functional at all breakpoints. All tests pass. Keyboard and screen reader navigation work. No gamification language present. The Home page loads without regression — existing components (GreetingHeader, OverdueAlert, SearchBar, QuickActions, SourceCard, Quick Stats) are unaffected.
+**Full archive:** `.claude/memory/milestones/webui_core.md`
 
 
 ## Surprises and Discoveries
@@ -408,11 +212,11 @@ Key lessons learned during implementation:
 | Claude + Groq | KC extraction (Claude), practice items (Groq) | `technology.md` |
 | **Vitest over Jest** | Native Vite integration, 5-10x faster, zero config | `quality/testing.md` |
 | **TDD mandatory** | 0% coverage = high regression risk, TDD ensures design clarity | `quality/testing.md` |
-| **HTML divs over SVG for graph** | Codebase has zero SVG; full Tailwind support; native DOM tooltip positioning | `NEW FEATURES.md` |
-| **Standalone hook over SupabaseContext** | Only used on Home page; avoids context bloat and re-renders on other pages | `NEW FEATURES.md` |
-| **Zero new npm packages** | Custom HTML grid + tooltip; Recharts lacks heatmap; react-calendar-heatmap not in stack | `NEW FEATURES.md` |
-| **Hash-based source colors** | djb2 × golden angle = deterministic hue; stable across source additions/deletions | `NEW FEATURES.md` |
-| **Absolute intensity thresholds** | 0/1-3/4-7/8+ counts → levels 0-3; stable, intuitive, matches GitHub convention | `NEW FEATURES.md` |
+| **HTML divs over SVG for graph** | Codebase has zero SVG; full Tailwind support; native DOM tooltip positioning | `milestones/webui_core.md` |
+| **Standalone hook over SupabaseContext** | Only used on Home page; avoids context bloat and re-renders on other pages | `milestones/webui_core.md` |
+| **Zero new npm packages** | Custom HTML grid + tooltip; Recharts lacks heatmap; react-calendar-heatmap not in stack | `milestones/webui_core.md` |
+| **Hash-based source colors** | djb2 × golden angle = deterministic hue; stable across source additions/deletions | `milestones/webui_core.md` |
+| **Absolute intensity thresholds** | 0/1-3/4-7/8+ counts → levels 0-3; stable, intuitive, matches GitHub convention | `milestones/webui_core.md` |
 | **No gamification in graph** | Design philosophy: analytical tool for self-observation, not motivation mechanic | `VISION.md` |
 
 
@@ -432,7 +236,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 
 ## Milestone Quick Reference
 
-**61 milestones complete (M1-M51, I1-I4, T1-T6), 4 in progress (M52-M55).** Production: https://personalized-learning-system.netlify.app/
+**65 milestones complete (M1-M55, I1-I4, T1-T6).** Production: https://personalized-learning-system.netlify.app/
 
 | Range | Feature | Key Components |
 |-------|---------|----------------|
@@ -453,7 +257,7 @@ This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude AP
 | M51 | Session Continuity | sessions table columns, useSessionPersistence, recovery dialog |
 | I1-I4 | Infrastructure | EC2 + Docker + Nginx + Netlify deployment |
 | T1-T6 | TDD Foundation | pytest (21 tests), Vitest (24 tests), Chrome UI tests, agent separation |
-| **M52-M55** | **Contribution Graph** | **DB index, utility functions, data hook, grid UI, responsive, a11y** |
+| M52-M55 | Contribution Graph | DB index, utility functions, data hook, grid UI, responsive, a11y |
 
 
 ## CLI Usage Reference
@@ -1062,10 +866,4 @@ Key milestones: M1-M51 (CLI, Web UI, Sources, Speed, Memory, Document Reader, Au
 
 **2026-01-28:** Completed T1-T6 (TDD Foundation). Added TDD Operational Policy with agent separation. Infrastructure: pytest (21 tests), Vitest (24 tests), Chrome UI testing.
 
-**2026-01-28:** M52 complete — `web/src/lib/contributionGraph.js` (7 pure functions), 42 Vitest tests passing. SQL index migration documented (run via Supabase SQL Editor before shipping).
-
-**2026-01-28:** M53 complete — `web/src/hooks/useContributionData.js` (standalone hook, 5-min cache, parallel queries, source filtering). 11 Vitest tests in `web/src/hooks/__tests__/useContributionData.test.js`. Total: 77 tests passing, lint clean, build succeeds.
-
-**2026-01-28:** M54 complete — 9 component files in `web/src/components/home/contribution-graph/`. Home.jsx modified with React.lazy + Suspense. Code-split chunk: 11.22 kB. 6 component tests. Visual verification: grid renders, tooltip works, 12w/26w/52w selector works, legend with source chips. Total: 83 tests passing, lint clean, build succeeds.
-
-**2026-01-28:** M55 complete — Responsive: `p-3 md:p-6` padding, `w-[10px] md:w-3` cells, day labels hidden on mobile (`hidden md:flex`), header stacks vertically on small screens, responsive month label widths. Accessibility: `role="grid"`, `role="gridcell"`, `aria-label` on every cell with full date+count text, `tabIndex={0}` + `aria-activedescendant` for keyboard nav, arrow keys move focus, Enter/Space opens tooltip, Escape closes. No gamification language. Verified at 375px, 768px, 1024px, 1440px. 83 tests passing, lint clean, build succeeds.
+**2026-01-28:** M52-M55 complete (Learning Contribution Graph). GitHub-style heatmap on Home page. 83 tests total, responsive at all breakpoints, fully accessible. See `.claude/memory/milestones/webui_core.md` for details.
