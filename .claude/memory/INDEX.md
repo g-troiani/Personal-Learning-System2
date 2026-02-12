@@ -1,16 +1,17 @@
 # Memory System Index
 
-**Last Updated:** 2026-01-23
-**Total Files:** 18
+**Last Updated:** 2026-02-06
+**Total Files:** 19
 
 ## Quick Navigation
 
 | Category | Files | Key Topics |
 |----------|-------|------------|
-| Milestones | 8 | M1-M51, I1-I4 implementation history |
+| Milestones | 8 | M1-M55, I1-I4 implementation history |
 | Decisions | 4 | Architecture, technology, patterns, memory system |
 | Schemas | 3 | Database, API, React components |
 | Reference | 3 | Research, context, retrospectives |
+| Quality | 1 | Testing infrastructure, TDD protocol, coverage |
 
 ## File Summaries
 
@@ -19,7 +20,7 @@
 | File | Milestones | Key Topics |
 |------|------------|------------|
 | `cli_foundation.md` | M1-M8 | CLI, ingestion, KC extraction, practice items, study loop, SM-2, technique bundles |
-| `webui_core.md` | M9-M15, M50, M51 | React setup, home dashboard, study session, calendar, due review, progress, analytics, practice mode UI differentiation, session continuity |
+| `webui_core.md` | M9-M15, M50, M51, M52-M55 | React setup, home dashboard, study session, calendar, due review, progress, analytics, practice mode UI, session continuity, contribution graph |
 | `sources_feature.md` | M16-M20, M49 | File upload, FastAPI backend, real-time processing, delete/detail panels, source-grounded practice items |
 | `speed_optimization.md` | M21-M23 | Groq integration, parallel processing, retry logic, bug fixes |
 | `agent_memory.md` | M24-M29 | Memory system, tiered architecture, scout subagents, EXECPLAN slimming |
@@ -51,6 +52,12 @@
 | `research.md` | Learning science sources (Make It Stick, A Mind for Numbers, Ultralearning), core findings, feature mapping |
 | `context.md` | Complete glossary, project structure, requirements, memory system overview |
 | `retrospective.md` | Major milestone retrospectives, what worked, gaps, lessons learned |
+
+### quality/
+
+| File | Topics |
+|------|--------|
+| `testing.md` | T1-T6 TDD Foundation, pytest/Vitest setup, UI test protocol, fixtures, coverage, agent separation policy |
 
 ### Project Root Analysis Documents
 

@@ -4,9 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the **Personal Adaptive Learning System**—a localhost CLI tool that automates the logistics of learning using cognitive science principles (spaced repetition, retrieval practice, interleaving).
+This is the **Personal Adaptive Learning System**—a deployed web application (with optional CLI) that automates the logistics of learning using cognitive science principles (spaced repetition, retrieval practice, interleaving).
 
-**Current Status:** Fully implemented through M23 (CLI + Web UI + FastAPI backend). M24-M29 implemented the tiered memory system to manage EXECPLAN complexity.
+**Production URLs:**
+- Frontend: https://personalized-learning-system.netlify.app/
+- Backend: AWS EC2 with Docker (http://3.215.170.154/api)
+
+**Current Status:** The system supports document upload (PDF, DOCX, PPTX, Markdown), AI-powered knowledge extraction, spaced repetition practice, multi-user auth with RLS, and session continuity.
 
 ## ExecPlans
 
@@ -60,6 +64,9 @@ Stored in `.claude/memory/`:
 | `milestones/webui_core.md` | M9-M15 details | Modifying UI |
 | `milestones/sources_feature.md` | M16-M20 details | Upload issues |
 | `milestones/speed_optimization.md` | M21-M23 details | Performance |
+| `milestones/document_reader.md` | M30-M40 details | Document viewing |
+| `milestones/auth_multiuser.md` | M41-M47 details | Auth/RLS issues |
+| `milestones/infrastructure_deployment.md` | I1-I4 details | Deployment issues |
 | `decisions/architecture.md` | Structural choices | Proposing changes |
 | `decisions/technology.md` | Stack choices | Evaluating alternatives |
 | `decisions/patterns.md` | Implementation patterns | Adding features |
@@ -69,6 +76,7 @@ Stored in `.claude/memory/`:
 | `reference/research.md` | Learning science | Justifying features |
 | `reference/context.md` | Glossary, structure | Onboarding |
 | `reference/retrospective.md` | What worked, lessons | Planning |
+| `quality/testing.md` | Test infrastructure, patterns, coverage | Writing tests |
 
 ### Starting New Work Protocol
 
@@ -84,9 +92,13 @@ Before implementing a new milestone, PROACTIVELY read relevant memory:
    - Web UI work → `milestones/webui_core.md`
    - Upload/processing → `milestones/sources_feature.md`
    - Performance → `milestones/speed_optimization.md`
+   - Document reader → `milestones/document_reader.md`
+   - Auth/RLS/Admin → `milestones/auth_multiuser.md`
+   - Infrastructure/Deployment → `milestones/infrastructure_deployment.md`
    - Database changes → `schemas/database.md`
    - API changes → `schemas/api.md`
    - New features → `reference/research.md` (learning science basis)
+   - Testing work → `quality/testing.md`
 
 3. **Check for patterns:**
    - Similar past milestones for implementation patterns
@@ -115,6 +127,8 @@ Also read external memory when:
 
 ### Memory Update Protocol
 
+   **This is mandatory for EVERY milestone.** 
+
 After completing work:
 1. Archive detailed notes to appropriate memory file
 2. Update EXECPLAN.md Progress (keep concise - link to archive)
@@ -128,9 +142,10 @@ After completing work:
 
 | Layer | Technology | Notes |
 |-------|------------|-------|
-| Language | Python | 3.11+ |
-| Database | Supabase | PostgreSQL, cloud-hosted |
-| Interface | CLI + Web UI | Command-line and React SPA |
+| Frontend | React 18 + Vite 5 | Tailwind CSS, React Router 6, Recharts |
+| Backend | Python 3.11+ FastAPI | Docker, LibreOffice for PPTX conversion |
+| Database | Supabase | PostgreSQL, Auth, Storage, RLS |
+| Hosting | Netlify + AWS EC2 | Frontend CDN, Backend Docker container |
 | LLM | Claude API + Groq | KC extraction (Claude), practice items (Groq) |
 | Document Processing | LibreOffice | PDF, DOCX, PPTX, Markdown |
 
@@ -187,19 +202,42 @@ Never modify production infrastructure without:
 ## Development Commands
 
 ```bash
-# TBD - Commands will be defined as implementation begins
-python -m learn todo      # Show what's due for practice
-python -m learn ingest    # Process a new document
-python -m learn practice  # Start a practice session
-python -m learn stats     # View learning analytics
+# Web UI (primary interface)
+cd web/
+npm install              # Install dependencies
+npm run dev              # Development server at http://localhost:5173
+npm run build            # Production build
+npm run lint             # Lint code
+npm run test             # Run tests in watch mode
+npm run test:run         # Run tests once
+npm run test:coverage    # Run tests with coverage
+
+# Backend API
+cd learn_system/
+pip install -r requirements.txt
+uvicorn app.api.server:app --port 8001 --reload  # API at http://localhost:8001
+pytest -v                # Run all tests
+pytest --cov=app -v      # Run tests with coverage
+pytest tests/unit/       # Run only unit tests
+
+# CLI (optional, all commands functional)
+python -m app.main init                    # Initialize database and bundles
+python -m app.main ingest <file> --domain  # Process document, extract KCs
+python -m app.main status                  # Show system statistics
+python -m app.main sources                 # List ingested documents
+python -m app.main todo                    # Show what's due for review
+python -m app.main study --duration 30     # Start study session
+python -m app.main review <pattern>        # Focus session on specific source
 ```
 
 ## Key Architectural Decisions
 
-- **Single user** (no auth, no multi-tenancy)
-- **CLI + Web UI** (both interfaces share same Supabase backend)
-- **Supabase database** (cloud PostgreSQL)
+- **Multi-user with RLS** (Supabase Auth, email/password, Row-Level Security)
+- **Approved users whitelist** (upload requires approval, admins manage via /admin)
+- **Web UI primary, CLI secondary** (both share same Supabase backend)
+- **Supabase database** (cloud PostgreSQL with 46+ RLS policies)
 - **LLM for ingestion only** (not during practice sessions)
+- **EC2 over Lambda** (LLM timeouts exceed API Gateway 29s limit)
 
 ## Design Philosophy
 
@@ -224,18 +262,82 @@ These principles guide all implementation decisions:
 
 ## Core Capabilities
 
-1. **Automatic Content Processing** — Extract knowledge components from documents, classify by type, generate practice items
-2. **Intelligent Scheduling** — Spaced repetition, overdue tracking, struggle detection
-3. **Measurement & Tracking** — Correctness, confidence, timing, attempts, hints used
-4. **Self-Experimentation** — A/B testing of learning techniques with controlled variables
-5. **Source-Specific Review** — Per-document tracking and topic-focused sessions
+1. **Automatic Content Processing** — Extract knowledge components from documents (PDF, DOCX, PPTX, Markdown), classify by type, generate practice items grounded in source material
+2. **Document Reader** — Read uploaded documents with TOC navigation, highlights, notes, and AI chat before practicing
+3. **Intelligent Scheduling** — Spaced repetition (SM-2), overdue tracking, struggle detection
+4. **Mode-Specific Practice** — Recognition (multiple choice), cued recall (hints), execution (checklists), explanation/application (rubrics)
+5. **Session Continuity** — Resume practice sessions after page reload, browser restart, or WiFi change
+6. **Measurement & Tracking** — Correctness, confidence, timing, attempts, hints used
+7. **Multi-User with Approval** — Email/password auth, RLS isolation, admin-controlled upload whitelist
 
 ## Testing Instructions
 
-- Run linting before commits
-- Test with sample documents of each type (PDF, DOCX, Markdown)
-- Verify database migrations work on existing data
-- Test spaced repetition algorithm with simulated time progression
+**TDD is mandatory for EVERY milestone.** No milestone is complete without passing tests. Use two test types: **Logic Tests** (automated) and **UI Tests** (browser automation).
+
+### Agent Separation Policy (MANDATORY)
+
+**The agent that writes tests MUST be different from the agent that implements the solution.** This prevents bias. For every milestone:
+1. Spawn **Test Agent** first to write failing tests based on requirements
+2. Spawn **Implementation Agent** to write code that passes the tests
+3. Test Agent reviews coverage and adds edge cases
+
+### Real Data Policy (MANDATORY)
+
+**NEVER use mock data when real services are available.** This applies to EVERYTHING - databases, APIs, storage, auth, any service.
+
+If a real endpoint exists, use it. If a real database exists, query it. If a real service exists, call it.
+
+**Only mock when absolutely necessary:**
+- External paid APIs (Claude, Groq) to avoid costs during CI
+- Time-sensitive operations (use fixed timestamps)
+- Network failure scenarios (to test error handling)
+- Third-party services with no test environment
+
+### Logic Tests (Automated)
+
+| Tool | Location | Run Command |
+|------|----------|-------------|
+| pytest | `learn_system/tests/` | `cd learn_system && pytest -v` |
+| Vitest | `web/src/**/*.test.js` | `cd web && npm run test:run` |
+| Playwright | E2E tests | `npx playwright test` (if installed) |
+
+**What to test with Logic Tests:**
+- Backend: API endpoints, SM-2 algorithm, JWT validation, data transformations
+- Frontend: Hook logic, utility functions, state management, form validation
+
+**Alternative: MCP Tools for Testing**
+The system has access to MCP browser automation tools (Chrome extension). If these are faster or more advantageous for a specific test scenario, use them instead of or alongside traditional test frameworks.
+
+**Run before every commit:**
+```bash
+cd learn_system && pytest -v              # Backend tests
+cd web && npm run test:run                 # Frontend tests
+```
+
+### UI Tests (Browser Automation)
+
+Use Chrome extension for visual verification and user flow testing.
+
+**What to test with UI Tests:**
+- Visual rendering: Does the page look correct?
+- User flows: login → upload → study workflow
+- Component interactions: buttons, forms, modals
+- Responsive design: 375px, 768px, 1024px, 1440px viewports
+
+**UI Test Protocol:**
+1. Start dev server: `cd web && npm run dev`
+2. Navigate to http://localhost:5173
+3. Take screenshots of affected pages
+4. Test user interactions (click, type, submit)
+5. Test at mobile viewport (375px width)
+
+### Pre-Commit Checklist
+
+- [ ] `npm run lint` passes in `web/`
+- [ ] `npm run build` succeeds in `web/`
+- [ ] `pytest -v` passes in `learn_system/`
+- [ ] `npm run test:run` passes in `web/`
+- [ ] UI visually verified for any UI changes
 
 ## Git Workflow
 
@@ -249,11 +351,22 @@ These principles guide all implementation decisions:
 - Follow the design philosophy above
 - Track all variables defined in the variable taxonomy
 - Handle document processing errors gracefully
-- Make CLI output clear and actionable
+- Maintain RLS policies when adding database features
+- Test auth flows (login, approved user checks)
+- Write tests BEFORE implementing new features (TDD)
+- Run `pytest` and `npm run test:run` before committing
+- Add test coverage for new backend endpoints and frontend hooks
+- Use UI tests for visual changes and user flow verification
 
 **Do Not:**
 - Call LLM during practice sessions (only during ingestion)
 - Add gamification elements (badges, streaks, points)
+- Bypass RLS with service role key in frontend
+- Store secrets in code or CLAUDE.md/EXECPLAN.md
+- Skip tests when implementing new features
+- Mark milestones complete without passing tests
+- Use mock data when real services are available (databases, APIs, storage, auth, etc.)
+- Commit API keys to git (use .env files, test with real but gitignored credentials)
 
 ## Success Metrics
 
@@ -262,4 +375,4 @@ The system succeeds if:
 2. Time-to-mastery improves vs. unstructured learning
 3. Retention at 7 and 30 days is measurably better
 4. Self-experimentation yields actionable insights
-5. `learn todo` replaces manual study planning
+5. The Home dashboard replaces manual study planning

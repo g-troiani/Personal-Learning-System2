@@ -8,10 +8,12 @@ import { uploadSource } from '../../lib/api'
 const SUPPORTED_TYPES = {
   'application/pdf': '.pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'application/vnd.ms-powerpoint': '.ppt',
   'text/markdown': '.md',
   'text/plain': '.txt'
 }
-const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.md', '.txt']
+const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.pptx', '.ppt', '.md', '.txt']
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
 
 // Upload states

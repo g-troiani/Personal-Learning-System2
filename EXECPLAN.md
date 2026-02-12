@@ -23,6 +23,7 @@ This ExecPlan is a living document maintained in accordance with PLANS.md. The s
    - Auth/RLS/Admin (M41-M47) → `.claude/memory/milestones/auth_multiuser.md`
    - Database changes → `.claude/memory/schemas/database.md`
    - API changes → `.claude/memory/schemas/api.md`
+   - Testing work → `.claude/memory/quality/testing.md`
 
 3. **Why this matters:** This EXECPLAN is intentionally slim (~500 lines). Full implementation details, decisions, and patterns are archived in `.claude/memory/`. Reading the archives prevents repeating mistakes and ensures consistency with past decisions.
 
@@ -41,182 +42,59 @@ See CLAUDE.md "Memory System" section for complete protocol.
 
 ## Purpose and Big Picture
 
-After implementing this system, a user can upload educational documents and receive automatically generated practice items scheduled for optimal retention. The user runs a command to see what needs review, another command to study, and the system tracks everything needed to measure learning effectiveness over time.
+Users upload educational documents and receive automatically generated practice items scheduled for optimal retention. The system extracts knowledge components, generates practice items, and uses SM-2 spaced repetition to schedule reviews.
 
-The observable behavior works as follows. On Monday, the user runs `python -m app.main ingest Evaluating_LLMs.docx --domain ai_ml` and the system extracts approximately fifty knowledge components, generates around one hundred fifty practice items, and stores them in a local database. The user then runs `python -m app.main study --duration 30` and spends thirty minutes practicing. The system presents items, collects responses, records confidence and difficulty ratings, and updates mastery estimates. On Tuesday, the user runs `python -m app.main todo` and sees output showing that fifteen items from the LLM evaluation document are due for review. The user runs `python -m app.main review eval` to focus on that specific topic. After a week of use across multiple documents, the database contains enough data to analyze which learning techniques produce better retention for which types of content.
+**Core workflow:** Upload document → Read in browser → Practice with spaced repetition → Track mastery
 
-The system solves five problems. First, it eliminates the "I don't know what I don't know" problem by forcing retrieval practice that reveals actual gaps. Second, it fights forgetting through spaced repetition scheduling. Third, it measures learning objectively through tracked performance rather than felt fluency. Fourth, it enables self-experimentation by recording which techniques were used for which content. Fifth, it removes cognitive overhead by telling the user exactly what to practice and when.
+**Problems solved:** (1) Forces retrieval practice to reveal gaps, (2) Fights forgetting via spaced repetition, (3) Measures learning objectively, (4) Enables self-experimentation, (5) Removes cognitive overhead.
 
-**Document Reader Feature (M30-M37):** After these milestones, users can read uploaded documents directly in the browser before starting practice. The workflow becomes: upload → read/study → practice, with documents always one click away. Users navigate to `/reader/:sourceId` to view PDFs or Markdown with a Table of Contents in the sidebar, take notes, highlight text, and ask AI questions about the content.
-
-**Document Viewer Fidelity (M38):** This milestone fixes a critical gap where DOCX files render as plain text, losing all formatting. After M38, uploaded DOCX files display with full visual fidelity—headings, tables, images, colors, and formatting preserved—using the `docx-preview` library for client-side rendering.
-
-**PDF Highlighting (M39):** This milestone implements PDF-specific highlighting. Currently, highlights save to the database but don't render in PDFs because the prop isn't passed and the positioning system is incompatible. After M39, users can highlight PDF text and see those highlights persist across sessions using page-based percentage coordinates.
-
-**PowerPoint Support (M40):** This milestone adds PowerPoint (.pptx) document support. After M40, users can upload PowerPoint presentations and view them in the document reader with full visual fidelity. The system extracts text using python-pptx for KC generation, converts PPTX to PDF using LibreOffice + unoserver for display, and reuses the existing PDFRenderer for viewing. Highlights work on the converted PDF.
-
-**Authentication & Multi-User (M41-M46):** These milestones transform the single-user localhost system into a secure multi-user web deployment. After M46, users can sign up with email/password, log in, and have their data completely isolated from other users. The system uses Supabase Auth for authentication, Row-Level Security (RLS) for data isolation, and JWT validation in the FastAPI backend. Existing data is migrated to the first registered user. The architecture supports deployment to Vercel (frontend) + Railway (backend) + Supabase (database).
-
-**Approved Users Whitelist (M47):** This milestone restricts document upload (which triggers expensive Claude and Groq API calls) to a whitelist of approved users. Non-approved users can log in and view existing data but receive a 403 Forbidden error when attempting to upload. Hardcoded admin emails can access an Admin page at `/admin` to manage the whitelist—adding or removing approved users. This prevents runaway API costs from unauthorized usage while preserving read access for all authenticated users.
-
-**Source-Grounded Practice Items (M49):** This milestone fixes a critical quality issue where practice items test concepts not present in the source document. Currently, the LLM generates items from its general knowledge rather than the uploaded content, creating questions that require knowledge the user has no way of having learned. After M49, each Knowledge Component will include the verbatim source excerpt it was derived from, and practice item generation will be constrained to only test concepts derivable from the source + reasonable domain prerequisites. This is NOT pure memorization—items may require reasoning, inference, and application—but they must be answerable by someone who has read the material and has appropriate foundational knowledge. No database changes required—the `source_excerpt` field already exists but was never populated.
-
-**Practice Mode UI Differentiation (M50):** This milestone transforms the study interface to render practice items differently based on their `practice_mode` type. Currently, `AnswerInput.jsx` renders ALL practice modes (free_recall, cued_recall, recognition, explanation, application, execution) as identical textareas. After M50, each mode has appropriate UI: recognition shows clickable multiple-choice buttons with auto-grading, cued_recall shows progressive hint reveals, execution shows task checklists with completion tracking, and explanation/application show rubric previews. This is a **pure frontend enhancement**—the backend already stores and returns all necessary data (`practice_mode`, `hints`, `rubric`, `success_criteria`). No database or API changes required.
-
-**Session Continuity Across Page Reloads (M51):** This milestone persists study session progress so users can resume where they left off after page reload, WiFi change, or browser restart. Currently, `Study.jsx` creates a NEW session ID on every page load (`sess_${Date.now()}`), abandoning any incomplete session. User's completed attempts are saved in the database but inaccessible because React state resets. After M51, the system checks for incomplete sessions on load, offers to resume or start fresh via a modal dialog, and maintains progress across interruptions. Session state uses hybrid storage: localStorage for fast cache + database as source of truth. Requires database migration (5 new columns on `sessions` table) and new API endpoint (`POST /api/sessions/pause` for sendBeacon on tab close).
-
-**Infrastructure Deployment (I1-I4):** These milestones deploy the Personal Learning System from localhost to production. After I4, users can access the system from any device via the web. The architecture uses Netlify for the React frontend (free tier), AWS EC2 for the FastAPI backend with Docker and LibreOffice for PPTX conversion, Nginx as reverse proxy with Let's Encrypt SSL, and Supabase for the database (already cloud-hosted). EC2 was chosen over Lambda due to API Gateway timeout limits (29s max vs. 30-60s LLM processing), LibreOffice size constraints, and SSE streaming requirements. Estimated cost: $1-18/month (mostly Claude API).
+**Key features (all implemented):**
+- Document reader with PDF/DOCX/PPTX/Markdown support, highlights, notes, AI chat
+- Multi-user auth with RLS, approved users whitelist for upload access
+- Mode-specific practice UI (recognition, cued recall, execution, explanation, application)
+- Session continuity across page reloads
+- Production deployment on Netlify + EC2 + Supabase
 
 
 ## Progress
 
-This section tracks granular progress with timestamps. Each stopping point must be documented, even if it requires splitting a partially completed task.
+**M1-M55, I1-I4, T1-T6 complete.** For detailed notes, see `.claude/memory/milestones/` and `.claude/memory/quality/`.
 
-**CLI Foundation (M1-M8)** - See `.claude/memory/milestones/cli_foundation.md`
-- [x] M1: Project foundation - database schema, CLI skeleton, configuration (2026-01-02)
-- [x] M2: Document ingestion - text extraction, content storage (2026-01-02)
-- [x] M3: KC extraction - LLM-based identification, chunking, deduplication (2026-01-02)
-- [x] M4: Practice items - type-specific generation, hints, rubrics (2026-01-02)
-- [x] M5: Study loop - session management, response collection (2026-01-02)
-- [x] M6: Spaced repetition - SM-2 scheduling, mastery tracking (2026-01-02)
-- [x] M7: Todo dashboard - due items by source (2026-01-02)
-- [x] M8: Technique bundles - self-experimentation foundation (2026-01-02)
+| Phase | Milestones | Date | Archive |
+|-------|------------|------|---------|
+| CLI Foundation | M1-M8 | 2026-01-02 | `cli_foundation.md` |
+| Web UI Core | M9-M15 | 2026-01-02 | `webui_core.md` |
+| Sources Feature | M16-M20 | 2026-01-02/03 | `sources_feature.md` |
+| Speed Optimization | M21-M23 | 2026-01-03 | `speed_optimization.md` |
+| Agent Memory System | M24-M29 | 2026-01-04 | `agent_memory.md` |
+| Document Reader | M30-M37 | 2026-01-05 | `document_reader.md` |
+| DOCX Fidelity | M38 | 2026-01-06 | `document_reader.md` |
+| PDF Highlighting | M39 | 2026-01-06 | `document_reader.md` |
+| PowerPoint Support | M40 | 2026-01-06 | `document_reader.md` |
+| Auth & Multi-User | M41-M46 | 2026-01-06/07 | `auth_multiuser.md` |
+| Approved Users | M47 | 2026-01-11 | `auth_multiuser.md` |
+| Zoom Preference | M48 | 2026-01-18 | `document_reader.md` |
+| Source Grounding | M49 | 2026-01-19 | `sources_feature.md` |
+| Practice Mode UI | M50 | 2026-01-19 | `webui_core.md` |
+| Session Continuity | M51 | 2026-01-19 | `webui_core.md` |
+| Infrastructure | I1-I4 | 2026-01-23 | `infrastructure_deployment.md` |
+| TDD Foundation | T1-T6 | 2026-01-28 | `quality/testing.md` |
+| Contribution Graph | M52-M55 | 2026-01-28 | `webui_core.md` |
 
-**Web UI Core (M9-M15)** - See `.claude/memory/milestones/webui_core.md`
-- [x] M9: Web foundation - React/Vite scaffold, routing, SupabaseContext (2026-01-02)
-- [x] M10: Home dashboard - greeting, alerts, source cards, quick stats (2026-01-02)
-- [x] M11: Study session - question cards, answer input, self-assessment (2026-01-02)
-- [x] M12: Calendar - month navigation, session scheduling (2026-01-02)
-- [x] M13: Due for review - urgency sections, filtered study links (2026-01-02)
-- [x] M14: Progress - stat cards, mastery by source, weekly chart (2026-01-02)
-- [x] M15: Analytics - technique comparison, calibration analysis, recommendations (2026-01-02)
+### T1-T6: TDD Foundation (Complete)
 
-**Sources Feature (M16-M20)** - See `.claude/memory/milestones/sources_feature.md`
-- [x] Sources research - 5 parallel agents, NEW FEATURES.md spec (2026-01-02)
-- [x] M16: Sources page - list display, filtering, sorting (2026-01-02)
-- [x] M17: Upload UI - drag-drop zone, file validation (2026-01-02)
-- [x] M18: FastAPI backend - upload endpoint, processing pipeline (2026-01-02)
-- [x] M19: Real-time progress - Supabase Realtime, polling fallback (2026-01-02)
-- [x] M20: Error handling - delete UI, SourceDetailPanel, confirmation dialogs (2026-01-03)
+Test-Driven Development infrastructure with two test types: **Logic Tests** (pytest/Vitest) and **UI Tests** (Chrome extension).
 
-**Speed Optimization (M21-M23)** - See `.claude/memory/milestones/speed_optimization.md`
-- [x] M21: Groq client - fast LLM, batch database inserts (2026-01-03)
-- [x] M22: Parallel processing - ThreadPoolExecutor, 5 workers (2026-01-03)
-- [x] M23: Error resilience - retry logic, exponential backoff (2026-01-03)
-- Bug fixes: delete 404, stuck upload detection, stale sidebar, empty state UI (2026-01-03)
+**Results:** 21 backend tests, 24 frontend tests, UI protocol validated.
 
-**Agent Memory System (M24-M29)** - Complete
-- [x] M24: Memory directory structure - `.claude/memory/` with subdirs (2026-01-04)
-- [x] M25: Extract milestones to archive - 4 files created (2026-01-04)
-- [x] M26: Extract decisions and schemas - 6 files created, Decision Log trimmed (2026-01-04)
-- [x] M27: Extract reference material - 3 files created, Research Foundation trimmed (2026-01-04)
-- [x] M28: Slim EXECPLAN - reduced from 1500 to 502 lines (2026-01-04)
-- [x] M29: Update CLAUDE.md - memory access instructions added (2026-01-04)
+**Full archive:** `.claude/memory/quality/testing.md`
 
-**Document Reader Feature (M30-M37)** - See `.claude/memory/milestones/document_reader.md`
-- [x] Research phase - 6 parallel agents, NEW FEATURES.md consolidated spec (2026-01-05)
-- [x] M30: Core infrastructure - database migration, Supabase Storage, /reader route (2026-01-05)
-- [x] M31: Sidebar TOC integration - TableOfContentsSection, route detection (2026-01-05)
-- [x] M32: Document rendering - PDF, Markdown, text viewers (2026-01-05)
-- [x] M33: Navigation entry points - Read buttons, upload redirect (2026-01-05)
-- [x] M34: Text selection and highlights - SelectionTooltip, annotations (2026-01-05)
-- [x] M35: Assistant panel - notes, AI chat tabs (2026-01-05)
-- [x] M36: Reading progress - position tracking, completion percentage (2026-01-05)
-- [x] M37: Polish and performance - zen mode, memoization, deep linking (2026-01-05)
 
-**Document Viewer Fidelity (M38)** - Complete
-- [x] M38 Research: 6 parallel worktrees, docx-preview recommendation (2026-01-06)
-- [x] M38 Implementation: DOCX high-fidelity rendering with docx-preview (2026-01-06)
+### M52-M55: Learning Contribution Graph (Complete)
 
-**PDF Highlighting (M39)** - Complete
-- [x] M39 Research: 6 parallel worktrees, validated architecture (2026-01-06)
-- [x] M39 Implementation: PDF page-based highlighting with PDFHighlightLayer (2026-01-06)
-  - Phase 0: Wired up highlights prop to PDFRenderer in ReaderContent.jsx
-  - Phase 1: Database migration added position_type and pdf_rects columns
-  - Phase 2: Updated useTextSelection for PDF-aware page-based selection
-  - Phase 3: Updated PDFRenderer with data-page-number attributes
-  - Phase 4: Created PDFHighlightLayer component for overlay rendering
-  - Phase 5: Updated useAnnotations to handle PDF position type and sorting
+GitHub-style heatmap on Home page showing daily practice activity over 52 weeks. Color hue = dominant source; intensity = volume. Responsive (26 weeks mobile, 52 desktop), keyboard-navigable, screen-reader accessible. 83 tests total.
 
-**PowerPoint Support (M40)** - Complete
-- [x] M40 Research: 6 parallel worktrees, consolidated spec in NEW FEATURES.md (2026-01-06)
-- [x] M40 Phase 1: Backend text extraction with python-pptx (2026-01-06)
-- [x] M40 Phase 2: PPTX→PDF conversion with LibreOffice (local, no Docker required) (2026-01-06)
-- [x] M40 Phase 3: Database schema (slide_count, converted_pdf_path columns) (2026-01-06)
-- [x] M40 Phase 4: Frontend content type detection and routing (2026-01-06)
-- [x] M40 Phase 5: API endpoint for converted PDF URL (2026-01-06)
-
-**Authentication & Multi-User (M41-M46)** - Complete
-- [x] M41-M46 Research: 6 parallel worktrees, consolidated spec in NEW FEATURES.md (2026-01-06)
-- [x] M41: Supabase Auth Configuration - email enabled, Site URL/Redirects configured, JWT=3600s, env vars added (2026-01-06)
-- [x] M42: Database Schema Migration - user_id UUID column on 12 tables, 12 single-column indexes, 8 compound indexes for query patterns (2026-01-06)
-- [x] M43: Backend Auth Middleware - PyJWT, auth package (schemas, jwt_utils, dependencies, ownership), CurrentUser on all routes, CORS expose X-Token-Expiring-Soon (2026-01-06)
-- [x] M44: Frontend Auth Flow - AuthContext, ProtectedRoute, login/signup/reset forms, api.js with auth headers, Sidebar logout (2026-01-07)
-- [x] M45: Row-Level Security Policies - RLS enabled on 14 tables, 46+ table policies, 4 storage policies for documents bucket (2026-01-07)
-- [x] M46: Data Migration & Deployment - first_user_migration.py, m46_enforce_auth.sql, migration API endpoints, CORS env config (2026-01-07)
-
-**RLS/Display Bug Investigation** - Complete (2026-01-07)
-- Root cause: practice_items RLS policy too complex; migration.py had redundant user_id filters
-- Fix: `fix_practice_items_rls.sql` + updated useSources.js/Study.jsx to direct Supabase queries
-- All pages regression tested and verified functional. See `.claude/memory/milestones/auth_multiuser.md` for details.
-
-**Approved Users Whitelist (M47)** - Complete
-- [x] M47 Phase 1: Database migration - approved_users table with RLS (2026-01-11)
-- [x] M47 Phase 2: Backend approval logic - is_user_approved, is_admin, require_approved_user (2026-01-11)
-- [x] M47 Phase 3: Protect upload endpoint - ApprovedUser dependency (2026-01-11)
-- [x] M47 Phase 4: Admin API endpoints - list, add, remove approved users (2026-01-11)
-- [x] M47 Phase 5: Frontend AdminRoute guard and useIsAdmin hook (2026-01-11)
-- [x] M47 Phase 6: Admin page UI - table, add form, remove button (2026-01-11)
-- [x] M47 Phase 7: Upload error handling - user-friendly 403 message (2026-01-11)
-- [x] M47 Phase 8: Integration testing - all flows verified in Chrome (2026-01-11)
-
-**Persistent Zoom Preference (M48)** - Complete
-- [x] M48 Phase 1: Database migration - user_preferences table with RLS (2026-01-18)
-- [x] M48 Phase 2: useZoomPreference hook - load/save with 500ms debounce (2026-01-18)
-- [x] M48 Phase 3: Lift zoom state to ReaderContent.jsx (2026-01-18)
-- [x] M48 Phase 4: Update PDFRenderer and DOCXRenderer to accept zoom props (2026-01-18)
-- [x] M48 Phase 5: Bug fix - SupabaseContext missing session; added auth state tracking (2026-01-18)
-- [x] M48 Testing: Verified zoom persists across page refresh (130% → 150% → refresh → 150%) (2026-01-18)
-
-**Source-Grounded Practice Items (M49)** - Complete
-- [x] M49 Research: 6 parallel worktrees, comprehensive investigation (2026-01-19)
-- [x] M49 Phase 1: Update KC extraction prompt to request source_excerpt (2026-01-19)
-- [x] M49 Phase 2: Update parse_llm_response() to extract source_excerpt (2026-01-19)
-- [x] M49 Phase 3: Update store_extracted_kcs() to pass source_excerpt to DB (2026-01-19)
-- [x] M49 Phase 4: Update all 4 practice item templates with grounding constraints (2026-01-19)
-- [x] M49 Testing: Verified excerpts populated, grounding constraints in prompts, backward compatible with NULL excerpts (2026-01-19)
-
-**Practice Mode UI Differentiation (M50)** - Complete
-- [x] M50 Research: 6 parallel worktrees, consolidated spec in NEW FEATURES.md (2026-01-19)
-- [x] M50 Phase 1: Infrastructure - Created inputs/ and shared/ directories, TextArea/SubmitButton/SkipButton primitives, FreeRecallInput (2026-01-19)
-- [x] M50 Phase 2: Dispatcher Refactor - AnswerInput.jsx now dispatches to mode-specific components, Study.jsx passes practiceMode and item (2026-01-19)
-- [x] M50 Phase 3: Recognition Mode - RecognitionInput.jsx with A/B/C/D buttons, auto-grading, skips SelfAssessment (2026-01-19)
-- [x] M50 Phase 4: Cued Recall - CuedRecallInput.jsx with progressive hint reveal, amber styling, tracks hintsUsed (2026-01-19)
-- [x] M50 Phase 5: Execution Mode - ExecutionInput.jsx with Start Task → Record Results flow, success_criteria checklist, independence/iterations tracking (2026-01-19)
-- [x] M50 Phase 6: Explanation/Application - ExplanationInput.jsx with rubric preview (blue), ApplicationInput.jsx with scenario styling (purple), word count (2026-01-19)
-- [x] M50 Testing: ExplanationInput and ApplicationInput verified in Chrome (blue rubric, word count, scenario placeholder). Recognition/CuedRecall/Execution not in current study queue but code verified (2026-01-19)
-
-**Session Continuity Across Page Reloads (M51)** - Complete
-- [x] M51 Research: 6 parallel worktrees (ui-ux, data-model, study-jsx, lifecycle, storage, edge-cases), consolidated spec in NEW FEATURES.md (2026-01-19)
-- [x] M51 Phase 1: Database migration (m51_session_continuity.sql) - add status, current_item_index, queue_item_ids, paused_at, last_activity_at columns to sessions table (2026-01-19)
-- [x] M51 Phase 2: useSessionPersistence hook - localStorage cache + DB sync logic (2026-01-19)
-- [x] M51 Phase 3: SessionRecoveryDialog component - resume/start-fresh modal (2026-01-19)
-- [x] M51 Phase 4: Study.jsx integration - recovery check on mount, save-on-answer (2026-01-19)
-- [x] M51 Phase 5: BeforeUnload handler (integrated in Study.jsx, pauseSession on unload) (2026-01-19)
-- [x] M51 Phase 6: SaveIndicator component in SessionHeader (2026-01-19)
-- [x] M51 Phase 7: Multiple tab prevention (localStorage lock) (2026-01-19)
-- [x] M51 RLS Fix: Added SELECT policy "Users can select own sessions" on sessions table (2026-01-19)
-- [x] M51 Testing: Reload mid-session → recovery dialog shows correct progress (1/20) → resume works (2026-01-19)
-
-**Infrastructure Deployment (I1-I4)** - Full specs in Milestones section below (self-contained)
-- [x] Infrastructure Research: 6 parallel worktrees (ec2, docker, nginx-ssl, netlify, docs, integration), consolidated NEW FEATURES.md (2026-01-23)
-- [x] I2 Files: Created Dockerfile, docker-compose.yml, .dockerignore (2026-01-23)
-- [x] I4 Files: Created web/netlify.toml (2026-01-23)
-- [x] EXECPLAN Integration: Full deployment content integrated into EXECPLAN.md (credentials, concrete steps, checklist, procedures, troubleshooting) (2026-01-23)
-- [ ] I1: EC2 instance setup + security groups + SSH (requires AWS Console)
-- [ ] I2 Deploy: Deploy Docker container to EC2
-- [ ] I3: Nginx reverse proxy + SSL (Let's Encrypt) (requires EC2)
-- [ ] I4 Deploy: Netlify site creation + environment variables
+**Full archive:** `.claude/memory/milestones/webui_core.md`
 
 
 ## Surprises and Discoveries
@@ -283,6 +161,15 @@ Key lessons learned during implementation:
 - Fix: `CREATE POLICY "Users can select own sessions" ON sessions FOR SELECT USING (auth.uid() = user_id)`
 - Lesson: Always verify all CRUD operations have corresponding RLS policies
 
+**Infrastructure Deployment (I1-I4) - 2026-01-23:**
+- **Terraform for EC2:** Created `infrastructure/main.tf` with full EC2 provisioning (instance, security group, elastic IP, SSH key pair). User_data script installs Docker and Nginx automatically.
+- **netlify.toml location:** Must be in repo root, not in `web/` subdirectory. Netlify ignores toml files in subdirectories.
+- **CORS for production:** EC2 `.env` needs `CORS_ORIGINS=http://localhost:5173,https://your-app.netlify.app` (comma-separated, no spaces)
+- **Elastic IP cost:** Free when associated with running instance; ~$3.60/month if instance stopped. Keep instance running or release EIP.
+- **docker-compose version warning:** "version attribute is obsolete" warning is harmless, can be ignored or remove `version: '3.8'` line
+- **CRITICAL - Mixed content blocking:** HTTPS frontend (Netlify) cannot make HTTP requests to backend (EC2 without SSL). Browser blocks these as mixed content. **Solution:** Add Netlify proxy in netlify.toml: `[[redirects]] from="/api/*" to="http://EC2-IP/api/:splat" status=200 force=true`. Set `VITE_API_URL=/api` (relative path). Requests go HTTPS→Netlify→HTTP→EC2.
+- **docker-compose restart vs recreate:** `docker compose restart` does NOT reload `.env` file. Must use `docker compose down && docker compose up -d` to pick up env var changes.
+
 
 ## Known Issues and Future Improvements
 
@@ -313,34 +200,24 @@ Key lessons learned during implementation:
 
 ## Decision Log
 
-**Full decision archive:** `.claude/memory/decisions/`
+**Full archive:** `.claude/memory/decisions/`
 
-**Infrastructure Deployment Decisions (2026-01-23):**
-
-- **Decision:** EC2 over Lambda for backend hosting
-  - Rationale: Lambda's 29s API Gateway timeout is insufficient for LLM processing (30-60s). LibreOffice (500MB+) exceeds Lambda layer limits. SSE streaming not supported by API Gateway. Background tasks require persistent server.
-  - Date: 2026-01-23
-
-- **Decision:** Netlify over Vercel for frontend
-  - Rationale: Free tier generous (100GB bandwidth), excellent Vite support, simpler configuration than Vercel for SPAs.
-  - Date: 2026-01-23
-
-- **Decision:** Docker container for backend
-  - Rationale: Encapsulates LibreOffice dependency (~400-500MB), ensures consistent environment between dev and prod, simplifies deployment with docker-compose.
-  - Date: 2026-01-23
-
-- **Decision:** Nginx reverse proxy with 300s timeout for LLM endpoints
-  - Rationale: Default Nginx timeout (60s) kills long-running LLM requests. Upload endpoint needs 300s for PPTX conversion + KC extraction + practice item generation. SSE streaming needs buffering disabled.
-  - Date: 2026-01-23
-
-- **Decision:** Let's Encrypt for SSL
-  - Rationale: Free, automated renewal via certbot, widely trusted. No need for paid certificates for personal learning system.
-  - Date: 2026-01-23
-
-**Earlier Decisions (archived in `.claude/memory/decisions/`):**
-- `architecture.md` - Supabase, hybrid CLI/web, FastAPI, RLS, auth
-- `technology.md` - Claude/Groq, SM-2, React/Vite, ThreadPoolExecutor, document rendering
-- `patterns.md` - Batch inserts, retry logic, progress callbacks
+| Decision | Rationale | Archive |
+|----------|-----------|---------|
+| EC2 over Lambda | 29s timeout insufficient, LibreOffice too large, SSE unsupported | `architecture.md` |
+| Netlify frontend | Free tier, Vite support, simple SPA config | `architecture.md` |
+| Docker backend | Encapsulates LibreOffice, consistent env | `technology.md` |
+| Nginx 300s timeout | LLM requests need 30-60s+, SSE buffering | `infrastructure_deployment.md` |
+| Supabase + RLS | Auth, PostgreSQL, row-level security | `architecture.md` |
+| Claude + Groq | KC extraction (Claude), practice items (Groq) | `technology.md` |
+| **Vitest over Jest** | Native Vite integration, 5-10x faster, zero config | `quality/testing.md` |
+| **TDD mandatory** | 0% coverage = high regression risk, TDD ensures design clarity | `quality/testing.md` |
+| **HTML divs over SVG for graph** | Codebase has zero SVG; full Tailwind support; native DOM tooltip positioning | `milestones/webui_core.md` |
+| **Standalone hook over SupabaseContext** | Only used on Home page; avoids context bloat and re-renders on other pages | `milestones/webui_core.md` |
+| **Zero new npm packages** | Custom HTML grid + tooltip; Recharts lacks heatmap; react-calendar-heatmap not in stack | `milestones/webui_core.md` |
+| **Hash-based source colors** | djb2 × golden angle = deterministic hue; stable across source additions/deletions | `milestones/webui_core.md` |
+| **Absolute intensity thresholds** | 0/1-3/4-7/8+ counts → levels 0-3; stable, intuitive, matches GitHub convention | `milestones/webui_core.md` |
+| **No gamification in graph** | Design philosophy: analytical tool for self-observation, not motivation mechanic | `VISION.md` |
 
 
 ## Outcomes and Retrospective
@@ -357,41 +234,30 @@ Retrospectives for M1-M8 (CLI), M9-M15 (Web UI), M16-M19 (Sources). Key outcomes
 This is a personal learning tool: CLI + Web UI, Supabase (PostgreSQL), Claude API for ingestion, Groq for item generation. Key concepts: Knowledge Component (KC), practice items, mastery level (EMA), SM-2 spaced repetition, technique bundles. Project structure: `learn_system/` (Python CLI) and `web/` (React). See archive for complete glossary.
 
 
-## Plan of Work
+## Milestone Quick Reference
 
-Implementation proceeds through fifty-one milestones plus four infrastructure milestones. M1-M51 are complete. I1-I4 are ready for implementation.
+**65 milestones complete (M1-M55, I1-I4, T1-T6).** Production: https://personalized-learning-system.netlify.app/
 
-**CLI (Complete):** M1: Project foundation and database schema. M2: Document ingestion. M3: KC extraction via LLM. M4: Practice item generation. M5: Interactive study loop. M6: SM-2 spaced repetition. M7: Todo dashboard and source review. M8: Technique bundle tracking.
-
-**Web UI Core (Complete):** M9: Foundation (React/Vite/Tailwind setup, sidebar layout). M10: Home dashboard. M11: Study session interface. M12: Calendar and scheduling. M13: Due for Review page. M14: Progress statistics. M15: Analytics and insights.
-
-**Sources Feature (Complete):** M16: Sources page foundation with list display. M17: Upload UI with drag-drop and validation. M18: FastAPI backend with processing endpoints. M19: Real-time processing progress. M20: Error handling and polish.
-
-**Speed Optimization (Complete):** M21: Groq client and batch database inserts. M22: Parallel practice item generation. M23: Error resilience and retry logic.
-
-**Agent Memory System (Complete):** M24: Create memory directory structure. M25: Extract completed milestones to archive. M26: Extract decisions and schemas. M27: Extract reference material. M28: Slim EXECPLAN to active content only. M29: Update CLAUDE.md with memory access instructions.
-
-**Document Reader Feature (Complete):** M30: Core infrastructure (database, storage, route). M31: Sidebar TOC integration. M32: Document rendering (PDF, Markdown, text). M33: Navigation entry points. M34: Text selection and highlights. M35: Assistant panel (notes, AI chat). M36: Reading progress tracking. M37: Polish and performance.
-
-**Document Viewer Fidelity (Complete):** M38: DOCX high-fidelity rendering with docx-preview (client-side).
-
-**PDF Highlighting (Complete):** M39: Page-based PDF highlighting with percentage coordinates.
-
-**PowerPoint Support (Complete):** M40: PPTX document support with LibreOffice conversion. Upload PowerPoint presentations, view as PDF, highlight text, generate KCs from slides.
-
-**Authentication & Multi-User (Complete):** M41: Supabase Auth configuration. M42: Database schema migration. M43: Backend auth middleware. M44: Frontend auth flow. M45: RLS policies. M46: Data migration. See `.claude/memory/milestones/auth_multiuser.md`.
-
-**Approved Users Whitelist (Complete):** M47: Restricted document upload to approved users. Database migration for approved_users table with deny-all RLS, backend approval logic (ApprovedUser dependency) and admin endpoints, frontend AdminRoute guard with useIsAdmin hook, Admin page for managing whitelist, upload error handling for 403.
-
-**Persistent Zoom Preference (Complete):** M48: Remember user's zoom level in document reader across sessions. Database-backed per-user preferences.
-
-**Source-Grounded Practice Items (Complete):** M49: Practice items now grounded in source documents. KC extraction populates `source_excerpt` with verbatim quotes, templates include GROUNDING RULES that constrain items to test only concepts derivable from source + reasonable domain prerequisites. No database migrations needed - field already existed.
-
-**Practice Mode UI Differentiation (Complete):** M50: Render practice items with mode-appropriate UI. Recognition shows multiple choice buttons with auto-grading, cued_recall shows progressive hints, execution shows task checklists, explanation/application show rubric previews with word count. Pure frontend work - no backend changes. See `.claude/memory/milestones/webui_core.md` for implementation details.
-
-**Session Continuity (Complete):** M51: Persist study session progress across page reloads. Database migration adds 5 columns to sessions table (status, current_item_index, queue_item_ids, paused_at, last_activity_at). Hybrid storage: localStorage cache + database source of truth. New components: useSessionPersistence hook, SessionRecoveryDialog, SaveIndicator. BeforeUnload with sendBeacon for crash resilience. Multiple tab prevention via localStorage lock.
-
-**Infrastructure Deployment (Ready):** I1: EC2 instance setup (Ubuntu 24.04 t3.micro, security groups, SSH). I2: Docker configuration (Dockerfile with LibreOffice, docker-compose.yml). I3: Nginx reverse proxy with SSL (Let's Encrypt, 300s timeouts for LLM endpoints). I4: Netlify frontend deployment (netlify.toml, environment variables). See `.claude/memory/milestones/infrastructure_deployment.md`.
+| Range | Feature | Key Components |
+|-------|---------|----------------|
+| M1-M8 | CLI Foundation | DB schema, ingestion, KC extraction, practice items, SM-2, todo |
+| M9-M15 | Web UI Core | React/Vite, Home, Study, Calendar, Due, Progress, Analytics |
+| M16-M20 | Sources | Sources page, upload UI, FastAPI, realtime progress, error handling |
+| M21-M23 | Speed | Groq client, parallel processing, retry logic |
+| M24-M29 | Memory System | `.claude/memory/` structure, archive extraction, slim EXECPLAN |
+| M30-M37 | Document Reader | PDF/Markdown viewers, TOC, highlights, notes, AI chat, progress |
+| M38 | DOCX Fidelity | docx-preview library, client-side rendering |
+| M39 | PDF Highlighting | Page-based % coordinates, PDFHighlightLayer |
+| M40 | PowerPoint | python-pptx extraction, LibreOffice→PDF conversion |
+| M41-M46 | Auth/Multi-User | Supabase Auth, user_id columns, JWT middleware, RLS (46+ policies) |
+| M47 | Approved Users | Upload whitelist, admin page at `/admin`, 403 handling |
+| M48 | Zoom Preference | user_preferences table, useZoomPreference hook |
+| M49 | Source Grounding | KC source_excerpt field, GROUNDING RULES in templates |
+| M50 | Practice Mode UI | Recognition/CuedRecall/Execution/Explanation input components |
+| M51 | Session Continuity | sessions table columns, useSessionPersistence, recovery dialog |
+| I1-I4 | Infrastructure | EC2 + Docker + Nginx + Netlify deployment |
+| T1-T6 | TDD Foundation | pytest (21 tests), Vitest (24 tests), Chrome UI tests, agent separation |
+| M52-M55 | Contribution Graph | DB index, utility functions, data hook, grid UI, responsive, a11y |
 
 
 ## CLI Usage Reference
@@ -448,7 +314,7 @@ The app runs at http://localhost:5173
 
 ## Memory Index
 
-External memory in `.claude/memory/` (17 files):
+External memory in `.claude/memory/` (18+ files):
 
 | Category | Files |
 |----------|-------|
@@ -456,6 +322,7 @@ External memory in `.claude/memory/` (17 files):
 | `decisions/` | architecture.md, technology.md, patterns.md, memory_system.md |
 | `schemas/` | database.md, api.md, components.md |
 | `reference/` | research.md, context.md, retrospective.md |
+| `quality/` | testing.md |
 
 See `.claude/memory/INDEX.md` for full summaries and cross-references.
 
@@ -470,19 +337,23 @@ Deploy to production: Netlify (frontend) + EC2 (backend with Docker/LibreOffice/
 
 | ID | Description | Status |
 |----|-------------|--------|
-| I1 | EC2 instance setup + security groups + SSH | Pending |
-| I2 | Docker + docker-compose configuration with LibreOffice | Files created, deployment pending |
-| I3 | Nginx reverse proxy + SSL (Let's Encrypt) | Pending |
-| I4 | Netlify frontend deployment | Files created, deployment pending |
+| I1 | EC2 instance setup + security groups + SSH | ✅ Complete (Terraform) |
+| I2 | Docker + docker-compose configuration with LibreOffice | ✅ Complete |
+| I3 | Nginx reverse proxy + SSL (Let's Encrypt) | ✅ Complete (SSL pending domain) |
+| I4 | Netlify frontend deployment | ✅ Complete |
+
+**Production URLs:**
+- Frontend: https://personalized-learning-system.netlify.app/
+- Backend: http://3.215.170.154/api
 
 ### Deployment Prerequisites
 
-Before deploying:
-- [ ] CORS_ORIGINS configured for production domain (set in EC2 .env)
-- [ ] Supabase RLS policies applied (already complete - M45)
-- [ ] Admin users added to approved_users table (already complete - M47)
-- [ ] EC2 SSH key created and secured
-- [ ] Domain DNS configured (or use Netlify subdomain)
+All prerequisites complete:
+- [x] CORS_ORIGINS configured for production domain
+- [x] Supabase RLS policies applied (M45)
+- [x] Admin users added to approved_users table (M47)
+- [x] EC2 SSH key created and secured
+- [x] Using Netlify subdomain (custom domain optional)
 
 
 ## Artifacts and Notes
@@ -551,33 +422,31 @@ Target: Keep EXECPLAN.md under ~650 lines. If it grows larger, archive completed
 
 EXECPLAN.md should contain only active work content. Target: ~500-650 lines.
 
-**Sections to keep (with target lines):**
-- Purpose and Big Picture (20)
-- Progress - summaries only (50)
-- Active Milestones - M24-M29 full detail (200)
-- Known Issues and Future Improvements (30)
-- Surprises and Discoveries - recent only (20)
-- Memory Index - new section (30)
-- CLI and Web Usage Reference (50)
-- Recovery Notes (15)
+**Sections to keep:**
+- Purpose and Big Picture (concise system description)
+- Progress (summary table with links to memory)
+- Known Issues and Future Improvements (active guidance)
+- Surprises and Discoveries (operational knowledge)
+- Memory Index (links to all `.claude/memory/` files)
+- CLI and Web Usage Reference (operational docs)
+- Recovery Notes (operational docs)
+- Operational Policies (this section and Memory Access Protocols)
+- Infrastructure Reference (deployment procedures)
 
-**Sections to archive or remove:**
-- Completed milestone details → already in milestones/
-- Full Decision Log → already in decisions/
-- Outcomes and Retrospective → archive to reference/
-- Context and Orientation → already in reference/
-- Full Artifacts → already in schemas/
-- Web UI Design Specifications → archive to schemas/
-- Research Foundation → already in reference/
+**Sections to archive:**
+- Detailed milestone phase-by-phase notes → `milestones/*.md`
+- Full Decision Log → `decisions/*.md`
+- Detailed Outcomes and Retrospective → `reference/retrospective.md`
+- Full Context and Orientation → `reference/context.md`
+- Full schema details → `schemas/*.md`
 
-**Work:**
+**When adding new milestones:**
+1. Add full detail during active development
+2. After completion, archive to appropriate memory file
+3. Replace with one-line summary + link to archive
+4. Update Memory Index if new files created
 
-1. Add Memory Index section pointing to all `.claude/memory/` files
-2. Remove archived content, replace with one-line links
-3. Consolidate redundant sections
-4. Verify all information still accessible
-
-**Verification:** EXECPLAN.md under 500 lines. `wc -l EXECPLAN.md` returns < 500. All content still accessible via memory files.
+**Verification:** Keep EXECPLAN.md under 650 lines. Run `wc -l EXECPLAN.md` to check.
 
 
 ### Memory Access Protocols (OPERATIONAL POLICY - DO NOT DELETE)
@@ -709,75 +578,123 @@ Add Memory System section to CLAUDE.md after ExecPlans section:
 **Verification:** CLAUDE.md contains Memory System section with both proactive and reactive protocols. New session starting a milestone reads relevant archives before implementation.
 
 
+### Test-Driven Development (OPERATIONAL POLICY - DO NOT DELETE)
+
+**TDD is mandatory for EVERY milestone.** No milestone is complete without passing tests. Write tests BEFORE implementing features. Use two test types: **Logic Tests** (automated) and **UI Tests** (browser automation).
+
+**Agent Separation Policy (MANDATORY):**
+The agent that writes tests MUST be different from the agent that implements the solution. This prevents bias. For every milestone:
+1. Spawn **Test Agent** first to write failing tests based on requirements
+2. Spawn **Implementation Agent** to write code that passes the tests
+3. Test Agent reviews coverage and adds edge cases
+
+**Real Data Policy (MANDATORY):**
+NEVER use mock data when real services are available. This applies to EVERYTHING - databases, APIs, storage, auth, any service. If a real endpoint/service exists, use it.
+
+**Only mock when absolutely necessary:**
+- External paid APIs (Claude, Groq) to avoid CI costs
+- Time-sensitive operations (use fixed timestamps)
+- Network failure scenarios (error handling tests)
+- Third-party services with no test environment
+
+**Two Test Types:**
+
+| Type | Tool | Purpose | When Required |
+|------|------|---------|---------------|
+| **Logic Tests** | pytest, Vitest, Playwright | Verify business logic, APIs, hooks, data transformations | Every code change |
+| **UI Tests** | Chrome extension, Playwright | Verify visual rendering, user flows, interactions | Every UI change |
+
+**Alternative: MCP Tools for Testing**
+The system has access to MCP browser automation tools (Chrome extension). If these are faster or more advantageous for a specific test scenario, use them instead of or alongside traditional test frameworks.
+
+**UI Testing Permission:** The system has standing permission to use Chrome browser automation for UI testing without additional approval.
+
+**Modified Cleanup Loop:**
+
+    Work → Logic Test → UI Test → Archive → Slim → Repeat
+                 ↑           ↑
+                 └───────────┴─ Both required before completion
+
+**When to use each test type:**
+
+| Change Type | Logic Tests | UI Tests |
+|-------------|-------------|----------|
+| Backend API endpoint | ✅ Required | ❌ Not needed |
+| Business logic (spacing, parsing) | ✅ Required | ❌ Not needed |
+| React hook logic | ✅ Required | ❌ Not needed |
+| New UI component | ✅ Required (logic) | ✅ Required (visual) |
+| Styling/layout change | ❌ Not needed | ✅ Required |
+| User flow change | ✅ Required (logic) | ✅ Required (flow) |
+| Bug fix (backend) | ✅ Required | ❌ Not needed |
+| Bug fix (UI) | ⚠️ If logic involved | ✅ Required |
+
+**Pre-Completion Verification:**
+
+Before marking ANY milestone complete:
+
+    # 1. Logic Tests
+    cd learn_system/ && pytest --cov=app -v    # Backend
+    cd web/ && npm run test:run                 # Frontend
+
+    # 2. UI Tests (if UI changed)
+    - Start dev server: cd web/ && npm run dev
+    - Use Chrome extension to navigate to affected pages
+    - Take screenshots, verify visual correctness
+    - Test user interactions (click, type, submit)
+    - Test at mobile viewport if responsive
+
+**Requirements:**
+1. Logic tests pass (no failures, no skips without rationale)
+2. Coverage meets targets: ≥70% frontend, ≥75% backend critical modules
+3. UI tests verify visual correctness (screenshots reviewed)
+4. User flows complete successfully in browser
+
+**Failure Handling:**
+
+If tests don't pass:
+- ✗ DO NOT mark milestone complete in Progress table
+- ✗ DO NOT run Archive step of Cleanup Loop
+- ✓ DO document issue in "Known Issues and Future Improvements"
+- ✓ DO keep milestone "in-progress" until tests pass
+
+**Memory Integration:**
+
+When archiving to `.claude/memory/milestones/[feature].md`, include "Testing Approach" section:
+
+    ## Testing Approach (MXX)
+
+    **Logic Tests:**
+    - Files: paths/to/test/files
+    - Coverage: XX%
+    - Key cases: list
+
+    **UI Tests:**
+    - Pages tested: /login, /upload, etc.
+    - Flows verified: login → upload → study
+    - Viewports: desktop, mobile
+    - Issues found: none / list
+
+**Verification:** Run `pytest`, `npm run test:run`, and Chrome UI verification before any milestone completion.
+
+
 ---
 
-## Milestones
+## Completed Milestones Summary
 
-All completed milestones are archived in `.claude/memory/milestones/`. See Progress section for dates.
+All milestones archived in `.claude/memory/milestones/`. Key highlights:
 
-
-### Document Reader Feature M30-M40 (Complete)
-
-**Full specs:** `.claude/memory/milestones/document_reader.md`
-
-AlphaXiv-style document reader. Flow: upload → read/study → practice. Supports PDF, DOCX (docx-preview), PPTX (LibreOffice→PDF), Markdown, text. Features: sidebar TOC, text selection, highlights (character-based for text, page-based % coords for PDF), AI chat, notes, reading progress, zen mode.
-
-
-### Authentication & Multi-User Feature M41-M46 (Complete)
-
-**Full specs:** `.claude/memory/milestones/auth_multiuser.md`
-
-Supabase Auth, email/password, JWT validation, 46+ RLS policies, data migration, deployment config (Vercel + Railway + Supabase). See memory archive for implementation details.
+| Feature | Archive | Notes |
+|---------|---------|-------|
+| Document Reader (M30-M40) | `document_reader.md` | PDF/DOCX/PPTX/Markdown, TOC, highlights, AI chat, zen mode |
+| Auth & Multi-User (M41-M46) | `auth_multiuser.md` | Supabase Auth, 46+ RLS policies, JWT validation |
+| Approved Users (M47) | `auth_multiuser.md` | Whitelist for uploads, admin page at `/admin` |
+| Zoom Preference (M48) | `document_reader.md` | Persists across sessions, user_preferences table |
+| Source Grounding (M49) | `sources_feature.md` | KC source_excerpt, grounding rules in templates |
+| Practice Mode UI (M50) | `webui_core.md` | Recognition/cued_recall/execution/explanation modes |
+| Session Continuity (M51) | `webui_core.md` | Resume after reload, hybrid localStorage + DB |
 
 
-### Approved Users Whitelist Feature M47 (Complete)
-
-**Full specs:** `.claude/memory/milestones/auth_multiuser.md`
-
-Restricts document upload to whitelisted users. Non-approved users get 403 Forbidden. Admins manage whitelist via `/admin` page. Hardcoded admin emails: gianmariatroiani@gmail.com, gtroiani@equilibriaconsulting.net. Key components: approved_users table with deny-all RLS, ApprovedUser dependency for protected endpoints, AdminRoute guard, Admin page UI.
-
-
-### Persistent Zoom Preference M48 (Complete)
-
-**Full specs:** `.claude/memory/milestones/document_reader.md`
-
-User's zoom level persists across sessions. Database-backed user_preferences table with RLS, useZoomPreference hook with debounced saves, zoom state lifted from renderers to ReaderContent.jsx.
-
-
-### Source-Grounded Practice Items M49 (Complete)
-
-**Full specs:** `.claude/memory/milestones/sources_feature.md`
-
-Practice items grounded in source documents rather than LLM general knowledge. KC extraction populates `source_excerpt` with verbatim quotes (50-200 words). Templates include GROUNDING RULES constraining items to test only concepts derivable from source + reasonable domain prerequisites. Backward compatible with NULL excerpts.
-
-
-### Practice Mode UI Differentiation M50 (Complete)
-
-**Full specs:** `.claude/memory/milestones/webui_core.md`
-
-Practice items now render with mode-appropriate UI. Recognition shows A/B/C/D buttons with auto-grading, cued_recall has progressive hints, execution has task checklists. Pure frontend: AnswerInput.jsx dispatches to mode-specific components in `inputs/` directory.
-
-
-### Session Continuity Across Page Reloads M51 (Complete)
-
-**Full specs:** `.claude/memory/milestones/webui_core.md`
-
-Persist study session progress so users can resume after page reload, WiFi change, or browser restart. Hybrid storage: localStorage cache for fast access + database as source of truth. Recovery dialog shows progress and offers resume/start-fresh choice.
-
-**Key Components:**
-- `web/src/hooks/useSessionPersistence.js` - Checks for incomplete sessions on mount, debounced DB saves, localStorage cache
-- `web/src/components/study/SessionRecoveryDialog.jsx` - Resume/start-fresh modal with progress display
-- `web/src/components/study/SaveIndicator.jsx` - Cloud save status icon in header
-- `web/src/components/study/SessionHeader.jsx` - Updated to show SaveIndicator
-
-**Critical Fix:** Added SELECT RLS policy for sessions table - users could INSERT/UPDATE/DELETE but not SELECT their own sessions.
-
-**Validation Rules:**
-- Session age < 7 days: valid, show resume dialog
-- Session age > 7 days: auto-mark abandoned, start fresh
-
-
-### Infrastructure Deployment I1-I4 (Ready)
+### Infrastructure Deployment I1-I4 (Complete)
 
 Deploy the Personal Learning System from localhost to production. After I4 completion, users can access the system from any device via the web.
 
@@ -846,291 +763,11 @@ Deploy the Personal Learning System from localhost to production. After I4 compl
 
 ---
 
-#### I1: EC2 Instance Setup
+#### Setup Instructions (Archived)
 
-**Goal:** Provision AWS EC2 instance with SSH access and Docker installed.
+**For detailed I1-I4 setup steps, see:** `.claude/memory/milestones/infrastructure_deployment.md`
 
-**Concrete Steps:**
-
-1. **Launch EC2 instance via AWS Console:**
-   - Go to EC2 Dashboard → Launch Instance
-   - AMI: Ubuntu Server 24.04 LTS (free tier eligible)
-   - Instance type: t3.micro (free tier for 12 months)
-   - Storage: 20GB gp3
-   - Key pair: Create new → `learning-system-key.pem` → Download and save to `~/.ssh/`
-
-2. **Configure Security Group (inbound rules):**
-
-   | Port | Source | Purpose |
-   |------|--------|---------|
-   | 22 | Your IP only | SSH access |
-   | 80 | 0.0.0.0/0 | HTTP (redirects to HTTPS) |
-   | 443 | 0.0.0.0/0 | HTTPS |
-   | 8001 | 127.0.0.1 | FastAPI (localhost only in production) |
-
-3. **Allocate Elastic IP (optional but recommended):**
-   - EC2 Dashboard → Elastic IPs → Allocate → Associate with instance
-   - This gives you a static IP that survives instance restarts
-
-4. **Setup local SSH config (on your machine, `~/.ssh/config`):**
-
-       Host learning-prod
-           HostName <EC2-PUBLIC-IP-OR-ELASTIC-IP>
-           User ubuntu
-           IdentityFile ~/.ssh/learning-system-key.pem
-
-5. **Secure the key and connect:**
-
-       chmod 400 ~/.ssh/learning-system-key.pem
-       ssh learning-prod
-
-6. **Initial server setup (run on EC2):**
-
-       sudo apt update && sudo apt upgrade -y
-
-       # Install Docker
-       sudo apt install -y docker.io docker-compose-v2
-       sudo usermod -aG docker ubuntu
-
-       # Install Nginx and Certbot
-       sudo apt install -y nginx certbot python3-certbot-nginx
-
-       # Log out and back in for docker group to take effect
-       exit
-
-   Then reconnect: `ssh learning-prod`
-
-**Verification:**
-
-    ssh learning-prod
-    docker run hello-world
-    # Should print "Hello from Docker!"
-
----
-
-#### I2: Docker Configuration
-
-**Goal:** Containerize FastAPI backend with LibreOffice support.
-
-**Files already created:**
-- `learn_system/Dockerfile` — Python 3.11-slim + LibreOffice + curl for healthcheck
-- `learn_system/docker-compose.yml` — Container orchestration with logging
-- `learn_system/.dockerignore` — Excludes .env, tests, __pycache__
-
-**Concrete Steps (on EC2):**
-
-1. **Clone repository:**
-
-       cd /home/ubuntu
-       git clone <your-repo-url> app
-       cd app/learn_system
-
-2. **Create production .env file:**
-
-       nano .env
-       # Paste the backend .env template from Credentials Reference above
-       # Fill in your actual values
-
-3. **Build and start container:**
-
-       docker compose up -d --build
-
-   First build takes 5-10 minutes (LibreOffice is ~400-500MB).
-
-4. **Check container status:**
-
-       docker compose ps
-       # Should show: learning-system-api   running (healthy)
-
-**Verification:**
-
-    curl http://localhost:8001/api/health
-    # Expected: {"status":"healthy","version":"1.0.0","timestamp":"..."}
-
-**Troubleshooting:**
-
-    # View logs if container fails
-    docker compose logs --tail=100
-
-    # Common issues:
-    # - Missing .env: Create it with nano .env
-    # - Port in use: sudo lsof -i :8001
-    # - Out of disk: df -h
-
----
-
-#### I3: Nginx Reverse Proxy + SSL
-
-**Goal:** Configure Nginx as reverse proxy with Let's Encrypt SSL certificate.
-
-**Concrete Steps (on EC2):**
-
-1. **Create Nginx config:**
-
-       sudo nano /etc/nginx/sites-available/learning-api
-
-   Paste the following (replace `api.yourdomain.com` with your actual domain):
-
-       # Rate limiting
-       limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
-
-       upstream fastapi_backend {
-           server 127.0.0.1:8001;
-           keepalive 32;
-       }
-
-       # HTTP -> HTTPS redirect
-       server {
-           listen 80;
-           server_name api.yourdomain.com;
-
-           location /.well-known/acme-challenge/ {
-               root /var/www/certbot;
-           }
-
-           location / {
-               return 301 https://$host$request_uri;
-           }
-       }
-
-       # HTTPS server
-       server {
-           listen 443 ssl http2;
-           server_name api.yourdomain.com;
-
-           # SSL certificates (certbot will configure these)
-           ssl_certificate /etc/letsencrypt/live/api.yourdomain.com/fullchain.pem;
-           ssl_certificate_key /etc/letsencrypt/live/api.yourdomain.com/privkey.pem;
-
-           # Security headers
-           add_header X-Frame-Options "DENY" always;
-           add_header X-Content-Type-Options "nosniff" always;
-           add_header Strict-Transport-Security "max-age=31536000" always;
-
-           client_max_body_size 50M;
-
-           # Upload endpoint (300s timeout for PPTX conversion + LLM processing)
-           location /api/sources/upload {
-               limit_req zone=api_limit burst=5 nodelay;
-               proxy_pass http://fastapi_backend;
-               proxy_read_timeout 300s;
-               proxy_send_timeout 300s;
-           }
-
-           # SSE streaming endpoint (buffering disabled)
-           location /api/ai/chat/stream {
-               proxy_pass http://fastapi_backend;
-               proxy_set_header Connection '';
-               proxy_buffering off;
-               proxy_cache off;
-               chunked_transfer_encoding off;
-               proxy_read_timeout 300s;
-           }
-
-           # All other API endpoints
-           location /api/ {
-               limit_req zone=api_limit burst=20 nodelay;
-               proxy_pass http://fastapi_backend;
-               proxy_read_timeout 120s;
-           }
-       }
-
-2. **Enable site and test config:**
-
-       sudo ln -s /etc/nginx/sites-available/learning-api /etc/nginx/sites-enabled/
-       sudo nginx -t
-       # Should say: syntax is ok, test is successful
-
-3. **Point your domain DNS to EC2:**
-   - In your domain registrar, create an A record: `api.yourdomain.com` → `<EC2-ELASTIC-IP>`
-   - Wait for DNS propagation (5-30 minutes)
-
-4. **Get SSL certificate:**
-
-       sudo mkdir -p /var/www/certbot
-       sudo certbot --nginx -d api.yourdomain.com
-       # Follow prompts, enter email, agree to terms
-
-5. **Reload Nginx:**
-
-       sudo systemctl reload nginx
-
-**Verification:**
-
-    curl -I https://api.yourdomain.com/api/health
-    # Should return HTTP/2 200 with SSL certificate info
-
-**SSL Auto-Renewal:** Certbot creates a systemd timer that auto-renews certificates. Verify with:
-
-    sudo systemctl status certbot.timer
-
----
-
-#### I4: Netlify Frontend Deployment
-
-**Goal:** Deploy React SPA to Netlify with proper configuration.
-
-**File already created:** `web/netlify.toml` — SPA routing, caching, security headers
-
-**Concrete Steps:**
-
-1. **Commit and push netlify.toml:**
-
-       git add web/netlify.toml
-       git commit -m "feat: Add netlify.toml for production deployment"
-       git push
-
-2. **Create Netlify site:**
-   - Go to https://app.netlify.com
-   - Add new site → Import from Git
-   - Connect your repository
-   - Build settings:
-     - Base directory: `web`
-     - Build command: `npm run build`
-     - Publish directory: `web/dist`
-
-3. **Set environment variables (Netlify Dashboard → Site settings → Environment variables):**
-
-   | Variable | Value |
-   |----------|-------|
-   | `VITE_SUPABASE_URL` | `https://xxx.supabase.co` |
-   | `VITE_SUPABASE_ANON_KEY` | `eyJhbGc...` (legacy format, NOT sb_publishable_) |
-   | `VITE_API_URL` | `https://api.yourdomain.com/api` |
-
-4. **Trigger deploy:**
-   - Netlify auto-deploys on push, or click "Trigger deploy" in dashboard
-
-**Verification:**
-- Navigate to your Netlify URL (e.g., `https://your-app.netlify.app`)
-- Login should work
-- Sources page should show your documents
-- Upload should work (if you're an approved user)
-
----
-
-#### Deployment Checklist
-
-**Before Going Live:**
-- [ ] EC2 instance launched (t3.micro, Ubuntu 24.04)
-- [ ] SSH key secured (`chmod 400`)
-- [ ] Docker installed and tested (`docker run hello-world`)
-- [ ] Repository cloned to `/home/ubuntu/app`
-- [ ] Backend `.env` created with all credentials
-- [ ] Container running: `docker compose ps` shows healthy
-- [ ] Health check passes: `curl http://localhost:8001/api/health`
-- [ ] Domain DNS points to EC2 Elastic IP
-- [ ] Nginx config created and tested (`nginx -t`)
-- [ ] SSL certificate obtained via certbot
-- [ ] HTTPS works: `curl -I https://api.yourdomain.com/api/health`
-- [ ] netlify.toml committed and pushed
-- [ ] Netlify site created and linked to repo
-- [ ] Netlify environment variables set (all 3)
-- [ ] Frontend loads at Netlify URL
-- [ ] End-to-end test: login → view sources → practice
-
-**Week 1 Post-Launch:**
-- [ ] Uptime monitoring configured (e.g., UptimeRobot free tier)
-- [ ] AWS billing alert set (e.g., $15 threshold)
+This includes: EC2 instance setup, Docker configuration, Nginx/SSL configuration, Netlify deployment, and deployment checklist.
 
 ---
 
@@ -1223,31 +860,10 @@ Learning science research (Make It Stick, A Mind for Numbers, Ultralearning, Ada
 
 ## Revision History
 
-- 2026-01-02: M1-M8 CLI, M9-M15 Web UI completed
-- 2026-01-02: M16-M19 Sources feature with FastAPI backend
-- 2026-01-03: M20-M23 Error handling, speed optimization (Groq, parallel processing)
-- 2026-01-04: M24-M29 Agent memory system implementation
-- 2026-01-05: M30-M37 Document Reader feature complete (AlphaXiv-style reader with zen mode, AI chat, highlights, reading progress)
-- 2026-01-06: M38 Complete - Document Viewer Fidelity (DOCX high-fidelity rendering with docx-preview, text selection, highlights)
-- 2026-01-06: M39 Complete - PDF Highlighting (page-based percentage coordinates, PDFHighlightLayer component)
-- 2026-01-06: M40 Complete - PowerPoint Support (PPTX with LibreOffice conversion, python-pptx text extraction, converted PDF viewing)
-- 2026-01-06: M41-M46 Research Complete - Authentication & Multi-User (6 parallel worktrees, consolidated spec, Supabase Auth, RLS, JWT middleware, frontend auth flow, deployment strategy)
-- 2026-01-07: M41-M44 Complete - Supabase Auth config, database schema migration (user_id on 12 tables, 20 indexes), backend auth middleware (JWT validation, ownership checks), frontend auth flow (AuthContext, ProtectedRoute, login/signup/reset forms, logout)
-- 2026-01-07: M45 Complete + Auth Testing - RLS policies (46+ table + 4 storage), comprehensive auth testing validated: signup (email confirmation), login (redirect to home), protected routes (data visible), API auth (sources load), upload UI (modal works), logout (redirect to login, routes blocked)
-- 2026-01-07: M46 Complete - Data Migration & Deployment (first_user_migration.py with check_has_orphaned_data/migrate_existing_data_to_user, m46_enforce_auth.sql for NOT NULL constraints, /api/migration/status and /api/migration/trigger endpoints, CORS_ORIGINS env var support). Authentication & Multi-User feature complete (M41-M46).
-- 2026-01-07: RLS/Display Bug Fix - Removed redundant user_id filters from migration.py (lines 36, 56, 94). Full regression test passed: all pages functional, study sessions recording correctly, no regressions.
-- 2026-01-07: RLS Policy Proper Fix - Applied fix_practice_items_rls.sql via Supabase Dashboard. Updated useSources.js and Study.jsx to use direct Supabase queries instead of backend workaround. Technical debt reduced. Full study flow verified: question display, answer submission, self-assessment, next question transition.
-- 2026-01-07: API Port Fix - Fixed api.js using wrong port (8000 instead of 8001). Document reader now works correctly. Root cause found via 3 parallel research agents investigating backend, frontend, and storage/RLS.
-- 2026-01-11: M47 Spec Added - Approved Users Whitelist feature integrated into EXECPLAN. Restricts document upload to whitelisted users, admin page for management. 8 implementation phases defined.
-- 2026-01-11: M47 Complete - Approved Users Whitelist feature fully implemented and tested. Database migration (approved_users table with RLS), backend approval logic (ApprovedUser dependency), protected upload endpoint, admin API endpoints (list/add/remove), AdminRoute guard with useIsAdmin hook, Admin page UI (table, add form, remove with confirmation), 403 error handling for non-approved uploads. Integration testing verified: admin link visibility, admin page CRUD operations, upload zone access for approved users. Required `pip install email-validator` for Pydantic EmailStr validation.
-- 2026-01-18: M48 Complete - Persistent Zoom Preference. User's zoom level in document reader now persists across sessions. Created user_preferences table with RLS, useZoomPreference hook with debounced saves, lifted zoom state from PDFRenderer/DOCXRenderer to ReaderContent.
-- 2026-01-19: M49 Spec Added - Source-Grounded Practice Items. Research complete via 6 parallel worktrees. Problem: source_excerpt field exists but never populated, causing practice items to test concepts not in source. Solution: 2-phase fix (KC extraction + templates), no DB migrations needed.
-- 2026-01-19: M49 Complete - Source-Grounded Practice Items. KC extraction now populates source_excerpt with verbatim quotes (kc_extractor.py). Templates include GROUNDING RULES constraining items to test only concepts derivable from source + domain prerequisites (templates.py). Backward compatible with NULL excerpts.
-- 2026-01-19: M50 Spec Added - Practice Mode UI Differentiation. Research complete via 6 parallel worktrees (NEW FEATURES.md). Pure frontend enhancement: render practice items with mode-appropriate UI (recognition as MCQ buttons, cued_recall with hints, execution with checklists). 6 implementation phases defined. No backend changes required.
-- 2026-01-19: M50 Complete - Practice Mode UI Differentiation. Created inputs/ directory with 6 mode-specific components (FreeRecallInput, RecognitionInput, CuedRecallInput, ExecutionInput, ExplanationInput, ApplicationInput) and shared/ directory with primitives (TextArea, SubmitButton, SkipButton). AnswerInput refactored as dispatcher. Study.jsx updated with userResponse state and mode-specific handling (recognition auto-grades, execution calculates independence score). Live testing verified ExplanationInput (blue rubric, word count) and ApplicationInput (scenario placeholder).
-- 2026-01-19: M51 Spec Added - Session Continuity Across Page Reloads. Research complete via 6 parallel worktrees (ui-ux, data-model, study-jsx, lifecycle, storage, edge-cases). Problem: Study.jsx creates new session on every load, abandoning incomplete sessions. Solution: hybrid storage (localStorage cache + DB source of truth), SessionRecoveryDialog on mount, beforeunload with sendBeacon, multiple tab prevention. Database migration adds 5 columns to sessions table. 7 implementation phases defined.
-- 2026-01-19: M51 Complete - Session Continuity Across Page Reloads. Implemented useSessionPersistence hook (async auth check, debounced DB saves), SessionRecoveryDialog with progress display (X/20, last activity timestamp), SaveIndicator with cloud icon. Critical fix: added SELECT RLS policy "Users can select own sessions" on sessions table - original RLS only had INSERT/UPDATE/DELETE but not SELECT. Live testing verified: complete item → reload → recovery dialog shows 1/20 progress → resume works.
-- 2026-01-23: Infrastructure Deployment Research Complete - 6 parallel worktrees created (infra/ec2-setup, infra/docker-config, infra/nginx-ssl, infra/netlify-frontend, infra/deployment-docs, infra/system-integration). Consolidated into NEW FEATURES.md covering EC2, Docker, Nginx/SSL, Netlify, credentials, operational procedures, troubleshooting.
-- 2026-01-23: Infrastructure Deployment Integrated into EXECPLAN - Created `.claude/memory/milestones/infrastructure_deployment.md` with full deployment specs. Added I1-I4 milestones to Progress section. Added detailed milestone descriptions. Updated Purpose/Big Picture, Plan of Work, Infrastructure Reference, Memory Index. EXECPLAN now fully self-contained for infrastructure deployment following PLANS.md conventions.
-- 2026-01-23: Infrastructure Files Created - Created `learn_system/Dockerfile` (Python 3.11-slim + LibreOffice), `learn_system/docker-compose.yml`, `learn_system/.dockerignore`. Created `web/netlify.toml` (SPA routing, security headers, caching).
-- 2026-01-23: EXECPLAN Self-Contained - Integrated full infrastructure deployment content directly into EXECPLAN.md per PLANS.md requirements. Added: Credentials Reference with .env templates, Concrete Steps with exact commands for I1-I4, Deployment Checklist, Operational Procedures, Troubleshooting Guide, Infrastructure Decision Log entries. Removed external INFRA.md dependency. EXECPLAN.md now contains everything needed for a novice to deploy end-to-end.
+**Full changelog:** See `.claude/memory/reference/retrospective.md`
+
+Key milestones: M1-M51 (CLI, Web UI, Sources, Speed, Memory, Document Reader, Auth, Whitelist, Zoom, Grounding, Practice Mode UI, Session Continuity) + I1-I4 (Infrastructure Deployment). All complete as of 2026-01-23.
+
+**2026-01-28:** Completed T1-T6 (TDD Foundation). Added TDD Operational Policy with agent separation. Infrastructure: pytest (21 tests), Vitest (24 tests), Chrome UI testing.
+
+**2026-01-28:** M52-M55 complete (Learning Contribution Graph). GitHub-style heatmap on Home page. 83 tests total, responsive at all breakpoints, fully accessible. See `.claude/memory/milestones/webui_core.md` for details.

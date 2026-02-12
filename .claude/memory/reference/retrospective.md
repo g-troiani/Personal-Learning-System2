@@ -1,6 +1,6 @@
 # Outcomes and Retrospective Archive
 
-**Last Updated:** 2026-01-04
+**Last Updated:** 2026-01-23
 **Summary:** Major milestone retrospectives documenting what worked, gaps, and lessons learned
 
 ## All 8 Milestones Complete (2026-01-02) - CLI Foundation
@@ -122,6 +122,55 @@
 - Parallel KC chunk processing: most docs single-chunk, low ROI
 - Streaming responses: not needed at current speed
 - Celery queue: overkill for single-user
+
+## Detailed Revision History (Changelog)
+
+**2026-01-02:**
+- M1-M8 CLI, M9-M15 Web UI completed
+- M16-M19 Sources feature with FastAPI backend
+
+**2026-01-03:**
+- M20-M23 Error handling, speed optimization (Groq, parallel processing)
+
+**2026-01-04:**
+- M24-M29 Agent memory system implementation
+
+**2026-01-05:**
+- M30-M37 Document Reader feature complete (AlphaXiv-style reader with zen mode, AI chat, highlights, reading progress)
+
+**2026-01-06:**
+- M38 Complete - DOCX high-fidelity rendering (docx-preview, text selection, highlights)
+- M39 Complete - PDF Highlighting (page-based percentage coordinates, PDFHighlightLayer)
+- M40 Complete - PowerPoint Support (PPTX with LibreOffice conversion, python-pptx text extraction)
+- M41-M46 Research Complete - Authentication & Multi-User (6 parallel worktrees)
+
+**2026-01-07:**
+- M41-M44 Complete - Supabase Auth config, DB migration (user_id on 12 tables, 20 indexes), backend auth middleware, frontend auth flow
+- M45 Complete + Auth Testing - RLS policies (46+ table + 4 storage), comprehensive testing
+- M46 Complete - Data Migration & Deployment (first_user_migration.py, CORS_ORIGINS env var)
+- RLS/Display Bug Fix - Removed redundant user_id filters, applied fix_practice_items_rls.sql
+- API Port Fix - Fixed api.js using wrong port (8000 instead of 8001)
+
+**2026-01-11:**
+- M47 Complete - Approved Users Whitelist (approved_users table, ApprovedUser dependency, Admin page UI)
+
+**2026-01-18:**
+- M48 Complete - Persistent Zoom Preference (user_preferences table, useZoomPreference hook)
+
+**2026-01-19:**
+- M49 Complete - Source-Grounded Practice Items (source_excerpt population, GROUNDING RULES in templates)
+- M50 Complete - Practice Mode UI Differentiation (6 mode-specific components in inputs/ directory)
+- M51 Complete - Session Continuity (useSessionPersistence hook, SessionRecoveryDialog, SELECT RLS policy fix)
+
+**2026-01-23:**
+- I1-I4 Complete - Production Deployment Live
+  - Created Terraform config (`infrastructure/main.tf`) for EC2 provisioning
+  - Deployed: EC2 t3.micro (IP: 3.215.170.154) with Docker container, Nginx reverse proxy
+  - Frontend: https://personalized-learning-system.netlify.app/
+  - Fixed: netlify.toml moved to repo root, added email-validator to requirements.txt
+  - SSL pending custom domain configuration
+
+---
 
 ## Cross-References
 
